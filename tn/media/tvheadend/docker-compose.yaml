@@ -1,0 +1,81 @@
+services:
+  tvheadend:
+    # https://docs.linuxserver.io/images/docker-tvheadend
+    # https://github.com/tvheadend/tvheadend
+    image: lscr.io/linuxserver/tvheadend:26ec161f-ls231
+    container_name: tvheadend
+    restart: unless-stopped
+    environment:
+      # https://docs.linuxserver.io/images/docker-tvheadend/#environment-variables-e
+      - PUID=${TVHEADEND_UID}
+      - PGID=${MEDIA_GID}
+      - UMASK=002
+      - TZ=${TZ}
+    labels:
+      traefik.enable: true
+
+      # Listen on http, but redirect all requests to https
+      traefik.http.routers.tvheadend-http.rule: Host(`tvheadend.${DOMAIN}`)
+      traefik.http.routers.tvheadend-http.entrypoints: http
+      traefik.http.routers.tvheadend-http.middlewares: redirect-https
+
+      # Direct all https requests to the service, checking with crowdsec first
+      traefik.http.routers.tvheadend-https.rule: Host(`tvheadend.${DOMAIN}`)
+      traefik.http.routers.tvheadend-https.entrypoints: https
+      traefik.http.routers.tvheadend-https.tls: true
+      traefik.http.routers.tvheadend-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.tvheadend-https.service: tvheadend
+      traefik.http.routers.tvheadend-https.middlewares: crowdsec-bouncer
+
+      traefik.http.services.tvheadend.loadbalancer.server.port: 9981
+
+      # Enable Whalewall for this service
+      whalewall.enabled: true
+      # tvheadend: Communicate with traefik and to WAN over selected protocols.
+      whalewall.rules: |
+        output:
+          - log_prefix: "dns"
+            proto: udp
+            dst_ports:
+              - 53
+          - log_prefix: "https"
+            proto: tcp
+            dst_ports:
+              - 443
+          - log_prefix: "http"
+            proto: tcp
+            dst_ports:
+              - 80
+          # allow communication to traefik
+          - network: common_backend
+            container: traefik
+    volumes:
+      - tvheadend_config:/config
+      - /mnt/andromeda/media/dvr:/data/dvr
+    networks:
+      - backend
+
+  tvheadend-exporter:
+    # https://github.com/0x4d4d/tvheadend-exporter
+    image: ghcr.io/0x4d4d/tvheadend-exporter:v0.10.0
+    container_name: tvheadend-exporter
+    restart: unless-stopped
+    environment:
+      - TVH_USER=${TVHEADEND_EXPORTER_USER}
+      - TVH_PASS=${TVHEADEND_EXPORTER_PASS}
+      - TVH_SERVER=${TVHEADEND_EXPORTER_SERVER}
+    labels:
+      whalewall.enabled: true
+      whalewall.rules: |
+        output:
+          # allow communication to retreive metrics
+          - network: common_backend
+            container: tvheadend
+          # allow prometheus to scrape metrics
+          - network: common_backend
+            container: prometheus
+    networks:
+      - backend
+
+volumes:
+  tvheadend_config:

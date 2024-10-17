@@ -1,0 +1,62 @@
+# MEDIA STACK
+## Per-stack instances of services (e.g. for backups) are declared here.
+services:
+  media-backup:
+    # https://github.com/offen/docker-volume-backup
+    image: offen/docker-volume-backup:v2.43.0
+    container_name: media-backup
+    restart: unless-stopped
+    environment:
+      # https://offen.github.io/docker-volume-backup/reference
+      - BACKUP_FILENAME=media-%Y-%m-%dT%H-%M-%S.tar.gz
+      - BACKUP_CRON_EXPRESSION=15 4 * * *
+      - BACKUP_PRUNING_PREFIX=media-
+      - BACKUP_RETENTION_DAYS=7
+    labels:
+      # Enable whalewall for this service
+      whalewall.enabled: true
+      # backup: no traffic in or out
+    volumes: 
+      # Backup source volumes
+      # emby
+      - emby_config:/backup/emby_config:ro
+      # navidrome
+      - navidrome_config:/backup/navidrome_config:ro
+      # plex
+      - plex_config:/backup/plex_config:ro
+      # radarr
+      - radarr_config:/backup/radarr_config:ro
+      # sabnzbd
+      - sabnzbd_config:/backup/sabnzbd_config:ro
+      # sonarr
+      - sonarr_config:/backup/sonarr_config:ro
+      # tautulli
+      - tautulli_config:/backup/tautulli_config:ro
+      # tvheadend
+      - tvheadend_config:/backup/tvheadend_config:ro
+      # xteve
+      - xteve_config:/backup/xteve_config:ro
+      - xteve_root:/backup/xteve_root:ro
+
+      # Backup target
+      - ${ZFS_POOL_ROOT_HDD}/docker_backups:/archive
+    networks:
+      - backend
+
+# When referring to a network called 'backend', we mean the common stack's backend network
+networks:
+  backend:
+    name: common_backend
+    external: true
+
+# Remaining services in the stack have their own Compose configuration.
+include:
+  - ./emby/docker-compose.yaml
+  - ./navidrome/docker-compose.yaml
+  - ./plex/docker-compose.yaml
+  - ./radarr/docker-compose.yaml
+  - ./sabnzbd/docker-compose.yaml
+  - ./sonarr/docker-compose.yaml
+  - ./tautulli/docker-compose.yaml
+  - ./tvheadend/docker-compose.yaml
+  - ./xteve/docker-compose.yaml

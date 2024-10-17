@@ -1,0 +1,59 @@
+# COMMON STACK
+## Per-stack instances of services (e.g. for backups) are declared here.
+services:
+  common-backup:
+    # https://github.com/offen/docker-volume-backup
+    image: offen/docker-volume-backup:v2.43.0
+    container_name: common-backup
+    restart: unless-stopped
+    environment:
+      # https://offen.github.io/docker-volume-backup/reference
+      - BACKUP_FILENAME=common-%Y-%m-%dT%H-%M-%S.tar.gz
+      - BACKUP_CRON_EXPRESSION=5 4 * * *
+      - BACKUP_PRUNING_PREFIX=common-
+      - BACKUP_RETENTION_DAYS=7
+    labels:
+      # Enable whalewall for this service
+      whalewall.enabled: true
+      # backup: no traffic in or out
+    volumes: 
+      # Backup source volumes
+      # crowdsec
+      - crowdsec_config:/backup/crowdsec_config:ro
+      - crowdsec_data:/backup/crowdsec_data:ro
+      - crowdsec_log:/backup/crowdsec_log:ro
+      # nginx
+      # portainer
+      - portainer_data:/backup/portainer_data:ro
+      # traefik
+      - traefik_le:/backup/traefik_le:ro
+      - traefik_log:/backup/traefik_log:ro
+      # whalewall
+      - whalewall_data:/backup/whalewall_data:ro
+
+      # Backup target
+      - ${ZFS_POOL_ROOT_HDD}/docker_backups:/archive
+    networks:
+      - backend
+
+networks:
+  # bind to a secondary IP adddress on the SCALE host, so that we stay out of the way of the webui and other services.
+  proxy:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.host_binding_ipv4: ${DOCKER_HOST_IPV4}
+  backend:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.host_binding_ipv4: ${DOCKER_HOST_IPV4}
+    # Electric Eel default is to allocate a /27 per-app - larger backend pool will be necessary
+    ipam:
+      config:
+        - subnet: ${COMMON_BACKEND_SUBNET_V4}
+
+include:
+  - ./crowdsec/docker-compose.yaml
+  - ./nginx/docker-compose.yaml
+  - ./portainer/docker-compose.yaml
+  - ./traefik/docker-compose.yaml
+  - ./whalewall/docker-compose.yaml

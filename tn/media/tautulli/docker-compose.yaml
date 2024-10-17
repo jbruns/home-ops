@@ -1,0 +1,56 @@
+services:
+  tautulli:
+    # https://github.com/Tautulli/Tautulli/pkgs/container/tautulli
+    # https://github.com/Tautulli/Tautulli
+    image: ghcr.io/tautulli/tautulli:v2.14.6
+    container_name: tautulli
+    restart: unless-stopped
+    environment:
+      - PUID=${TAUTULLI_UID}
+      - PGID=${TAUTULLI_GID}
+      - TZ=${TZ}
+    labels:
+      traefik.enable: true
+
+      # Listen on http, but redirect all requests to https
+      traefik.http.routers.tautulli-http.rule: Host(`tautulli.${DOMAIN}`)
+      traefik.http.routers.tautulli-http.entrypoints: http
+      traefik.http.routers.tautulli-http.middlewares: redirect-https
+
+      # Direct all https requests to the service, checking with crowdsec first
+      traefik.http.routers.tautulli-https.rule: Host(`tautulli.${DOMAIN}`)
+      traefik.http.routers.tautulli-https.entrypoints: https
+      traefik.http.routers.tautulli-https.tls: true
+      traefik.http.routers.tautulli-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.tautulli-https.service: tautulli
+      traefik.http.routers.tautulli-https.middlewares: crowdsec-bouncer
+
+      traefik.http.services.tautulli.loadbalancer.server.port: 8181
+
+      # Enable Whalewall for this service
+      whalewall.enabled: true
+      # tautulli: Communicate with traefik and to WAN over selected protocols.
+      whalewall.rules: |
+        output:
+          - log_prefix: "dns"
+            proto: udp
+            dst_ports:
+              - 53
+          - log_prefix: "https"
+            proto: tcp
+            dst_ports:
+              - 443
+          - log_prefix: "http"
+            proto: tcp
+            dst_ports:
+              - 80
+          # allow communication to traefik
+          - network: common_backend
+            container: traefik
+    volumes:
+      - tautulli_config:/config
+    networks:
+      - backend
+
+volumes:
+  tautulli_config:

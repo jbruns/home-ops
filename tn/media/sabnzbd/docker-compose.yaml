@@ -1,0 +1,87 @@
+services:
+  sabnzbd:
+    # https://hotio.dev/containers/sabnzbd
+    # https://github.com/sabnzbd/sabnzbd
+    image: ghcr.io/hotio/sabnzbd:release-4.3.3
+    container_name: sabnzbd
+    restart: unless-stopped
+    environment:
+      - PUID=${SABNZBD_UID}
+      - PGID=${MEDIA_GID}
+      - UMASK=002
+      - TZ=${TZ}
+    labels:
+      traefik.enable: true
+
+      # Listen on http, but redirect all requests to https
+      traefik.http.routers.sabnzbd-http.rule: Host(`sabnzbd.${DOMAIN}`)
+      traefik.http.routers.sabnzbd-http.entrypoints: http
+      traefik.http.routers.sabnzbd-http.middlewares: redirect-https
+
+      # Direct all https requests to the service, checking with crowdsec first
+      traefik.http.routers.sabnzbd-https.rule: Host(`sabnzbd.${DOMAIN}`)
+      traefik.http.routers.sabnzbd-https.entrypoints: https
+      traefik.http.routers.sabnzbd-https.tls: true
+      traefik.http.routers.sabnzbd-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.sabnzbd-https.service: sabnzbd
+      traefik.http.routers.sabnzbd-https.middlewares: crowdsec-bouncer
+
+      traefik.http.services.sabnzbd.loadbalancer.server.port: 8080
+
+      # Enable Whalewall for this service
+      whalewall.enabled: true
+      # sabnzbd: Communicate with traefik and to WAN over selected protocols.
+      whalewall.rules: |
+        output:
+          - log_prefix: "dns"
+            proto: udp
+            dst_ports:
+              - 53
+          - log_prefix: "https"
+            proto: tcp
+            dst_ports:
+              - 443
+          - log_prefix: "http"
+            proto: tcp
+            dst_ports:
+              - 80
+          # NNTP(S)
+          - proto: tcp
+            dst_ports:
+              - 119
+              - 563
+          # allow communication to traefik
+          - network: common_backend
+            container: traefik
+    volumes:
+      - sabnzbd_config:/config
+      - /mnt/andromeda/media/nzbdl:/data/nzbdl
+    networks:
+      - backend
+
+  sabnzbd-exporter:
+    # https://github.com/onedr0p/exportarr
+    image: ghcr.io/onedr0p/exportarr:v2.0.1
+    container_name: sabnzbd-exporter
+    command: ["sabnzbd"]
+    restart: unless-stopped
+    environment:
+      # https://github.com/onedr0p/exportarr#configuration
+      - PORT=9711
+      - URL="http://sabnzbd:8080"
+      - APIKEY=${SABNZBD_API_KEY}
+    labels:
+      whalewall.enabled: true
+      whalewall.rules: |
+        output:
+          # allow communication to retreive metrics
+          - network: common_backend
+            container: sabnzbd
+          # allow prometheus to scrape metrics
+          - network: common_backend
+            container: prometheus
+    networks:
+      - backend
+
+volumes:
+  sabnzbd_config:

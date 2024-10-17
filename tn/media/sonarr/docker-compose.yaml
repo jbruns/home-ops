@@ -1,0 +1,82 @@
+services:
+  sonarr:
+    # https://hotio.dev/containers/sonarr
+    # https://github.com/Sonarr/Sonarr
+    image: ghcr.io/hotio/sonarr:release-4.0.9.2244
+    container_name: sonarr
+    restart: unless-stopped
+    environment:
+      - PUID=${SONARR_UID}
+      - PGID=${MEDIA_GID}
+      - UMASK=002
+      - TZ=${TZ}    
+    labels:
+      traefik.enable: true
+
+      # Listen on http, but redirect all requests to https
+      traefik.http.routers.sonarr-http.rule: Host(`sonarr.${DOMAIN}`)
+      traefik.http.routers.sonarr-http.entrypoints: http
+      traefik.http.routers.sonarr-http.middlewares: redirect-https
+
+      # Direct all https requests to the service, checking with crowdsec first
+      traefik.http.routers.sonarr-https.rule: Host(`sonarr.${DOMAIN}`)
+      traefik.http.routers.sonarr-https.entrypoints: https
+      traefik.http.routers.sonarr-https.tls: true
+      traefik.http.routers.sonarr-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.sonarr-https.service: sonarr
+      traefik.http.routers.sonarr-https.middlewares: crowdsec-bouncer
+
+      traefik.http.services.sonarr.loadbalancer.server.port: 8989
+
+      # Enable Whalewall for this service
+      whalewall.enabled: true
+      # sonarr: Communicate with traefik and to WAN over selected protocols.
+      whalewall.rules: |
+        output:
+          - log_prefix: "dns"
+            proto: udp
+            dst_ports:
+              - 53
+          - log_prefix: "https"
+            proto: tcp
+            dst_ports:
+              - 443
+          - log_prefix: "http"
+            proto: tcp
+            dst_ports:
+              - 80
+          # allow communication to traefik
+          - network: common_backend
+            container: traefik
+    volumes:
+      - sonarr_config:/config
+      - ${ZFS_POOL_ROOT_HDD}/media:/data
+    networks:
+      - backend
+
+  sonarr-exporter:
+    # https://github.com/onedr0p/exportarr
+    image: ghcr.io/onedr0p/exportarr:v2.0.1
+    container_name: sonarr-exporter
+    command: ["sonarr"]
+    restart: unless-stopped
+    environment:
+      # https://github.com/onedr0p/exportarr#configuration
+      - PORT=9707
+      - URL="http://sonarr:8989"
+      - APIKEY=${SONARR_API_KEY}
+    labels:
+      whalewall.enabled: true
+      whalewall.rules: |
+        output:
+          # allow communication to retreive metrics
+          - network: common_backend
+            container: sonarr
+          # allow prometheus to scrape metrics
+          - network: common_backend
+            container: prometheus
+    networks:
+      - backend
+
+volumes:
+  sonarr_config:

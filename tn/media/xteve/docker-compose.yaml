@@ -1,0 +1,56 @@
+services:
+  xteve:
+    # https://hub.docker.com/r/alturismo/xteve_guide2go
+    # https://github.com/xteve-project/xTeVe
+    image: alturismo/xteve_guide2go:latest
+    container_name: xteve
+    restart: unless-stopped
+    labels:
+      traefik.enable: true
+
+      # Listen on http, but redirect all requests to https
+      traefik.http.routers.xteve-http.rule: Host(`xteve.${ALT_DOMAIN_RE}`)
+      traefik.http.routers.xteve-http.entrypoints: http
+      traefik.http.routers.xteve-http.middlewares: redirect-https
+
+      # Direct all https requests to the service, checking with crowdsec first
+      traefik.http.routers.xteve-https.rule: Host(`xteve.${ALT_DOMAIN_RE}`)
+      traefik.http.routers.xteve-https.entrypoints: https
+      traefik.http.routers.xteve-https.tls: true
+      traefik.http.routers.xteve-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.xteve-https.service: xteve
+      traefik.http.routers.xteve-https.middlewares: crowdsec-bouncer
+
+      traefik.http.services.xteve.loadbalancer.server.port: 34400
+
+      # Enable Whalewall for this service
+      whalewall.enabled: true
+      # xteve: allow published ports inbound. Communicate with traefik and to WAN over selected protocols.
+      whalewall.rules: |
+        output:
+          - log_prefix: "dns"
+            proto: udp
+            dst_ports:
+              - 53
+          - log_prefix: "https"
+            proto: tcp
+            dst_ports:
+              - 443
+          - log_prefix: "http"
+            proto: tcp
+            dst_ports:
+              - 80
+          # allow communication to traefik
+          - network: common_backend
+            container: traefik
+    volumes:
+      - xteve_buffer:/buffertmp
+      - xteve_config:/config
+      - xteve_root:/root/.xteve
+    networks:
+      - backend
+
+volumes:
+  xteve_buffer:
+  xteve_config:
+  xteve_root:

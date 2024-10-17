@@ -1,0 +1,82 @@
+services:
+  radarr:
+    # https://hotio.dev/containers/radarr
+    # https://github.com/Radarr/Radarr
+    image: ghcr.io/hotio/radarr:release-5.11.0.9244
+    container_name: radarr
+    restart: unless-stopped
+    environment:
+      - PUID=${RADARR_UID}
+      - PGID=${MEDIA_GID}
+      - UMASK=002
+      - TZ=${TZ}
+    labels:
+      traefik.enable: true
+
+      # Listen on http, but redirect all requests to https
+      traefik.http.routers.radarr-http.rule: Host(`radarr.${DOMAIN}`)
+      traefik.http.routers.radarr-http.entrypoints: http
+      traefik.http.routers.radarr-http.middlewares: redirect-https
+
+      # Direct all https requests to the service, checking with crowdsec first
+      traefik.http.routers.radarr-https.rule: Host(`radarr.${DOMAIN}`)
+      traefik.http.routers.radarr-https.entrypoints: https
+      traefik.http.routers.radarr-https.tls: true
+      traefik.http.routers.radarr-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.radarr-https.service: radarr
+      traefik.http.routers.radarr-https.middlewares: crowdsec-bouncer
+
+      traefik.http.services.radarr.loadbalancer.server.port: 7878
+
+      # Enable Whalewall for this service
+      whalewall.enabled: true
+      # radarr: Communicate with traefik and to WAN over selected protocols.
+      whalewall.rules: |
+        output:
+          - log_prefix: "dns"
+            proto: udp
+            dst_ports:
+              - 53
+          - log_prefix: "https"
+            proto: tcp
+            dst_ports:
+              - 443
+          - log_prefix: "http"
+            proto: tcp
+            dst_ports:
+              - 80
+          # allow communication to traefik
+          - network: common_backend
+            container: traefik
+    volumes:
+      - radarr_config:/config
+      - /mnt/andromeda/media:/data
+    networks:
+      - backend
+
+  radarr-exporter:
+    # https://github.com/onedr0p/exportarr
+    image: ghcr.io/onedr0p/exportarr:v2.0.1
+    container_name: radarr-exporter
+    command: ["radarr"]
+    restart: unless-stopped
+    environment:
+      # https://github.com/onedr0p/exportarr#configuration
+      - PORT=9708
+      - URL="http://radarr:7878"
+      - APIKEY=${RADARR_API_KEY}
+    labels:
+      whalewall.enabled: true
+      whalewall.rules: |
+        output:
+          # allow communication to retreive metrics
+          - network: common_backend
+            container: radarr
+          # allow prometheus to scrape metrics
+          - network: common_backend
+            container: prometheus
+    networks:
+      - backend
+
+volumes:
+  radarr_config:

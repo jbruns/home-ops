@@ -1,0 +1,86 @@
+services:
+  emby:
+    # https://hub.docker.com/r/emby/embyserver
+    # https://github.com/MediaBrowser/Emby.Releases/releases
+    image: emby/embyserver:4.8.10.0
+    container_name: emby
+    restart: unless-stopped
+    runtime: nvidia
+    environment:
+      - EMBY_UID=${EMBY_UID}
+      - EMBY_GID=${MEDIA_GID}
+    labels:
+      traefik.enable: true
+
+      # Listen on http, but redirect all requests to https
+      traefik.http.routers.emby-http.rule: Host(`emby.${DOMAIN}`)
+      traefik.http.routers.emby-http.entrypoints: http
+      traefik.http.routers.emby-http.middlewares: redirect-https
+
+      # Direct all https requests to the service, checking with crowdsec first
+      traefik.http.routers.emby-https.rule: Host(`emby.${DOMAIN}`)
+      traefik.http.routers.emby-https.entrypoints: https
+      traefik.http.routers.emby-https.tls: true
+      traefik.http.routers.emby-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.emby-https.service: emby
+      traefik.http.routers.emby-https.middlewares: crowdsec-bouncer
+
+      traefik.http.services.emby.loadbalancer.server.port: 32800
+
+      # Enable Whalewall for this service
+      whalewall.enabled: true
+      # emby: allow published ports inbound. Communicate with traefik and to WAN over selected protocols.
+      whalewall.rules: |
+        mapped_ports:
+          external:
+            allow: true
+        output:
+          - log_prefix: "dns"
+            proto: udp
+            dst_ports:
+              - 53
+          - log_prefix: "https"
+            proto: tcp
+            dst_ports:
+              - 443
+          - log_prefix: "http"
+            proto: tcp
+            dst_ports:
+              - 80
+          # allow communication to traefik
+          - network: common_backend
+            container: traefik
+    ports:
+      - 32800:32800 # http
+      - 32900:32900 # https
+    volumes:
+      - emby_config:/config
+      - /mnt/andromeda/media/tv:/data/tv:ro
+      - /mnt/andromeda/media/movies:/data/movies:ro
+      - /mnt/andromeda/media/dvr:/data/dvr
+    networks:
+      - backend
+
+  emby-exporter:
+    # https://github.com/TOomaAh/emby_exporter_go
+    image: bagul/goemby_exporter:v1.0.11
+    container_name: emby-exporter
+    restart: unless-stopped
+    environment:
+      - CONFIG_FILE=/config/config.yaml
+      - TZ=${TZ}
+    labels:
+      whalewall.enabled: true
+      whalewall.rules: |
+        output:
+          - network: common_backend
+            container: emby
+          - network: common_backend
+            container: prometheus
+    volumes:
+      - ./emby_exporter_config.yaml:/config/config.yaml
+    networks:
+      - backend
+
+volumes:
+  emby_config:

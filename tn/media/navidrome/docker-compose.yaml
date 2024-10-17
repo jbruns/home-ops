@@ -1,0 +1,59 @@
+services:
+  navidrome:
+    # https://hub.docker.com/r/deluan/navidrome
+    # https://github.com/navidrome/navidrome/releases
+    image: deluan/navidrome:0.53.3
+    container_name: navidrome
+    restart: unless-stopped
+    user: ${NAVIDROME_UID}:${MEDIA_GID}
+    environment:
+      # https://www.navidrome.org/docs/usage/configuration-options/#environment-variables
+      - ND_ENABLETRANSCODINGCONFIG=true
+      - ND_DATAFOLDER=/config
+      - ND_MUSICFOLDER=/music
+    labels:
+      traefik.enable: true
+
+      # Listen on http, but redirect all requests to https
+      traefik.http.routers.navidrome-http.rule: Host(`navidrome.${DOMAIN}`)
+      traefik.http.routers.navidrome-http.entrypoints: http
+      traefik.http.routers.navidrome-http.middlewares: redirect-https
+
+      # Direct all https requests to the service, checking with crowdsec first
+      traefik.http.routers.navidrome-https.rule: Host(`navidrome.${DOMAIN}`)
+      traefik.http.routers.navidrome-https.entrypoints: https
+      traefik.http.routers.navidrome-https.tls: true
+      traefik.http.routers.navidrome-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.navidrome-https.service: navidrome
+      traefik.http.routers.navidrome-https.middlewares: crowdsec-bouncer
+
+      traefik.http.services.navidrome.loadbalancer.server.port: 4533
+
+      # Enable Whalewall for this service
+      whalewall.enabled: true
+      # navidrome: Communicate with traefik and to WAN over selected protocols.
+      whalewall.rules: |
+        output:
+          - log_prefix: "dns"
+            proto: udp
+            dst_ports:
+              - 53
+          - log_prefix: "https"
+            proto: tcp
+            dst_ports:
+              - 443
+          - log_prefix: "http"
+            proto: tcp
+            dst_ports:
+              - 80
+          # allow communication to traefik
+          - network: common_backend
+            container: traefik
+    volumes:
+      - navidrome_config:/config
+      - /mnt/andromeda/media/music/FLAC:/music:ro
+    networks:
+      - backend
+
+volumes:
+  navidrome_config:

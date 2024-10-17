@@ -1,0 +1,14 @@
+services:
+  # https://github.com/capnspacehook/whalewall
+  whalewall:
+    cap_add: 
+      - NET_ADMIN
+    image: ghcr.io/capnspacehook/whalewall
+    container_name: whalewall
+    network_mode: host
+    volumes:
+      - whalewall_data:/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+volumes:
+  whalewall_data:

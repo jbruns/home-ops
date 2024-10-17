@@ -1,0 +1,89 @@
+services:
+  plex:
+    # https://hub.docker.com/r/plexinc/pms-docker
+    # https://github.com/plexinc/pms-docker
+    image: plexinc/pms-docker:1.41.0.8994-f2c27da23
+    container_name: plex
+    restart: unless-stopped
+    environment:
+      # https://github.com/plexinc/pms-docker?tab=readme-ov-file#parameters
+      - PLEX_UID=${PLEX_UID}
+      - PLEX_GID=${MEDIA_GID}
+      - TZ=${TZ}
+    labels:
+      traefik.enable: true
+
+      # Listen on http, but redirect all requests to https
+      traefik.http.routers.plex-http.rule: Host(`plex.${DOMAIN}`)
+      traefik.http.routers.plex-http.entrypoints: http
+      traefik.http.routers.plex-http.middlewares: redirect-https
+
+      # Direct all https requests to the service, checking with crowdsec first
+      traefik.http.routers.plex-https.rule: Host(`plex.${DOMAIN}`)
+      traefik.http.routers.plex-https.entrypoints: https
+      traefik.http.routers.plex-https.tls: true
+      traefik.http.routers.plex-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.plex-https.service: plex
+      traefik.http.routers.plex-https.middlewares: crowdsec-bouncer
+
+      traefik.http.services.plex.loadbalancer.server.port: 32400
+
+      # Enable Whalewall for this service
+      whalewall.enabled: true
+      # plex: allow published ports inbound. Communicate with traefik and to WAN over selected protocols.
+      whalewall.rules: |
+        mapped_ports:
+          external:
+            allow: true
+        output:
+          - log_prefix: "dns"
+            proto: udp
+            dst_ports:
+              - 53
+          - log_prefix: "https"
+            proto: tcp
+            dst_ports:
+              - 443
+          - log_prefix: "http"
+            proto: tcp
+            dst_ports:
+              - 80
+          # allow communication to traefik
+          - network: common_backend
+            container: traefik
+    ports:
+      - 32400:32400 # http
+      - 32410:32410/udp # gdm-udp0
+      - 32412:32412/udp # gdm-udp1
+      - 32413:32413/udp # gdm-udp2
+      - 32414:32414/udp # gdm-udp3
+    volumes:
+      - plex_config:/config
+      - plex_transcode:/transcode
+      - /mnt/andromeda/media:/data:ro
+    networks:
+      - backend
+
+  plex-exporter:
+    # https://github.com/jsclayton/prometheus-plex-exporter
+    image: ghcr.io/jsclayton/prometheus-plex-exporter
+    container_name: plex-exporter
+    restart: unless-stopped
+    # https://github.com/jsclayton/prometheus-plex-exporter?tab=readme-ov-file#configuration
+    environment:
+      - PLEX_SERVER=http://plex:32400
+      - PLEX_TOKEN:${PLEX_EXPORTER_TOKEN}
+    labels:
+      whalewall.enabled: true
+      whalewall.rules: |
+        output:
+          - network: common_backend
+            container: plex
+          - network: common_backend
+            container: prometheus
+    networks:
+      - backend
+
+volumes:
+  plex_config:
+  plex_transcode:
