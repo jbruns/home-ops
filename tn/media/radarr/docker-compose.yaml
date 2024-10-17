@@ -1,10 +1,10 @@
 services:
   radarr:
+    << : *service_defaults
     # https://hotio.dev/containers/radarr
     # https://github.com/Radarr/Radarr
     image: ghcr.io/hotio/radarr:release-5.11.0.9244
     container_name: radarr
-    restart: unless-stopped
     environment:
       - PUID=${RADARR_UID}
       - PGID=${MEDIA_GID}

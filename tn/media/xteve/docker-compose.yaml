@@ -1,10 +1,10 @@
 services:
   xteve:
+    << : *service_defaults
     # https://hub.docker.com/r/alturismo/xteve_guide2go
     # https://github.com/xteve-project/xTeVe
     image: alturismo/xteve_guide2go:latest
     container_name: xteve
-    restart: unless-stopped
     labels:
       traefik.enable: true
 

@@ -1,10 +1,10 @@
 services:
   tautulli:
+    << : *service_defaults
     # https://github.com/Tautulli/Tautulli/pkgs/container/tautulli
     # https://github.com/Tautulli/Tautulli
     image: ghcr.io/tautulli/tautulli:v2.14.6
     container_name: tautulli
-    restart: unless-stopped
     environment:
       - PUID=${TAUTULLI_UID}
       - PGID=${TAUTULLI_GID}

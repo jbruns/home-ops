@@ -1,10 +1,10 @@
 services:
   navidrome:
+    << : *service_defaults
     # https://hub.docker.com/r/deluan/navidrome
     # https://github.com/navidrome/navidrome/releases
     image: deluan/navidrome:0.53.3
     container_name: navidrome
-    restart: unless-stopped
     user: ${NAVIDROME_UID}:${MEDIA_GID}
     environment:
       # https://www.navidrome.org/docs/usage/configuration-options/#environment-variables

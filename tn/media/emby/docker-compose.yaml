@@ -1,10 +1,10 @@
 services:
   emby:
+    << : *service_defaults
     # https://hub.docker.com/r/emby/embyserver
     # https://github.com/MediaBrowser/Emby.Releases/releases
     image: emby/embyserver:4.8.10.0
     container_name: emby
-    restart: unless-stopped
     runtime: nvidia
     environment:
       - EMBY_UID=${EMBY_UID}

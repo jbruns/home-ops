@@ -1,11 +1,16 @@
 # MEDIA STACK
+## Global service defaults
+x-service_defaults: &service_defaults
+  env_file: stack.env
+  restart: unless-stopped
+
 ## Per-stack instances of services (e.g. for backups) are declared here.
 services:
   media-backup:
-    # https://github.com/offen/docker-volume-backup
+    << : *service_defaults
+    # https://github.com/offen/docker-volume-backup    
     image: offen/docker-volume-backup:v2.43.0
     container_name: media-backup
-    restart: unless-stopped
     environment:
       # https://offen.github.io/docker-volume-backup/reference
       - BACKUP_FILENAME=media-%Y-%m-%dT%H-%M-%S.tar.gz

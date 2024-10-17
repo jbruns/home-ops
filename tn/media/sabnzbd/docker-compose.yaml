@@ -1,10 +1,10 @@
 services:
   sabnzbd:
+    << : *service_defaults
     # https://hotio.dev/containers/sabnzbd
     # https://github.com/sabnzbd/sabnzbd
     image: ghcr.io/hotio/sabnzbd:release-4.3.3
     container_name: sabnzbd
-    restart: unless-stopped
     environment:
       - PUID=${SABNZBD_UID}
       - PGID=${MEDIA_GID}

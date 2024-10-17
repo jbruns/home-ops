@@ -1,10 +1,10 @@
 services:
   tvheadend:
+    << : *service_defaults
     # https://docs.linuxserver.io/images/docker-tvheadend
     # https://github.com/tvheadend/tvheadend
     image: lscr.io/linuxserver/tvheadend:26ec161f-ls231
     container_name: tvheadend
-    restart: unless-stopped
     environment:
       # https://docs.linuxserver.io/images/docker-tvheadend/#environment-variables-e
       - PUID=${TVHEADEND_UID}
