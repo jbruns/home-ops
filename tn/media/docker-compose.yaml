@@ -49,9 +49,6 @@ networks:
     name: common_backend
     external: true
 
-env_file:
-  - stack.env
-
 # Remaining services in the stack have their own Compose configuration.
 include:
   - ./emby/docker-compose.yaml
