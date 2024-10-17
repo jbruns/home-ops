@@ -1,6 +1,8 @@
 services:
   sabnzbd:
-    << : *service_defaults
+    env_file: 
+      - stack.env
+    restart: unless-stopped
     # https://hotio.dev/containers/sabnzbd
     # https://github.com/sabnzbd/sabnzbd
     image: ghcr.io/hotio/sabnzbd:release-4.3.3
@@ -60,11 +62,13 @@ services:
       - backend
 
   sabnzbd-exporter:
+    env_file:
+      - stack.env
+    restart: unless-stopped
     # https://github.com/onedr0p/exportarr
     image: ghcr.io/onedr0p/exportarr:v2.0.1
     container_name: sabnzbd-exporter
     command: ["sabnzbd"]
-    restart: unless-stopped
     environment:
       # https://github.com/onedr0p/exportarr#configuration
       - PORT=9711
@@ -85,3 +89,8 @@ services:
 
 volumes:
   sabnzbd_config:
+
+networks:
+  backend:
+    name: common_backend
+    external: true

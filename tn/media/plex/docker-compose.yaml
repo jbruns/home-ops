@@ -1,6 +1,8 @@
 services:
   plex:
-    << : *service_defaults
+    env_file: 
+      - stack.env
+    restart: unless-stopped
     # https://hub.docker.com/r/plexinc/pms-docker
     # https://github.com/plexinc/pms-docker
     image: plexinc/pms-docker:1.41.0.8994-f2c27da23
@@ -65,10 +67,12 @@ services:
       - backend
 
   plex-exporter:
+    env_file:
+      - stack.env
+    restart: unless-stopped
     # https://github.com/jsclayton/prometheus-plex-exporter
     image: ghcr.io/jsclayton/prometheus-plex-exporter
     container_name: plex-exporter
-    restart: unless-stopped
     # https://github.com/jsclayton/prometheus-plex-exporter?tab=readme-ov-file#configuration
     environment:
       - PLEX_SERVER=http://plex:32400
@@ -87,3 +91,8 @@ services:
 volumes:
   plex_config:
   plex_transcode:
+
+networks:
+  backend:
+    name: common_backend
+    external: true

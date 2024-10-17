@@ -1,6 +1,8 @@
 services:
   tautulli:
-    << : *service_defaults
+    env_file: 
+      - stack.env
+    restart: unless-stopped
     # https://github.com/Tautulli/Tautulli/pkgs/container/tautulli
     # https://github.com/Tautulli/Tautulli
     image: ghcr.io/tautulli/tautulli:v2.14.6
@@ -54,3 +56,8 @@ services:
 
 volumes:
   tautulli_config:
+
+networks:
+  backend:
+    name: common_backend
+    external: true

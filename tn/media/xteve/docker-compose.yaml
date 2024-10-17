@@ -1,6 +1,8 @@
 services:
   xteve:
-    << : *service_defaults
+    env_file: 
+      - stack.env
+    restart: unless-stopped
     # https://hub.docker.com/r/alturismo/xteve_guide2go
     # https://github.com/xteve-project/xTeVe
     image: alturismo/xteve_guide2go:latest
@@ -54,3 +56,8 @@ volumes:
   xteve_buffer:
   xteve_config:
   xteve_root:
+
+networks:
+  backend:
+    name: common_backend
+    external: true

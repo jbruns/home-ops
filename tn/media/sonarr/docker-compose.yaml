@@ -1,6 +1,8 @@
 services:
   sonarr:
-    << : *service_defaults
+    env_file: 
+      - stack.env
+    restart: unless-stopped
     # https://hotio.dev/containers/sonarr
     # https://github.com/Sonarr/Sonarr
     image: ghcr.io/hotio/sonarr:release-4.0.9.2244
@@ -55,11 +57,13 @@ services:
       - backend
 
   sonarr-exporter:
+    env_file:
+      - stack.env
+    restart: unless-stopped
     # https://github.com/onedr0p/exportarr
     image: ghcr.io/onedr0p/exportarr:v2.0.1
     container_name: sonarr-exporter
     command: ["sonarr"]
-    restart: unless-stopped
     environment:
       # https://github.com/onedr0p/exportarr#configuration
       - PORT=9707
@@ -80,3 +84,8 @@ services:
 
 volumes:
   sonarr_config:
+
+networks:
+  backend:
+    name: common_backend
+    external: true

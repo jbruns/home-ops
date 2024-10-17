@@ -1,6 +1,8 @@
 services:
   tvheadend:
-    << : *service_defaults
+    env_file: 
+      - stack.env
+    restart: unless-stopped
     # https://docs.linuxserver.io/images/docker-tvheadend
     # https://github.com/tvheadend/tvheadend
     image: lscr.io/linuxserver/tvheadend:26ec161f-ls231
@@ -56,10 +58,12 @@ services:
       - backend
 
   tvheadend-exporter:
+    env_file:
+      - stack.env
+    restart: unless-stopped
     # https://github.com/0x4d4d/tvheadend-exporter
     image: ghcr.io/0x4d4d/tvheadend-exporter:v0.10.0
     container_name: tvheadend-exporter
-    restart: unless-stopped
     environment:
       - TVH_USER=${TVHEADEND_EXPORTER_USER}
       - TVH_PASS=${TVHEADEND_EXPORTER_PASS}
@@ -79,3 +83,8 @@ services:
 
 volumes:
   tvheadend_config:
+
+networks:
+  backend:
+    name: common_backend
+    external: true
