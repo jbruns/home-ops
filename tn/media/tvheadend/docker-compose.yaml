@@ -57,8 +57,8 @@ services:
 
   tvheadend-exporter:
     restart: unless-stopped
-    # https://github.com/0x4d4d/tvheadend-exporter
-    image: ghcr.io/0x4d4d/tvheadend-exporter:v0.10.0
+    # https://github.com/myrck/tvheadend-exporter
+    image: ghcr.io/myrck/tvheadend-exporter:v0.10.0
     container_name: tvheadend-exporter
     environment:
       - TVH_USER=${TVHEADEND_EXPORTER_USER}
