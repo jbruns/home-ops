@@ -1,7 +1,5 @@
 services:
   sabnzbd:
-    env_file: 
-      - ../stack.env
     restart: unless-stopped
     # https://hotio.dev/containers/sabnzbd
     # https://github.com/sabnzbd/sabnzbd
@@ -62,8 +60,6 @@ services:
       - backend
 
   sabnzbd-exporter:
-    env_file:
-      - ../stack.env
     restart: unless-stopped
     # https://github.com/onedr0p/exportarr
     image: ghcr.io/onedr0p/exportarr:v2.0.1

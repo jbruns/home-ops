@@ -1,7 +1,5 @@
 services:
   plex:
-    env_file: 
-      - ../stack.env
     restart: unless-stopped
     # https://hub.docker.com/r/plexinc/pms-docker
     # https://github.com/plexinc/pms-docker
@@ -67,8 +65,6 @@ services:
       - backend
 
   plex-exporter:
-    env_file:
-      - ../stack.env
     restart: unless-stopped
     # https://github.com/jsclayton/prometheus-plex-exporter
     image: ghcr.io/jsclayton/prometheus-plex-exporter

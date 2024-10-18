@@ -1,7 +1,5 @@
 services:
   emby:
-    env_file: 
-      - ../stack.env
     restart: unless-stopped
     # https://hub.docker.com/r/emby/embyserver
     # https://github.com/MediaBrowser/Emby.Releases/releases
@@ -64,8 +62,6 @@ services:
       - backend
 
   emby-exporter:
-    env_file:
-      - ../stack.env
     restart: unless-stopped
     # https://github.com/TOomaAh/emby_exporter_go
     image: bagul/goemby_exporter:v1.0.11
