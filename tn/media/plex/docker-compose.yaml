@@ -68,7 +68,7 @@ services:
 
   plex-exporter:
     env_file:
-      - stack.env
+      - ../stack.env
     restart: unless-stopped
     # https://github.com/jsclayton/prometheus-plex-exporter
     image: ghcr.io/jsclayton/prometheus-plex-exporter

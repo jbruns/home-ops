@@ -65,7 +65,7 @@ services:
 
   emby-exporter:
     env_file:
-      - stack.env
+      - ../stack.env
     restart: unless-stopped
     # https://github.com/TOomaAh/emby_exporter_go
     image: bagul/goemby_exporter:v1.0.11

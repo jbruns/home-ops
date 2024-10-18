@@ -59,7 +59,7 @@ services:
 
   tvheadend-exporter:
     env_file:
-      - stack.env
+      - ../stack.env
     restart: unless-stopped
     # https://github.com/0x4d4d/tvheadend-exporter
     image: ghcr.io/0x4d4d/tvheadend-exporter:v0.10.0
