@@ -3,7 +3,7 @@ services:
     restart: unless-stopped
     # https://hub.docker.com/r/emby/embyserver
     # https://github.com/MediaBrowser/Emby.Releases/releases
-    image: emby/embyserver:4.8.10.0
+    image: emby/embyserver:4.9.0.30
     container_name: emby
     # runtime: nvidia
     environment:
