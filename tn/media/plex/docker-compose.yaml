@@ -1,7 +1,7 @@
 services:
   plex:
     env_file: 
-      - stack.env
+      - ../stack.env
     restart: unless-stopped
     # https://hub.docker.com/r/plexinc/pms-docker
     # https://github.com/plexinc/pms-docker

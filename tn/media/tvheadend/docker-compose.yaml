@@ -1,7 +1,7 @@
 services:
   tvheadend:
     env_file: 
-      - stack.env
+      - ../stack.env
     restart: unless-stopped
     # https://docs.linuxserver.io/images/docker-tvheadend
     # https://github.com/tvheadend/tvheadend

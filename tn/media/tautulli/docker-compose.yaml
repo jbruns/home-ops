@@ -1,7 +1,7 @@
 services:
   tautulli:
     env_file: 
-      - stack.env
+      - ../stack.env
     restart: unless-stopped
     # https://github.com/Tautulli/Tautulli/pkgs/container/tautulli
     # https://github.com/Tautulli/Tautulli

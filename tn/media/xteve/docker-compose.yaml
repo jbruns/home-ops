@@ -1,7 +1,7 @@
 services:
   xteve:
     env_file: 
-      - stack.env
+      - ../stack.env
     restart: unless-stopped
     # https://hub.docker.com/r/alturismo/xteve_guide2go
     # https://github.com/xteve-project/xTeVe

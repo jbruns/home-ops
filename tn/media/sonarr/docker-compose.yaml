@@ -1,7 +1,7 @@
 services:
   sonarr:
     env_file: 
-      - stack.env
+      - ../stack.env
     restart: unless-stopped
     # https://hotio.dev/containers/sonarr
     # https://github.com/Sonarr/Sonarr

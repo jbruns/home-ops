@@ -1,7 +1,7 @@
 services:
   radarr:
     env_file: 
-      - stack.env
+      - ../stack.env
     restart: unless-stopped
     # https://hotio.dev/containers/radarr
     # https://github.com/Radarr/Radarr
