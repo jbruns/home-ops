@@ -25,7 +25,7 @@ services:
 
       # Enable Whalewall for this service
       whalewall.enabled: true
-      # xteve: allow published ports inbound. Communicate with traefik and to WAN over selected protocols.
+      # xteve: Communicate with traefik and to WAN over selected protocols.
       whalewall.rules: |
         output:
           - log_prefix: "dns"
