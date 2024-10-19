@@ -1,0 +1,34 @@
+services:  
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/config.yml'
+      - '--web.config.file=/etc/alertmanager/web.yml'
+      - '--log.level=error'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=https://alertmanager.${DOMAIN}'
+    volumes:
+      - ./config.yml:/etc/alertmanager/config.yml
+      - ./web.yml:/etc/alertmanager/web.yml
+    ports:
+      # fallback internal
+      - 9093:9093
+    networks:
+      - backend
+    labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: monitoring
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+
+
+# TODO: 
+# - basic auth - web.yml - https://prometheus.io/docs/alerting/latest/https/
+# - traefik config
+# - whalewall config

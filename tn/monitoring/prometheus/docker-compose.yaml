@@ -1,0 +1,41 @@
+services:
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--log.level=error'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.external-url=http://localhost:9090'
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./recording-rules.yml:/etc/prometheus/recording-rules.yml
+      - ./alerting-rules.yml:/etc/prometheus/alerting-rules.yml
+
+      - prometheus-data:/prometheus
+    ports:
+      - 9090:9090
+    networks:
+      - backend
+    labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: monitoring
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1m"
+        max-file: "1"
+        tag: "{{.Name}}"
+
+volumes:
+  prometheus-data:
+
+networks:
+  backend:
+    name: common_backend
+    external: true

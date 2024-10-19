@@ -1,0 +1,46 @@
+# MONITORING STACK
+## Per-stack instances of services (e.g. for backups) are declared here.
+services:
+  monitoring-backup:
+    restart: unless-stopped
+    # https://github.com/offen/docker-volume-backup    
+    image: offen/docker-volume-backup:v2.43.0
+    container_name: monitoring-backup
+    environment:
+      # https://offen.github.io/docker-volume-backup/reference
+      - BACKUP_FILENAME=monitoring-%Y-%m-%dT%H-%M-%S.tar.gz
+      - BACKUP_CRON_EXPRESSION=15 4 * * *
+      - BACKUP_PRUNING_PREFIX=monitoring-
+      - BACKUP_RETENTION_DAYS=7
+    labels:
+      # Enable whalewall for this service
+      whalewall.enabled: true
+      # backup: no traffic in or out
+    volumes: 
+      # Backup source volumes
+      # grafana
+      - grafana_data:/backup/grafana_data:ro
+
+      # Backup target
+      - ${ZFS_POOL_ROOT_HDD}/docker_backups:/archive
+    networks:
+      - backend
+
+# When referring to a network called 'backend', we mean the common stack's backend network
+networks:
+  backend:
+    name: common_backend
+    external: true
+
+# Remaining services in the stack have their own Compose configuration.
+include:
+  - ./alertmanager/docker-compose.yaml
+  - ./cadvisor/docker-compose.yaml
+  - ./grafana/docker-compose.yaml
+  - ./node-exporter/docker-compose.yaml
+  - ./prometheus/docker-compose.yaml
+
+# TODO:
+# - env
+# - loki
+# - promtail
