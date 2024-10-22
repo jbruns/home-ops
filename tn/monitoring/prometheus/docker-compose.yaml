@@ -26,10 +26,10 @@ services:
       logging_jobname: containerlogs
       stackname: monitoring
     logging:
-      driver: "json-file"
+      driver: json-file
       options:
-        max-size: "1m"
-        max-file: "1"
+        max-size: 1m
+        max-file: 1
         tag: "{{.Name}}"
 
 volumes:
@@ -39,3 +39,8 @@ networks:
   backend:
     name: common_backend
     external: true
+
+# TODO:
+# whalewall - backend range
+# web auth?
+# traefik?

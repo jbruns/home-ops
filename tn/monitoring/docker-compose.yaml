@@ -1,4 +1,5 @@
 # MONITORING STACK
+## With thanks to https://github.com/ruanbekker/docker-monitoring-stack-gpnc
 ## Per-stack instances of services (e.g. for backups) are declared here.
 services:
   monitoring-backup:
@@ -18,8 +19,15 @@ services:
       # backup: no traffic in or out
     volumes: 
       # Backup source volumes
+      # alertmanager
+      # cadvisor
       # grafana
       - grafana_data:/backup/grafana_data:ro
+      # loki
+      # node-exporter
+      # prometheus
+      - prometheus_data:/backup/prometheus_data:ro
+      # promtail
 
       # Backup target
       - ${ZFS_POOL_ROOT_HDD}/docker_backups:/archive
@@ -37,10 +45,7 @@ include:
   - ./alertmanager/docker-compose.yaml
   - ./cadvisor/docker-compose.yaml
   - ./grafana/docker-compose.yaml
+  - ./loki/docker-compose.yaml
   - ./node-exporter/docker-compose.yaml
   - ./prometheus/docker-compose.yaml
-
-# TODO:
-# - env
-# - loki
-# - promtail
+  - ./promtail/docker-compose.yaml

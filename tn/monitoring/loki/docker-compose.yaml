@@ -1,17 +1,14 @@
 services:
-  node-exporter:
-    image: prom/node-exporter:v1.8.2
-    container_name: node-exporter
-    restart: unless-stopped
+  loki:
+    image: grafana/loki:3.1.2
+    container_name: loki
+    user: root
+    ports:
+      - 3100:3100
+    command: -config.file=/etc/loki/loki.yaml
     volumes:
-      - /proc:/host/proc:ro
-      - /sys:/host/sys:ro
-      - /:/rootfs:ro
-    command:
-      - '--path.procfs=/host/proc'
-      - '--path.sysfs=/host/sys'
-      - '--collector.filesystem.ignored-mount-points'
-      - "^/(sys|proc|dev|host|etc|rootfs/var/lib/docker/containers|rootfs/var/lib/docker/overlay2|rootfs/run/docker/netns|rootfs/var/lib/docker/aufs)($$|/)"
+      - ./configs/loki/loki.yaml:/etc/loki/loki.yaml
+      - ./configs/loki/rules.yaml:/etc/loki/rules/fake/loki-rules.yml
     networks:
       - backend
     labels:
@@ -24,9 +21,15 @@ services:
       # loki: Communicate with monitoring data sources.
       whalewall.rules: |
         output:
-          # prometheus: data collection
+          # prometheus, grafana, alertmanager, promtail: data collection
           - network: common_backend
             container: prometheus
+          - network: common_backend
+            container: grafana
+          - network: common_backend
+            container: alertmanager
+          - network: common_backend
+            container: promtail
 
     logging:
       driver: json-file
