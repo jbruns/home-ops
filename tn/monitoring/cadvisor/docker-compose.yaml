@@ -6,7 +6,8 @@ services:
     restart: unless-stopped
     command:
       # https://github.com/google/cadvisor/blob/master/docs/running.md#with-docker
-      - --disable_metrics=process
+      # https://github.com/google/cadvisor/issues/3139
+      - --disable_metrics=process,referenced_memory
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
