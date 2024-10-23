@@ -21,7 +21,7 @@ services:
       - ./dashboards/container-metrics.json:/var/lib/grafana/dashboards/container-metrics.json:ro
       - ./dashboards/log-search.json:/var/lib/grafana/dashboards/log-search.json:ro
 
-      - grafana-data:/var/lib/grafana
+      - grafana_data:/var/lib/grafana
     labels:
       logging: promtail
       logging_jobname: containerlogs
@@ -79,7 +79,7 @@ services:
         tag: "{{.Name}}"
 
 volumes:
-  grafana-data:
+  grafana_data:
 
 networks:
   backend:

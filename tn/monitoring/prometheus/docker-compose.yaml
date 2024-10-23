@@ -18,7 +18,7 @@ services:
       - ./recording-rules.yml:/etc/prometheus/recording-rules.yml
       - ./alerting-rules.yml:/etc/prometheus/alerting-rules.yml
 
-      - prometheus-data:/prometheus
+      - prometheus_data:/prometheus
     ports:
       # fallback internal
       - 9090:9090
@@ -73,7 +73,7 @@ services:
         tag: "{{.Name}}"
 
 volumes:
-  prometheus-data:
+  prometheus_data:
 
 networks:
   backend:
