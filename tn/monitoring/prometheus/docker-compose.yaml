@@ -5,19 +5,22 @@ services:
     restart: unless-stopped
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--web.config.file=/etc/prometheus/web.yml'
       - '--log.level=error'
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=7d'
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
-      - '--web.external-url=http://localhost:9090'
+      - '--web.external-url=http://prometheus.${DOMAIN}'
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./web.yml:/etc/prometheus/web.yml
       - ./recording-rules.yml:/etc/prometheus/recording-rules.yml
       - ./alerting-rules.yml:/etc/prometheus/alerting-rules.yml
 
       - prometheus-data:/prometheus
     ports:
+      # fallback internal
       - 9090:9090
     networks:
       - backend
@@ -25,6 +28,43 @@ services:
       logging: promtail
       logging_jobname: containerlogs
       stackname: monitoring
+
+      traefik.enable: true
+
+      # Listen on http, but redirect all requests to https
+      traefik.http.routers.prometheus-http.rule: Host(`prometheus.${DOMAIN}`)
+      traefik.http.routers.prometheus-http.entrypoints: http
+      traefik.http.routers.prometheus-http.middlewares: redirect-https
+
+      # Direct all https requests to the service, checking with crowdsec first
+      traefik.http.routers.prometheus-https.rule: Host(`prometheus.${DOMAIN}`)
+      traefik.http.routers.prometheus-https.entrypoints: https
+      traefik.http.routers.prometheus-https.tls: true
+      traefik.http.routers.prometheus-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.prometheus-https.service: prometheus
+      traefik.http.routers.prometheus-https.middlewares: crowdsec-bouncer
+
+      traefik.http.services.prometheus.loadbalancer.server.port: 3000
+
+      # Enable Whalewall for this service
+      whalewall.enabled: true
+      # prometheus: Communicate with traefik, monitoring data sources.
+      whalewall.rules: |
+        output:
+          # allow communication with metrics exporters
+          - network: common_backend
+            proto: tcp
+            dst_ports:
+              - 1024-65535
+          # traefik: reverse proxy
+          - network: common_backend
+            container: traefik
+          # grafana, alertmanager: data collection
+          - network: common_backend
+            container: grafana
+          - network: common_backend
+            container: alertmanager
+
     logging:
       driver: json-file
       options:
@@ -39,8 +79,3 @@ networks:
   backend:
     name: common_backend
     external: true
-
-# TODO:
-# whalewall - backend range
-# web auth?
-# traefik?
