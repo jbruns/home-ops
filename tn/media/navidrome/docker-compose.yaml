@@ -9,8 +9,6 @@ services:
     environment:
       # https://www.navidrome.org/docs/usage/configuration-options/#environment-variables
       - ND_ENABLETRANSCODINGCONFIG=true
-      - ND_DATAFOLDER=/config
-      - ND_MUSICFOLDER=/music
     labels:
       traefik.enable: true
 
@@ -50,7 +48,7 @@ services:
           - network: common_backend
             container: traefik
     volumes:
-      - navidrome_config:/config
+      - navidrome_data:/data
       - /mnt/andromeda/media/music/FLAC:/music:ro
     networks:
       - backend
