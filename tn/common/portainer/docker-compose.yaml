@@ -4,7 +4,7 @@ services:
     container_name: portainer
     restart: unless-stopped
     environment:
-      - COMPOSE_UNPACKER_IMAGE=ghcr.io/sled/compose-unpacker:latest
+      - COMPOSE_UNPACKER_IMAGE=jbruns/compose-unpacker:2.21.3-sops
     labels:
       traefik.enable: true
 
