@@ -55,7 +55,8 @@ volumes:
   xteve_buffer:
   xteve_config:
   xteve_root:
-
+  xteve_guide2go:
+  
 networks:
   backend:
     name: common_backend
