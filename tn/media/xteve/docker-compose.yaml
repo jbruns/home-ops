@@ -47,6 +47,7 @@ services:
       - xteve_buffer:/buffertmp
       - xteve_config:/config
       - xteve_root:/root/.xteve
+      - xteve_guide2go:/guide2go
     networks:
       - backend
 
