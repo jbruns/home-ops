@@ -3,10 +3,10 @@ services:
     image:  grafana/promtail:3.1.2
     container_name: promtail
     volumes:
-      - ./promtail.yaml:/etc/promtail/docker-config.yaml
+      - ./docker-config.yml:/etc/promtail/docker-config.yml
       - ${DOCKER_DATA_ROOT}/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock
-    command: -config.file=/etc/promtail/docker-config.yaml
+    command: -config.file=/etc/promtail/docker-config.yml
     networks:
       - backend
     labels:
