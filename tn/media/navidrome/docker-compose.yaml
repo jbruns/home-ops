@@ -54,7 +54,7 @@ services:
       - backend
 
 volumes:
-  navidrome_config:
+  navidrome_data:
 
 networks:
   backend:

@@ -21,7 +21,7 @@ services:
       # emby
       - emby_config:/backup/emby_config:ro
       # navidrome
-      - navidrome_config:/backup/navidrome_config:ro
+      - navidrome_data:/backup/navidrome_data:ro
       # plex
       - plex_config:/backup/plex_config:ro
       # radarr
