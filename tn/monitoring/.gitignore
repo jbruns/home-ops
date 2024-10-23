@@ -1,0 +1,4 @@
+# stack-specific files which should not be committed unencrypted
+alertmanager/config.yml
+alertmanager/web.yml
+prometheus/web.yml
