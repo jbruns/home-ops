@@ -20,6 +20,7 @@ services:
     volumes: 
       # Backup source volumes
       # alertmanager
+      - alertmanager_data:/backup/alertmanager_data:ro
       # cadvisor
       # grafana
       - grafana_data:/backup/grafana_data:ro
