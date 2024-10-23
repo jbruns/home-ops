@@ -22,6 +22,8 @@ services:
       - ./dashboards/log-search.json:/var/lib/grafana/dashboards/log-search.json:ro
 
       - grafana_data:/var/lib/grafana
+    networks:
+      - backend
     labels:
       logging: promtail
       logging_jobname: containerlogs
