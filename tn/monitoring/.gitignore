@@ -2,3 +2,4 @@
 alertmanager/config.yml
 alertmanager/web.yml
 prometheus/web.yml
+grafana/provisioning/datasources.yml
