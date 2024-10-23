@@ -12,8 +12,9 @@ services:
       # fallback internal
       - 9093:9093
     volumes:
-      - ./config.yml:/etc/alertmanager/config.yml
-      - ./web.yml:/etc/alertmanager/web.yml
+      - ./config.yml:/etc/alertmanager/config.yml:ro
+      - ./web.yml:/etc/alertmanager/web.yml:ro
+      - alertmanager_data:/alertmanager
     networks:
       - backend
     labels:
@@ -76,11 +77,10 @@ services:
         max-file: 1
         tag: "{{.Name}}"
 
+volumes:
+  alertmanager_data:
+
 networks:
   backend:
     name: common_backend
     external: true
-
-# TODO: 
-# - basic auth - web.yml - https://prometheus.io/docs/alerting/latest/https/
-
