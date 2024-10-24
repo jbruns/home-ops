@@ -1,0 +1,60 @@
+Running notes as development continues...
+
+-create age sops key and dump to .txt, protect offline
+
+-common/env.template:
+--fill out cert_resolver, domain, email, tz, zfs pool root, docker host ip, common backend subnet.
+--get cloudflare key, fill in
+--randomize traefik password, determine user name, htpasswd -nbB username password, put in traefik_password_hash
+-sops encrypt env.template to .sops.env
+-commit changes, do not commit unencrypted secrets
+!-truenas: configure apps service. add additional ip. create docker_backups dataset.
+-pull your repo on server
+-set SOPS_AGE_KEY or use file on demand
+-decrypt .sops.env to .env
+-bring up crowdsec
+
+-crowdsec exec:
+--https://docs.crowdsec.net/docs/cscli/cscli_console_enroll/#cscli-console-enroll
+--https://docs.crowdsec.net/docs/local_api/intro/#bouncers
+--fill in traefik api key
+
+-encrypt secrets and commit.
+-pull changes on server. decrypt .env. bring up nginx, traefik, portainer, whalewall.
+-test portainer access via traefik and set initial creds, if this doesn't work, portainer locally on 9443 should work
+-add renovate to repo
+
+-configure portainer as desired
+
+-create users as desired. see <stack_name>/create_usersgroups.sh
+
+# monitoring:
+
+-monitoring/env.template:
+--fill out cert_resolver, docker_data_root, domain, GF_SECURITY_ADMIN_PASSWORD, GF_SECURITY_ADMIN_USER, zfs pool root. encrypt to .sops.env.
+
+-alertmanager/config.yml:
+--see https://github.com/ruanbekker/docker-monitoring-stack-gpnc/tree/main/configs/alertmanager for examples. encrypt.
+
+-alertmanager/web.yml:
+--see https://prometheus.io/docs/alerting/latest/https/. just basic_auth_users and a list of users with bcrypt passwords. encrypt.
+
+-prometheus/web.yml:
+--see https://github.com/prometheus/prometheus/blob/release-2.55/documentation/examples/web-config.yml. just basic_auth_users and a list of users with bcrypt passwords. encrypt.
+
+-grafana/provisioning/datasources.yml:
+--fill in usernames and passwords for prometheus and alertmanager. encrypt.
+
+-commit, push. bring up stack in portainer.
+
+# media:
+
+-media/env.template:
+--fill out cert_resolver, domain, tz, zfs pool root, uid/gid for all services based on what was created. api keys and tokens may be left blank for now. encrypt to .sops.env.
+
+-commit, push. bring up stack in portainer. WARNING: services will be in first-run state and unsecured. suggest stopping all containers and bringing up as you are ready to configure.
+
+-change ownership:
+--media_nextpvr_* to nextpvr:nextpvr
+--media_navidrome_data to navidrome:navidrome
+--media_xteve_* to xteve:xteve
