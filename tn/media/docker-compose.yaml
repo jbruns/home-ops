@@ -26,6 +26,8 @@ services:
       - emby_config:/backup/emby_config:ro
       # navidrome
       - navidrome_data:/backup/navidrome_data:ro
+      # nextpvr
+      - nextpvr_config:/backup/nextpvr_config:ro
       # plex
       - plex_config:/backup/plex_config:ro
       # radarr
@@ -36,8 +38,6 @@ services:
       - sonarr_config:/backup/sonarr_config:ro
       # tautulli
       - tautulli_config:/backup/tautulli_config:ro
-      # tvheadend
-      - tvheadend_config:/backup/tvheadend_config:ro
       # xteve
       - xteve_config:/backup/xteve_config:ro
       - xteve_root:/backup/xteve_root:ro
