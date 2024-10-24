@@ -8,6 +8,10 @@ services:
       # https://github.com/google/cadvisor/blob/master/docs/running.md#with-docker
       # https://github.com/google/cadvisor/issues/3139
       - --disable_metrics=process,referenced_memory
+      # https://github.com/google/cadvisor/issues/2523
+      - --docker_only=true
+      - --housekeeping_interval=10s
+
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
