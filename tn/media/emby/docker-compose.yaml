@@ -63,7 +63,7 @@ services:
     ports:
       - 32800:32800 # http
       - 32900:32900 # https
-    devices:
+    # devices:
       # NVENC/NVDEC
       # - /dev/dri
     volumes:
