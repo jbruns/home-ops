@@ -1,11 +1,14 @@
 services:
   xteve:
     restart: unless-stopped
-    # https://hub.docker.com/r/alturismo/xteve_guide2go
-    # https://github.com/xteve-project/xTeVe
-    image: alturismo/xteve_guide2go:latest
+    # https://hub.docker.com/r/dnsforge/xteve
+    image: dnsforge/xteve:latest
     container_name: xteve
-    user: ${XTEVE_UID}:${XTEVE_GID}
+    environment:
+      - TZ=${TZ}
+      - XTEVE_UID=${XTEVE_UID}
+      - XTEVE_GID=${XTEVE_GID}
+
     labels:
       logging: promtail
       logging_jobname: containerlogs
@@ -56,16 +59,14 @@ services:
         tag: "{{.Name}}"
     volumes:
       - xteve_buffer:/tmp/xteve
-      - xteve_config:/config
-      - xteve_root:/root/.xteve
-      - xteve_guide2go:/guide2go
+      - xteve_config:/home/xteve/conf
+      - xteve_guide2go:/home/xteve/guide2go/conf
     networks:
       - backend
 
 volumes:
   xteve_buffer:
   xteve_config:
-  xteve_root:
   xteve_guide2go:
   
 networks:
