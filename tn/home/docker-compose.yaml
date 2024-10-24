@@ -1,0 +1,46 @@
+# HOME STACK
+## Per-stack instances of services (e.g. for backups) are declared here.
+services:
+  home-backup:
+    # https://github.com/offen/docker-volume-backup
+    image: offen/docker-volume-backup:v2.43.0
+    container_name: home-backup
+    restart: unless-stopped
+    environment:
+      # https://offen.github.io/docker-volume-backup/reference
+      - BACKUP_FILENAME=home-%Y-%m-%dT%H-%M-%S.tar.gz
+      - BACKUP_CRON_EXPRESSION=5 4 * * *
+      - BACKUP_PRUNING_PREFIX=home-
+      - BACKUP_RETENTION_DAYS=7
+    labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: home
+
+      # Enable whalewall for this service
+      whalewall.enabled: true
+      # backup: no traffic in or out
+    volumes: 
+      # Backup source volumes
+      # nextcloud
+      - nextcloud_config:/backup/nextcloud_config:ro
+      # Backup target
+      - ${ZFS_POOL_ROOT_HDD}/docker_backups:/archive
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+    networks:
+      - backend
+
+# When referring to a network called 'backend', we mean the common stack's backend network
+networks:
+  backend:
+    name: common_backend
+    external: true
+
+# Remaining services in the stack have their own Compose configuration.
+include:
+  - ./nextcloud/docker-compose.yaml
