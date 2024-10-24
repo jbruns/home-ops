@@ -1,0 +1,2 @@
+# stack-specific files which should not be committed unencrypted
+emby/emby_exporter_config.yaml
