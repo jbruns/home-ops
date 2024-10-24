@@ -5,6 +5,7 @@ services:
     # https://github.com/xteve-project/xTeVe
     image: alturismo/xteve_guide2go:latest
     container_name: xteve
+    user: ${XTEVE_UID}:${XTEVE_GID}
     labels:
       logging: promtail
       logging_jobname: containerlogs
@@ -54,7 +55,7 @@ services:
         max-file: 1
         tag: "{{.Name}}"
     volumes:
-      - xteve_buffer:/buffertmp
+      - xteve_buffer:/tmp/xteve
       - xteve_config:/config
       - xteve_root:/root/.xteve
       - xteve_guide2go:/guide2go
