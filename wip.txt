@@ -58,3 +58,12 @@ Running notes as development continues...
 --media_nextpvr_* to nextpvr:nextpvr
 --media_navidrome_data to navidrome:navidrome
 --media_xteve_* to xteve:xteve
+
+
+## adding/removing a service:
+-subdirectory under stack_name/docker-compose.yaml
+-edit stack_name/docker-compose.yaml to modify includes, and backup volumes
+-edit monitoring/prometheus/prometheus.yml to modify scrape_configs
+-(optional) cleanup .env
+-modify users and groups as needed
+-modify containers, images, volumes as needed
