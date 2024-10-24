@@ -40,7 +40,6 @@ services:
       - tautulli_config:/backup/tautulli_config:ro
       # xteve
       - xteve_config:/backup/xteve_config:ro
-      - xteve_root:/backup/xteve_root:ro
 
       # Backup target
       - ${ZFS_POOL_ROOT_HDD}/docker_backups:/archive
@@ -63,8 +62,8 @@ networks:
 include:
   - ./emby/docker-compose.yaml
   - ./navidrome/docker-compose.yaml
-  - ./plex/docker-compose.yaml
   - ./nextpvr/docker-compose.yaml
+  - ./plex/docker-compose.yaml
   - ./radarr/docker-compose.yaml
   - ./sabnzbd/docker-compose.yaml
   - ./sonarr/docker-compose.yaml
