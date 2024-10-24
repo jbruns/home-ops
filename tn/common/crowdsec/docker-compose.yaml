@@ -9,6 +9,10 @@ services:
       # https://app.crowdsec.net/hub/collections
       - COLLECTIONS=crowdsecurity/traefik crowdsecurity/http-cve
     labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: common
+
       # Enable Whalewall for this service
       whalewall.enabled: true
       # crowdsec: communicate with traefik and to WAN over selected protocols.
@@ -29,6 +33,12 @@ services:
           # allow communication to traefik
           - network: common_backend
             container: traefik
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
     volumes:
       - crowdsec_log:/var/log/crowdsec
       - crowdsec_data:/var/lib/crowdsec/data

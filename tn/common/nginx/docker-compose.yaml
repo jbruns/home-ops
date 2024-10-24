@@ -4,6 +4,10 @@ services:
     container_name: nginx
     restart: unless-stopped
     labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: common
+
       traefik.enable: true
 
       # Catch-all for any undefined hostname. Handle error pages.
@@ -38,6 +42,12 @@ services:
         output:
           - network: common_backend
             container: traefik
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
     volumes:
       # Friendly error page html
       - ./error-pages:/usr/share/nginx/error-pages

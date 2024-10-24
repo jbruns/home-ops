@@ -6,6 +6,10 @@ services:
     environment:
       - COMPOSE_UNPACKER_IMAGE=jbruns/compose-unpacker:2.21.3-sops
     labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: common
+
       traefik.enable: true
 
       # Listen on http, but redirect all requests to https
@@ -43,6 +47,12 @@ services:
           # allow communication to traefik
           - network: common_backend
             container: traefik
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
     ports:
       # fallback internal
       - 9443:9443

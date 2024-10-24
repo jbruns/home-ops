@@ -6,6 +6,16 @@ services:
     image: ghcr.io/capnspacehook/whalewall
     container_name: whalewall
     network_mode: host
+    labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: common
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
     volumes:
       - whalewall_data:/data
       - /var/run/docker.sock:/var/run/docker.sock:ro

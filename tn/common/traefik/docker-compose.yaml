@@ -35,6 +35,10 @@ services:
       # Provide Cloudflare secret for DNS01 validation
       - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
     labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: common
+
       # Traefik Dashboard
       traefik.enable: true
       
@@ -99,6 +103,12 @@ services:
             proto: tcp
             dst_ports:
               - 1024-65535
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
     ports:
       - 443:443
       - 80:80
