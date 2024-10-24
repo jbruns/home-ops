@@ -128,8 +128,10 @@ services:
       # Allow Traefik to get updates from the Docker engine
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
-      - proxy
-      - backend
+      proxy:
+      backend:
+        # Static IP within the backend network, so that we can constrain trusted proxies for other services
+        ipv4_address: ${TRAEFIK_BACKEND_IPV4}
 
 volumes:
   traefik_log:
