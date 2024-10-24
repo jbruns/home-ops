@@ -14,9 +14,19 @@ services:
       - BACKUP_PRUNING_PREFIX=monitoring-
       - BACKUP_RETENTION_DAYS=7
     labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: monitoring
+
       # Enable whalewall for this service
       whalewall.enabled: true
       # backup: no traffic in or out
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
     volumes: 
       # Backup source volumes
       # alertmanager
