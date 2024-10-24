@@ -10,6 +10,10 @@ services:
       - PGID=${TAUTULLI_GID}
       - TZ=${TZ}
     labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: media
+
       traefik.enable: true
 
       # Listen on http, but redirect all requests to https
@@ -47,6 +51,12 @@ services:
           # allow communication to traefik
           - network: common_backend
             container: traefik
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
     volumes:
       - tautulli_config:/config
     networks:

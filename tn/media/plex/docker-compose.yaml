@@ -11,6 +11,10 @@ services:
       - PLEX_GID=${MEDIA_GID}
       - TZ=${TZ}
     labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: media
+
       traefik.enable: true
 
       # Listen on http, but redirect all requests to https
@@ -51,6 +55,12 @@ services:
           # allow communication to traefik
           - network: common_backend
             container: traefik
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
     ports:
       - 32400:32400 # http
       - 32410:32410/udp # gdm-udp0
@@ -74,6 +84,10 @@ services:
       - PLEX_SERVER=http://plex:32400
       - PLEX_TOKEN:${PLEX_EXPORTER_TOKEN}
     labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: media
+      
       whalewall.enabled: true
       whalewall.rules: |
         output:
@@ -81,6 +95,12 @@ services:
             container: plex
           - network: common_backend
             container: prometheus
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
     networks:
       - backend
 

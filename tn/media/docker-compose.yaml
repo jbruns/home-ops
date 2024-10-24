@@ -13,6 +13,10 @@ services:
       - BACKUP_PRUNING_PREFIX=media-
       - BACKUP_RETENTION_DAYS=7
     labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: media
+
       # Enable whalewall for this service
       whalewall.enabled: true
       # backup: no traffic in or out
@@ -40,6 +44,12 @@ services:
 
       # Backup target
       - ${ZFS_POOL_ROOT_HDD}/docker_backups:/archive
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
     networks:
       - backend
 

@@ -10,6 +10,10 @@ services:
       - EMBY_UID=${EMBY_UID}
       - EMBY_GID=${MEDIA_GID}
     labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: media
+
       traefik.enable: true
 
       # Listen on http, but redirect all requests to https
@@ -50,6 +54,12 @@ services:
           # allow communication to traefik
           - network: common_backend
             container: traefik
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
     ports:
       - 32800:32800 # http
       - 32900:32900 # https
@@ -70,6 +80,10 @@ services:
       - CONFIG_FILE=/config/config.yaml
       - TZ=${TZ}
     labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: media
+      
       whalewall.enabled: true
       whalewall.rules: |
         output:
@@ -77,6 +91,12 @@ services:
             container: emby
           - network: common_backend
             container: prometheus
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
     volumes:
       - ./emby_exporter_config.yaml:/config/config.yaml
     networks:

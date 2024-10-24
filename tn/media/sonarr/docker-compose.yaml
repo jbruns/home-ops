@@ -11,6 +11,10 @@ services:
       - UMASK=002
       - TZ=${TZ}    
     labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: media
+
       traefik.enable: true
 
       # Listen on http, but redirect all requests to https
@@ -48,6 +52,12 @@ services:
           # allow communication to traefik
           - network: common_backend
             container: traefik
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
     volumes:
       - sonarr_config:/config
       - ${ZFS_POOL_ROOT_HDD}/media:/data
@@ -66,6 +76,10 @@ services:
       - URL="http://sonarr:8989"
       - APIKEY=${SONARR_API_KEY}
     labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: media
+      
       whalewall.enabled: true
       whalewall.rules: |
         output:
@@ -75,6 +89,12 @@ services:
           # allow prometheus to scrape metrics
           - network: common_backend
             container: prometheus
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
     networks:
       - backend
 
