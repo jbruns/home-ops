@@ -64,9 +64,9 @@ include:
   - ./emby/docker-compose.yaml
   - ./navidrome/docker-compose.yaml
   - ./plex/docker-compose.yaml
+  - ./nextpvr/docker-compose.yaml
   - ./radarr/docker-compose.yaml
   - ./sabnzbd/docker-compose.yaml
   - ./sonarr/docker-compose.yaml
   - ./tautulli/docker-compose.yaml
-  - ./tvheadend/docker-compose.yaml
   - ./xteve/docker-compose.yaml
