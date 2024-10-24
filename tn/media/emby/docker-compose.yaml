@@ -68,9 +68,8 @@ services:
       - 32900:32900 # https
     volumes:
       - emby_config:/config
-      - ${ZFS_POOL_ROOT_HDD}/media/tv:/data/tv:ro
-      - ${ZFS_POOL_ROOT_HDD}/media/movies:/data/movies:ro
-      - ${ZFS_POOL_ROOT_HDD}/media/dvr:/data/dvr
+      - ${ZFS_POOL_ROOT_HDD}/media:/data:ro
+      - ${ZFS_POOL_ROOT_HDD}/media/emby_recordings:/recordings
     networks:
       - backend
 

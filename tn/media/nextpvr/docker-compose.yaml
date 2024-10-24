@@ -56,7 +56,7 @@ services:
     volumes:
       - nextpvr_config:/config
       - nextpvr_buffer:/buffer
-      - ${ZFS_POOL_ROOT_HDD}/media/dvr:/recordings
+      - ${ZFS_POOL_ROOT_HDD}/media/nextpvr_recordings:/recordings
     networks:
       - backend
 

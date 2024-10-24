@@ -75,6 +75,7 @@ services:
       - plex_config:/config
       - plex_transcode:/transcode
       - ${ZFS_POOL_ROOT_HDD}/media:/data:ro
+      - ${ZFS_POOL_ROOT_HDD}/media/plex_recordings:/recordings
     networks:
       - backend
 
