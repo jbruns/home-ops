@@ -7,8 +7,8 @@ services:
     container_name: emby
     # runtime: nvidia
     environment:
-      - EMBY_UID=${EMBY_UID}
-      - EMBY_GID=${MEDIA_GID}
+      - UID=${EMBY_UID}
+      - GID=${MEDIA_GID}
     labels:
       logging: promtail
       logging_jobname: containerlogs
@@ -63,11 +63,14 @@ services:
     ports:
       - 32800:32800 # http
       - 32900:32900 # https
+    devices:
+      # NVENC/NVDEC
+      # - /dev/dri
     volumes:
       - emby_config:/config
-      - /mnt/andromeda/media/tv:/data/tv:ro
-      - /mnt/andromeda/media/movies:/data/movies:ro
-      - /mnt/andromeda/media/dvr:/data/dvr
+      - ${ZFS_POOL_ROOT_HDD}/media/tv:/data/tv:ro
+      - ${ZFS_POOL_ROOT_HDD}/media/movies:/data/movies:ro
+      - ${ZFS_POOL_ROOT_HDD}/media/dvr:/data/dvr
     networks:
       - backend
 
@@ -83,7 +86,7 @@ services:
       logging: promtail
       logging_jobname: containerlogs
       stackname: media
-      
+
       whalewall.enabled: true
       whalewall.rules: |
         output:
