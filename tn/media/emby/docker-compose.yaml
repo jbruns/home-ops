@@ -9,6 +9,9 @@ services:
     environment:
       - UID=${EMBY_UID}
       - GID=${MEDIA_GID}
+      
+      # - NVIDIA_VISIBLE_DEVICES=all
+      # - NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
     labels:
       logging: promtail
       logging_jobname: containerlogs
@@ -63,9 +66,6 @@ services:
     ports:
       - 32800:32800 # http
       - 32900:32900 # https
-    # devices:
-      # NVENC/NVDEC
-      # - /dev/dri
     volumes:
       - emby_config:/config
       - ${ZFS_POOL_ROOT_HDD}/media/tv:/data/tv:ro

@@ -5,11 +5,15 @@ services:
     # https://github.com/plexinc/pms-docker
     image: plexinc/pms-docker:1.41.0.8994-f2c27da23
     container_name: plex
+    # runtime: nvidia
     environment:
       # https://github.com/plexinc/pms-docker?tab=readme-ov-file#parameters
       - PLEX_UID=${PLEX_UID}
       - PLEX_GID=${MEDIA_GID}
       - TZ=${TZ}
+
+      # - NVIDIA_VISIBLE_DEVICES=all
+      # - NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
     labels:
       logging: promtail
       logging_jobname: containerlogs
