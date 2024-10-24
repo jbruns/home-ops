@@ -33,6 +33,9 @@ services:
           # allow communication to traefik
           - network: common_backend
             container: traefik
+          # metrics collection
+          - network: common_backend
+            container: prometheus
     logging:
       driver: json-file
       options:
