@@ -1,0 +1,67 @@
+services:
+  nextcloud:
+    environment:
+      - REDIS_HOST=redis
+      - OVERWRITEHOST=nextcloud.${ALT_DOMAIN_HOME}
+      - OVERWRITEPROTOCOL=https
+      - TRUSTED_PROXIES=${TRAEFIK_BACKEND_IPV4}/32
+    labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: home
+
+      traefik.enable: true
+
+      # Listen on http, but redirect all requests to https
+      traefik.http.routers.nextcloud-http.rule: Host(`nextcloud.${ALT_DOMAIN_HOME}`)
+      traefik.http.routers.nextcloud-http.entrypoints: http
+      traefik.http.routers.nextcloud-http.middlewares: redirect-https
+
+      # Direct all https requests to the service with Nextcloud-specific middleware
+      traefik.http.routers.nextcloud-https.rule: Host(`nextcloud.${ALT_DOMAIN_HOME}`)
+      traefik.http.routers.nextcloud-https.entrypoints: https
+      traefik.http.routers.nextcloud-https.tls: true
+      traefik.http.routers.nextcloud-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.nextcloud-https.service: nextcloud
+      traefik.http.routers.nextcloud-https.middlewares: nextcloud-chain
+
+      # Middleware for service discovery (https://docs.nextcloud.com/server/latest/admin_manual/configuration_server/reverse_proxy_configuration.html#service-discovery)
+      traefik.http.middlewares.nextcloud-redirectregex.redirectregex.permanent: true
+      traefik.http.middlewares.nextcloud-redirectregex.redirectregex.regex: 'https://(.*)/.well-known/(?:card|cal)dav'
+      traefik.http.middlewares.nextcloud-redirectregex.redirectregex.replacement: 'https://$${1}/remote.php/dav'
+
+      # Middleware for Strict-Transport-Security
+      traefik.http.middlewares.nextcloud-hsts.headers.stsSeconds: 15552000
+      traefik.http.middlewares.nextcloud-hsts.headers.stsIncludeSubdomains: true
+
+      # Chain all Nextcloud middlewares together
+      traefik.http.middlewares.nextcloud-chain.chain.middlewares: crowdsec-bouncer, nextcloud-redirectregex, nextcloud-hsts
+
+      traefik.http.services.nextcloud.loadbalancer.server.port: 80
+
+      # Enable Whalewall for this service
+      whalewall.enabled: true
+      # nextcloud: communicate with traefik and to WAN over selected protocols.
+      whalewall.rules: |
+        output:
+          - log_prefix: "dns"
+            proto: udp
+            dst_ports:
+              - 53
+          - log_prefix: "https"
+            proto: tcp
+            dst_ports:
+              - 443
+          - log_prefix: "http"
+            proto: tcp
+            dst_ports:
+              - 80
+          # allow communication to traefik
+          - network: common_backend
+            container: traefik
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
