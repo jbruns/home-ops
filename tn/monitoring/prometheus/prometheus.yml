@@ -14,6 +14,51 @@ alerting:
         - targets: ['alertmanager:9093']
 
 scrape_configs:
+  # COMMON STACK
+  - job_name: traefik
+    static_configs:
+      - targets: [ 'traefik:8082']
+        labels:
+          container: 'traefik'
+
+  - job_name: crowdsec
+    static_configs:
+      - targets: [ 'crowdsec:6060']
+        labels:
+          container: 'crowdsec'
+
+  # MEDIA STACK
+  - job_name: emby
+    static_configs:
+      - targets: [ 'emby-exporter:9210']
+        labels:
+          container: 'emby-exporter'  
+
+  - job_name: plex
+    static_configs:
+      - targets: [ 'plex-exporter:9000']
+        labels:
+          container: 'plex-exporter'  
+
+  - job_name: sabnzbd
+    static_configs:
+      - targets: [ 'sabnzbd-exporter:9711']
+        labels:
+          container: 'sabnzbd-exporter'  
+
+  - job_name: sonarr
+    static_configs:
+      - targets: [ 'sonarr-exporter:9707']
+        labels:
+          container: 'sonarr-exporter'  
+
+  - job_name: radarr
+    static_configs:
+      - targets: [ 'radarr-exporter:9708']
+        labels:
+          container: 'radarr-exporter'
+
+  # core monitoring services. likely do not need to be modified.
   - job_name: prometheus
     static_configs:
       - targets: [ 'localhost:9090' ]
@@ -37,3 +82,4 @@ scrape_configs:
       - targets: [ 'cadvisor:8080' ]
         labels:
           container: 'cadvisor'
+
