@@ -59,7 +59,7 @@ services:
         tag: "{{.Name}}"
     volumes:
       - navidrome_data:/data
-      - /mnt/andromeda/media/music/FLAC:/music:ro
+      - ${ZFS_POOL_ROOT_HDD}/media/music/FLAC:/music:ro
     networks:
       - backend
 

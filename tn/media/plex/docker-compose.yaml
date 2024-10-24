@@ -70,7 +70,7 @@ services:
     volumes:
       - plex_config:/config
       - plex_transcode:/transcode
-      - /mnt/andromeda/media:/data:ro
+      - ${ZFS_POOL_ROOT_HDD}/media:/data:ro
     networks:
       - backend
 

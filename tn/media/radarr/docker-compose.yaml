@@ -60,7 +60,7 @@ services:
         tag: "{{.Name}}"
     volumes:
       - radarr_config:/config
-      - /mnt/andromeda/media:/data
+      - ${ZFS_POOL_ROOT_HDD}/media:/data
     networks:
       - backend
 

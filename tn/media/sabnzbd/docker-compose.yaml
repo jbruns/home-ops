@@ -65,7 +65,7 @@ services:
         tag: "{{.Name}}"
     volumes:
       - sabnzbd_config:/config
-      - /mnt/andromeda/media/nzbdl:/data/nzbdl
+      - ${ZFS_POOL_ROOT_HDD}/media/nzbdl:/data/nzbdl
     networks:
       - backend
 
