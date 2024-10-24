@@ -44,7 +44,7 @@ services:
       traefik.http.routers.prometheus-https.service: prometheus
       traefik.http.routers.prometheus-https.middlewares: crowdsec-bouncer
 
-      traefik.http.services.prometheus.loadbalancer.server.port: 3000
+      traefik.http.services.prometheus.loadbalancer.server.port: 9090
 
       # Enable Whalewall for this service
       whalewall.enabled: true
