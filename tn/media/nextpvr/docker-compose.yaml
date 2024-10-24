@@ -1,0 +1,70 @@
+services:
+  nextpvr:
+    restart: unless-stopped
+    # https://hub.docker.com/r/nextpvr/nextpvr_amd64
+    # https://github.com/sub3/NextPVR/wiki/Install-Docker
+    image: nextpvr/nextpvr_amd64:stable
+    container_name: nextpvr
+    labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: media
+
+      traefik.enable: true
+
+      # Listen on http, but redirect all requests to https
+      traefik.http.routers.nextpvr-http.rule: Host(`nextpvr.${DOMAIN}`)
+      traefik.http.routers.nextpvr-http.entrypoints: http
+      traefik.http.routers.nextpvr-http.middlewares: redirect-https
+
+      # Direct all https requests to the service, checking with crowdsec first
+      traefik.http.routers.nextpvr-https.rule: Host(`nextpvr.${DOMAIN}`)
+      traefik.http.routers.nextpvr-https.entrypoints: https
+      traefik.http.routers.nextpvr-https.tls: true
+      traefik.http.routers.nextpvr-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.nextpvr-https.service: nextpvr
+      traefik.http.routers.nextpvr-https.middlewares: crowdsec-bouncer
+
+      traefik.http.services.nextpvr.loadbalancer.server.port: 8866
+
+      # Enable Whalewall for this service
+      whalewall.enabled: true
+      # nextpvr: Communicate with traefik and to WAN over selected protocols.
+      whalewall.rules: |
+        output:
+          - log_prefix: "dns"
+            proto: udp
+            dst_ports:
+              - 53
+          - log_prefix: "https"
+            proto: tcp
+            dst_ports:
+              - 443
+          - log_prefix: "http"
+            proto: tcp
+            dst_ports:
+              - 80
+          # allow communication to traefik
+          - network: common_backend
+            container: traefik
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+    volumes:
+      - nextpvr_config:/config
+      - nextpvr_buffer:/buffer
+      - ${ZFS_POOL_ROOT_HDD}/media/dvr:/recordings
+    networks:
+      - backend
+
+volumes:
+  nextpvr_buffer:
+  nextpvr_config:
+
+networks:
+  backend:
+    name: common_backend
+    external: true
