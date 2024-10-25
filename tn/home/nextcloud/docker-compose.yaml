@@ -51,10 +51,6 @@ services:
       - nextcloud_admin_password
       - smtp_password
 
-    depends_on:
-      - redis
-      - mariadb
-
     labels:
       logging: promtail
       logging_jobname: containerlogs
@@ -109,6 +105,15 @@ services:
           # allow communication to traefik
           - network: common_backend
             container: traefik
+          # metrics collection
+          - network: common_backend
+            container: nextcloud-exporter
+          # memory cache
+          - network: common_backend
+            container: redis
+          # database
+          - network: common_backend
+            container: mariadb
     logging:
       driver: json-file
       options:
@@ -116,7 +121,58 @@ services:
         max-file: 1
         tag: "{{.Name}}"
     volumes:
-      - nextcloud_data:/var/www/html/data
+      - nextcloud_data:/var/www/html
+    networks:
+      - backend
+
+  nextcloud-cron:
+    image: nextcloud:30.0.1
+    container_name: nextcloud-cron
+    restart: unless-stopped
+    entrypoint: /cron.sh
+    labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: home
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+    volumes:
+      - nextcloud_data:/var/www/html
+
+
+  nextcloud-exporter:
+    # https://github.com/xperimental/nextcloud-exporter
+    # https://github.com/xperimental/nextcloud-exporter/pkgs/container/nextcloud-exporter
+    image: ghcr.io/xperimental/nextcloud-exporter:0.7.0
+    restart: unless-stopped
+    # https://github.com/xperimental/nextcloud-exporter#configuration-file
+    command:
+      - '--config-file /etc/nextcloud-exporter/config.yaml'
+    labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: home
+
+      # Enable Whalewall for this service
+      whalewall.enabled: true
+      # nextcloud-exporter: communicate with prometheus only
+      whalewall.rules: |
+        output:
+          # metrics collection
+          - network: common_backend
+            container: prometheus
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+    volumes:
+      - ./nextcloud_exporter_config.yaml:/etc/nextcloud_exporter/config.yaml:ro
     networks:
       - backend
 
