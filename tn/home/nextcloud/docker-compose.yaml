@@ -1,6 +1,23 @@
 services:
   nextcloud:
+    image: nextcloud:30.0.1
+    restart: unless-stopped
+    container_name: nextcloud
     environment:
+      - MYSQL_HOST=
+      - MYSQL_DATABASE=
+      - MYSQL_USER=
+      - MYSQL_PASSWORD=
+      - NEXTCLOUD_ADMIN_PASSWORD=
+      - NEXTCLOUD_ADMIN_USER=
+      - MAIL_FROM_ADDRESS=
+      - MAIL_DOMAIN=
+      - SMTP_SECURE=
+      - SMTP_PORT=
+      - SMTP_AUTHTYPE=
+      - SMTP_HOST=
+      - SMTP_NAME=
+      - SMTP_PASSWORD=
       - REDIS_HOST=redis
       - OVERWRITEHOST=nextcloud.${ALT_DOMAIN_HOME}
       - OVERWRITEPROTOCOL=https
@@ -65,3 +82,12 @@ services:
         max-size: 1m
         max-file: 1
         tag: "{{.Name}}"
+    volumes:
+      - nextcloud_config:/config
+    networks:
+      - backend
+
+networks:
+  backend:
+    name: common_backend
+    external: true
