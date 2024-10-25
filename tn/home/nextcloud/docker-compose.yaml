@@ -1,27 +1,60 @@
 services:
   nextcloud:
+    # https://hub.docker.com/_/nextcloud
     image: nextcloud:30.0.1
     restart: unless-stopped
     container_name: nextcloud
     environment:
-      - MYSQL_HOST=
-      - MYSQL_DATABASE=
-      - MYSQL_USER=
-      - MYSQL_PASSWORD=
-      - NEXTCLOUD_ADMIN_PASSWORD=
-      - NEXTCLOUD_ADMIN_USER=
-      - MAIL_FROM_ADDRESS=
-      - MAIL_DOMAIN=
-      - SMTP_SECURE=
-      - SMTP_PORT=
-      - SMTP_AUTHTYPE=
-      - SMTP_HOST=
-      - SMTP_NAME=
-      - SMTP_PASSWORD=
+      # https://github.com/nextcloud/Docker/#auto-configuration-via-environment-variables
+      # https://github.com/nextcloud/Docker/?tab=readme-ov-file#docker-secrets
+      
+      # MariaDB configuration
+      - MYSQL_HOST=mariadb
+      - MYSQL_DATABASE_FILE=/run/secrets/mysql_database
+      - MYSQL_USER_FILE=/run/secrets/mysql_user
+      - MYSQL_PASSWORD_FILE=/run/secrets/mysql_password
+      
+      # Redis configuration
       - REDIS_HOST=redis
+      - REDIS_HOST_PASSWORD=${REDIS_PASSWORD}
+
+      # Nextcloud initial credentials and expected domain(s)
+      - NEXTCLOUD_ADMIN_USER_FILE=/run/secrets/nextcloud_admin_user
+      - NEXTCLOUD_ADMIN_PASSWORD_FILE=/run/secrets/nextcloud_admin_password
+      - NEXTCLOUD_TRUSTED_DOMAINS=nextcloud.${ALT_DOMAIN_HOME}
+            
+      # SMTP settings
+      - MAIL_FROM_ADDRESS=${NEXTCLOUD_MAIL_FROM_ADDRESS}
+      - MAIL_DOMAIN=${NEXTCLOUD_MAIL_DOMAIN}
+
+      - SMTP_SECURE=${NEXTCLOUD_SMTP_SECURE}
+      - SMTP_PORT=${NEXTCLOUD_SMTP_PORT}
+      - SMTP_HOST=${NEXTCLOUD_SMTP_HOST}
+      - SMTP_NAME=${NEXTCLOUD_SMTP_NAME}
+      - SMTP_PASSWORD_FILE=/run/secrets/smtp_password
+      
+      # Reverse proxy
       - OVERWRITEHOST=nextcloud.${ALT_DOMAIN_HOME}
       - OVERWRITEPROTOCOL=https
       - TRUSTED_PROXIES=${TRAEFIK_BACKEND_IPV4}/32
+
+      # Performance tuning
+      - PHP_MEMORY_LIMIT=1G
+      - PHP_UPLOAD_LIMIT=6G
+      - APACHE_BODY_LIMIT=6442450944
+    
+    secrets:
+      - mysql_database
+      - mysql_user
+      - mysql_password
+      - nextcloud_admin_user
+      - nextcloud_admin_password
+      - smtp_password
+
+    depends_on:
+      - redis
+      - mariadb
+
     labels:
       logging: promtail
       logging_jobname: containerlogs
@@ -83,9 +116,26 @@ services:
         max-file: 1
         tag: "{{.Name}}"
     volumes:
-      - nextcloud_config:/config
+      - nextcloud_data:/var/www/html/data
     networks:
       - backend
+
+secrets:
+  mysql_database:
+    file: ./mysql_database.txt
+  mysql_user:
+    file: ./mysql_user.txt
+  mysql_password:
+    file: ./mysql_password.txt
+  nextcloud_admin_user:
+    file: ./nextcloud_admin_user.txt
+  nextcloud_admin_password:
+    file: ./nextcloud_admin_password.txt
+  smtp_password:
+    file: ./smtp_password.txt
+
+volumes:
+  nextcloud_data:
 
 networks:
   backend:
