@@ -1,0 +1,7 @@
+# Secrets specific to Nextcloud, which should not be committed unencrypted
+mysql_database.txt
+mysql_user.txt
+mysql_password.txt
+nextcloud_admin_user.txt
+nextcloud_admin_password.txt
+smtp_password.txt
