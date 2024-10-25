@@ -25,6 +25,7 @@ Running notes as development continues...
 -add renovate to repo
 
 -configure portainer as desired
+-create directory for portainer to unpack repo to. ownership should be root:root and chmod -R u=rwX.
 
 -create users as desired. see <stack_name>/create_usersgroups.sh
 
