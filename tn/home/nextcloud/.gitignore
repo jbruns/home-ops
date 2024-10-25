@@ -5,3 +5,4 @@ mysql_password.txt
 nextcloud_admin_user.txt
 nextcloud_admin_password.txt
 smtp_password.txt
+nextcloud_exporter_config.yaml
