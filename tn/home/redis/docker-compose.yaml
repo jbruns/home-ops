@@ -1,0 +1,73 @@
+services:
+  redis:
+    # https://redis.io/docs/latest/operate/oss_and_stack/install/install-stack/docker/
+    # https://github.com/redis-stack/redis-stack
+    # https://hub.docker.com/r/redis/redis-stack-server/tags
+    image: redis/redis-stack-server:7.4.0-v1
+    container_name: redis
+    restart: unless-stopped
+    environment:
+      - REDIS_ARGS="--requirepass ${REDIS_PASSWORD} --save 60 --loglevel warning"
+    labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: home
+      # Enable Whalewall for this service
+      whalewall.enabled: true
+      # redis: communicate with dependent services
+      whalewall.rules: |
+        output:
+          # metrics collection
+          - network: common_backend
+            container: nextcloud-exporter
+          # nextcloud
+          - network: common_backend
+            container: nextcloud
+          # vaultwarden
+          - network: common_backend
+            container: vaultwarden
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend
+  
+  redis-exporter:
+    # https://github.com/oliver006/redis_exporter
+    image: oliver006/redis_exporter:v1.65.0
+    container_name: redis-exporter
+    restart: unless-stopped
+    # https://github.com/oliver006/redis_exporter?tab=readme-ov-file#command-line-flags
+    environment:
+      - REDIS_ADDR="redis://redis:6379"
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: home
+      # Enable Whalewall for this service
+      whalewall.enabled: true
+      # redis-exporter: communicate with redis and prometheus
+      whalewall.rules: |
+        output:
+          # metrics collection
+          - network: common_backend
+            container: redis
+          # metrics scrape
+          - network: common_backend
+            container: prometheus
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+    networks:
+      - backend
+
+volumes:
+  redis_data:
+
+networks:
+  backend:
+    name: common_backend
+    external: true
