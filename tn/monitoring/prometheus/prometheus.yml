@@ -57,7 +57,22 @@ scrape_configs:
       - targets: [ 'radarr-exporter:9708']
         labels:
           container: 'radarr-exporter'
+  
+  # HOME STACK
+  - job_name: nextcloud
+    scrape_interval: 90s
+    static_configs:
+      - targets: ['nextcloud-exporter:9205']
+        labels:
+          container: 'nextcloud-exporter'
 
+  - job_name: redis
+    scrape_interval: 90s
+    static_configs:
+      - targets: ['redis-exporter:9121']
+        labels:
+          container: 'redis-exporter'
+          
   # core monitoring services. likely do not need to be modified.
   - job_name: prometheus
     static_configs:
