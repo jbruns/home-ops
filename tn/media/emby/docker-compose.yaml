@@ -5,7 +5,6 @@ services:
     # https://github.com/MediaBrowser/Emby.Releases/releases
     image: emby/embyserver:4.8.10.0
     container_name: emby
-    # runtime: nvidia
     environment:
       - UID=${EMBY_UID}
       - GID=${MEDIA_GID}
@@ -72,6 +71,13 @@ services:
       - ${ZFS_POOL_ROOT_HDD}/media/emby_recordings:/recordings
     networks:
       - backend
+#    deploy:
+#      resources:
+#        reservations:
+#          devices:
+#            - driver: nvidia
+#              count: 1
+#              capabilities: [gpu]
 
   emby-exporter:
     restart: unless-stopped
