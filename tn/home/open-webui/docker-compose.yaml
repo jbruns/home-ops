@@ -1,0 +1,118 @@
+services:
+  ollama:
+    # https://hub.docker.com/r/ollama/ollama/tags
+    # https://github.com/ollama/ollama/blob/main/envconfig/config.go#L233
+    image: ollama/ollama:0.3.14
+    restart: unless-stopped
+    container_name: ollama
+    labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: home    
+      # Enable Whalewall for this service
+      whalewall.enabled: true
+      # ollama: communicate with open-webui, and WAN over selected protocols.
+      whalewall.rules: |
+        output:
+          - log_prefix: "dns"
+            proto: udp
+            dst_ports:
+              - 53
+          - log_prefix: "https"
+            proto: tcp
+            dst_ports:
+              - 443
+          - log_prefix: "http"
+            proto: tcp
+            dst_ports:
+              - 80
+          # frontends
+          - network: common_backend
+            container: open-webui
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+    volumes:
+      ollama_data:/root/.ollama
+    networks:
+      - backend
+#    deploy:
+#      resources:
+#        reservations:
+#          devices:
+#            - driver: nvidia
+#              count: 1
+#              capabilities: [gpu]
+  
+  open-webui:
+    # https://github.com/open-webui/open-webui/pkgs/container/open-webui
+    # https://github.com/open-webui/open-webui
+    image: ghcr.io/open-webui/open-webui:0.3.35
+    restart: unless-stopped
+    container_name: open-webui
+    labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: home
+
+      traefik.enable: true
+
+      # Listen on http, but redirect all requests to https
+      traefik.http.routers.open-webui-http.rule: Host(`openwebui.${DOMAIN}`)
+      traefik.http.routers.open-webui-http.entrypoints: http
+      traefik.http.routers.open-webui-http.middlewares: redirect-https
+
+      # Direct all https requests to the service, checking with crowdsec first
+      traefik.http.routers.open-webui-https.rule: Host(`openwebui.${DOMAIN}`)
+      traefik.http.routers.open-webui-https.entrypoints: https
+      traefik.http.routers.open-webui-https.tls: true
+      traefik.http.routers.open-webui-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.open-webui-https.service: open-webui
+      traefik.http.routers.open-webui-https.middlewares: crowdsec-bouncer
+
+      traefik.http.services.open-webui.loadbalancer.server.port: 9000
+
+      # Enable Whalewall for this service
+      whalewall.enabled: true
+      # open-webui: communicate with traefik and to WAN over selected protocols.
+      whalewall.rules: |
+        output:
+          - log_prefix: "dns"
+            proto: udp
+            dst_ports:
+              - 53
+          - log_prefix: "https"
+            proto: tcp
+            dst_ports:
+              - 443
+          - log_prefix: "http"
+            proto: tcp
+            dst_ports:
+              - 80
+          # allow communication to traefik
+          - network: common_backend
+            container: traefik
+          # LLM backend
+          - network: common_backend
+            container: ollama
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+  volumes:
+    - open-webui_data:/app/backend/data
+  networks:
+    - backend
+
+volumes:
+  open-webui_data:
+
+networks:
+  backend:
+    name: common_backend
+    external: true
