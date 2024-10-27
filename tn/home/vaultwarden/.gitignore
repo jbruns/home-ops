@@ -1,0 +1,4 @@
+# Secrets specific to Vaultwarden, which should not be committed unencrypted
+admin_token.txt
+database_url.txt
+smtp_password.txt
