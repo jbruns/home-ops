@@ -1,0 +1,102 @@
+services:
+  vaultwarden:
+    # https://hub.docker.com/r/vaultwarden/server
+    image: vaultwarden/server:1.32.3
+    restart: unless-stopped
+    container_name: vaultwarden
+    environment:
+      # https://github.com/dani-garcia/vaultwarden/blob/main/.env.template
+      - DOMAIN="https://vault.${ALT_DOMAIN_HOME}"
+      - HELO_NAME="vault.${ALT_DOMAIN_HOME}"
+      # https://github.com/dani-garcia/vaultwarden/wiki/Enabling-admin-page#secure-the-admin_token
+      - ADMIN_TOKEN_FILE=/run/secrets/admin_token
+      - DATABASE_URL_FILE=/run/secrets/database_url
+      - SMTP_FROM=${VAULTWARDEN_SMTP_FROM}
+      - SMTP_HOST=${VAULTWARDEN_SMTP_HOST}
+      - SMTP_USERNAME=${VAULTWARDEN_SMTP_USERNAME}
+      - SMTP_PASSWORD_FILE=/run/secrets/smtp_password
+    secrets:
+      - admin_token
+      - database_url
+      - smtp_password
+    labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: home
+
+      traefik.enable: true
+
+      # Listen on http, but redirect all requests to https
+      traefik.http.routers.vaultwarden-http.rule: Host(`vault.${ALT_DOMAIN_HOME}`)
+      traefik.http.routers.vaultwarden-http.entrypoints: http
+      traefik.http.routers.vaultwarden-http.middlewares: redirect-https
+
+      # Direct all https requests to the service, checking with crowdsec first
+      traefik.http.routers.vaultwarden-https.rule: Host(`vault.${ALT_DOMAIN_HOME}`)
+      traefik.http.routers.vaultwarden-https.entrypoints: https
+      traefik.http.routers.vaultwarden-https.tls: true
+      traefik.http.routers.vaultwarden-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.vaultwarden-https.service: vaultwarden
+      traefik.http.routers.vaultwarden-https.middlewares: vaultwarden-chain
+
+      # Headers middleware (https://github.com/dani-garcia/vaultwarden/wiki/Proxy-examples)
+      traefik.http.middlewares.vaultwarden-headers.headers.stsSeconds: 31536000
+      traefik.http.middlewares.vaultwarden-headers.headers.customBrowserXSSValue: 0
+      traefik.http.middlewares.vaultwarden-headers.headers.customFrameOptionsValue: SAMEORIGIN
+      traefik.http.middlewares.vaultwarden-headers.headers.contentTypeNosniff: true
+      traefik.http.middlewares.vaultwarden-headers.headers.customResponseHeaders: 'X-Robots-Tag=noindex,nofollow'
+
+      # Chain all Vaultwarden middlewares together
+      traefik.http.middlewares.vaultwarden-chain.chain.middlewares: crowdsec-bouncer, vaultwarden-headers
+      
+      traefik.http.services.vaultwarden.loadbalancer.server.port: 80
+
+      # Enable Whalewall for this service
+      whalewall.enabled: true
+      # vaultwarden: communicate with traefik, mariadb and to WAN over selected protocols.
+      whalewall.rules: |
+        output:
+          - log_prefix: "dns"
+            proto: udp
+            dst_ports:
+              - 53
+          - log_prefix: "https"
+            proto: tcp
+            dst_ports:
+              - 443
+          - log_prefix: "http"
+            proto: tcp
+            dst_ports:
+              - 80
+          # allow communication to traefik
+          - network: common_backend
+            container: traefik
+          # database services
+          - network: common_backend
+            container: mariadb
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+    volumes:
+      - vaultwarden_data:/data
+    networks:
+      - backend
+
+secrets:
+  admin_token:
+    file: ./admin_token.txt
+  database_url:
+    file: ./database_url.txt
+  smtp_password:
+    file: ./smtp_password.txt
+
+volumes:
+  vaultwarden_data:
+
+networks:
+  backend:
+    name: common_backend
+    external: true
