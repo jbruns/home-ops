@@ -1,0 +1,2 @@
+# Secrets specific to MariaDB, which should not be committed unencrypted
+mariadb_root_password.txt

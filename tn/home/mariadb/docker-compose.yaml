@@ -1,0 +1,48 @@
+services:
+  mariadb:
+    # https://hub.docker.com/_/mariadb
+    image: mariadb:11.4.3
+    container_name: mariadb
+    restart: unless-stopped
+    environment:
+      # https://mariadb.com/kb/en/mariadb-server-docker-official-image-environment-variables/
+      - MARIADB_ROOT_PASSWORD_FILE=/run/secrets/mariadb_root_password
+    secrets:
+      - mariadb_root_password
+    labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: home
+
+      # Enable Whalewall for this service
+      whalewall.enabled: true
+      # mariadb: communicate with dependent services.
+      whalewall.rules: |
+          # nextcloud database
+          - network: common_backend
+            container: nextcloud
+          # vaultwarden database
+          - network: common_backend
+            container: vaultwarden
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    networks:
+      - backend
+
+secrets:
+  mariadb_root_password:
+    file: ./mariadb_root_password.txt
+
+volumes:
+  mariadb_data:
+
+networks:
+  backend:
+    name: common_backend
+    external: true
