@@ -95,8 +95,3 @@ secrets:
 
 volumes:
   vaultwarden_data:
-
-networks:
-  backend:
-    name: common_backend
-    external: true
