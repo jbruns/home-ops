@@ -192,8 +192,3 @@ secrets:
 
 volumes:
   nextcloud_data:
-
-networks:
-  backend:
-    name: common_backend
-    external: true

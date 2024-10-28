@@ -41,8 +41,3 @@ secrets:
 
 volumes:
   mariadb_data:
-
-networks:
-  backend:
-    name: common_backend
-    external: true

@@ -66,8 +66,3 @@ services:
 
 volumes:
   redis_data:
-
-networks:
-  backend:
-    name: common_backend
-    external: true

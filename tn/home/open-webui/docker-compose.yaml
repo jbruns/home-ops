@@ -36,7 +36,7 @@ services:
         max-file: 1
         tag: "{{.Name}}"
     volumes:
-      ollama_data:/root/.ollama
+      - ollama_data:/root/.ollama
     networks:
       - backend
 #    deploy:
@@ -104,15 +104,10 @@ services:
         max-size: 1m
         max-file: 1
         tag: "{{.Name}}"
-  volumes:
-    - open-webui_data:/app/backend/data
-  networks:
-    - backend
+    volumes:
+      - open-webui_data:/app/backend/data
+    networks:
+      - backend
 
 volumes:
   open-webui_data:
-
-networks:
-  backend:
-    name: common_backend
-    external: true
