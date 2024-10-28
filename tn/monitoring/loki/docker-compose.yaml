@@ -37,8 +37,3 @@ services:
         max-size: 1m
         max-file: 1
         tag: "{{.Name}}"
-
-networks:
-  backend:
-    name: common_backend
-    external: true
