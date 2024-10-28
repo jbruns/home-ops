@@ -14,8 +14,13 @@ services:
       - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER}
       - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
     volumes:
+      - type: bind
+        source: ./provisioning/datasources.yml
+        target: /etc/grafana/provisioning/datasources/provisioning-datasources.yaml
+        read_only: true
+        # Stored encrypted in repo
+        x-sops: true
       - ./provisioning/dashboards.yml:/etc/grafana/provisioning/dashboards/provisioning-dashboards.yaml:ro
-      - ./provisioning/datasources.yml:/etc/grafana/provisioning/datasources/provisioning-datasources.yaml:ro
       - ./plugins/app.yaml:/etc/grafana/provisioning/plugins/app.yaml:ro
       - ./dashboards/node-metrics.json:/var/lib/grafana/dashboards/node-metrics.json:ro
       - ./dashboards/container-metrics.json:/var/lib/grafana/dashboards/container-metrics.json:ro

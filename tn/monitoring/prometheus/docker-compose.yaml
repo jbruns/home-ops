@@ -13,10 +13,15 @@ services:
       - '--web.console.templates=/usr/share/prometheus/consoles'
       - '--web.external-url=http://prometheus.${DOMAIN}'
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-      - ./web.yml:/etc/prometheus/web.yml
-      - ./recording-rules.yml:/etc/prometheus/recording-rules.yml
-      - ./alerting-rules.yml:/etc/prometheus/alerting-rules.yml
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - type: bind
+        source: ./web.yml
+        target: /etc/prometheus/web.yml
+        read_only: true
+        # Stored encrypted in repo
+        x-sops: true
+      - ./recording-rules.yml:/etc/prometheus/recording-rules.yml:ro
+      - ./alerting-rules.yml:/etc/prometheus/alerting-rules.yml:ro
 
       - prometheus_data:/prometheus
     ports:
