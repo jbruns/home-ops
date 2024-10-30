@@ -1,0 +1,33 @@
+services:
+  autobrr:
+    # https://github.com/autobrr/autobrr/pkgs/container/autobrr
+    image: ghcr.io/autobrr/autobrr:v1.47
+    container_name: autobrr
+    restart: unless-stopped
+    environment:
+      # https://autobrr.com/installation/docker#environment-variables
+      - TZ=${TZ}
+    labels:
+      - traefik.enable=true
+
+      # Listen on http, but redirect all requests to https
+      - traefik.http.routers.autobrr-http.rule=Host(`autobrr.${DOMAIN}`)
+      - traefik.http.routers.autobrr-http.entrypoints=http
+      - traefik.http.routers.autobrr-http.middlewares=redirect-https
+
+      # Direct all https requests to the service, checking with crowdsec first
+      - traefik.http.routers.autobrr-https.rule=Host(`autobrr.${DOMAIN}`)
+      - traefik.http.routers.autobrr-https.entrypoints=https
+      - traefik.http.routers.autobrr-https.tls=true
+      - traefik.http.routers.autobrr-https.tls.certresolver=${CERT_RESOLVER}
+      - traefik.http.routers.autobrr-https.service=autobrr
+      - traefik.http.routers.autobrr-https.middlewares=crowdsec-bouncer
+
+      - traefik.http.services.autobrr.loadbalancer.server.port=7474
+    volumes:
+      - autobrr_config:/config
+    networks:
+      - backend
+
+volumes:
+  autobrr_config:

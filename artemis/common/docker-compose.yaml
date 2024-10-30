@@ -1,0 +1,11 @@
+networks:
+  proxy:
+    external: true
+  backend:
+    driver: bridge
+
+include:
+  - ./crowdsec/docker-compose.yaml
+  - ./nginx/docker-compose.yaml
+  - ./portainer/docker-compose.yaml
+  - ./traefik/docker-compose.yaml

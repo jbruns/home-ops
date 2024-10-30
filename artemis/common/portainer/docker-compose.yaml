@@ -1,0 +1,32 @@
+services:
+  portainer:
+    image: portainer/portainer-ee:2.22.0
+    container_name: portainer
+    restart: unless-stopped
+    environment:
+      - COMPOSE_UNPACKER_IMAGE=jbruns/compose-unpacker:2.21.3-sops
+    labels:
+      - traefik.enable=true
+
+      # Listen on http, but redirect all requests to https
+      - traefik.http.routers.portainer-http.rule=Host(`pio.${DOMAIN}`)
+      - traefik.http.routers.portainer-http.entrypoints=http
+      - traefik.http.routers.portainer-http.middlewares=redirect-https
+
+      # Direct all https requests to the service, checking with crowdsec first
+      - traefik.http.routers.portainer-https.rule=Host(`pio.${DOMAIN}`)
+      - traefik.http.routers.portainer-https.entrypoints=https
+      - traefik.http.routers.portainer-https.tls=true
+      - traefik.http.routers.portainer-https.tls.certresolver=${CERT_RESOLVER}
+      - traefik.http.routers.portainer-https.service=portainer
+      - traefik.http.routers.portainer-https.middlewares=crowdsec-bouncer
+
+      - traefik.http.services.portainer.loadbalancer.server.port=9000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    networks:
+      - backend
+
+volumes:
+  portainer_data:

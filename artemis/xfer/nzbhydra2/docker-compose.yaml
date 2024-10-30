@@ -1,0 +1,37 @@
+services:
+  nzbhydra2:
+    # https://github.com/linuxserver/docker-nzbhydra2/pkgs/container/nzbhydra2
+    image: lscr.io/linuxserver/nzbhydra2:7.7.0
+    container_name: nzbhydra2
+    restart: unless-stopped
+    environment:
+      # https://docs.linuxserver.io/images/docker-nzbhydra2/#environment-variables-e
+      - PUID=${NZBHYDRA2_UID}
+      - PGID=${NZBHYDRA2_GID}
+      - TZ=${TZ}
+    labels:
+      - traefik.enable=true
+
+      # Listen on http, but redirect all requests to https
+      - traefik.http.routers.nzbhydra2-http.rule=Host(`hydra.${DOMAIN}`)
+      - traefik.http.routers.nzbhydra2-http.entrypoints=http
+      - traefik.http.routers.nzbhydra2-http.middlewares=redirect-https
+
+      # Direct all https requests to the service, checking with crowdsec first
+      - traefik.http.routers.nzbhydra2-https.rule=Host(`hydra.${DOMAIN}`)
+      - traefik.http.routers.nzbhydra2-https.entrypoints=https
+      - traefik.http.routers.nzbhydra2-https.tls=true
+      - traefik.http.routers.nzbhydra2-https.tls.certresolver=${CERT_RESOLVER}
+      - traefik.http.routers.nzbhydra2-https.service=nzbhydra2
+      - traefik.http.routers.nzbhydra2-https.middlewares=crowdsec-bouncer
+
+      - traefik.http.services.nzbhydra2.loadbalancer.server.port=5076
+    volumes:
+      - nzbhydra2_config:/config
+      - nzbhydra2_downloads:/downloads
+    networks:
+      - backend
+
+volumes:
+  nzbhydra2_config:
+  nzbhydra2_downloads:

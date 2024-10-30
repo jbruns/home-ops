@@ -1,0 +1,39 @@
+services:
+  nginx:
+    image: nginx:1.27.2
+    container_name: nginx
+    restart: unless-stopped
+    labels:
+      - traefik.enable=true
+
+      # Catch-all for any undefined hostname. Handle error pages.
+      - traefik.http.routers.nginx-http.rule=HostRegexp(`.+`)
+      - traefik.http.routers.nginx-http.priority=1
+      - traefik.http.routers.nginx-http.entrypoints=http
+      - traefik.http.routers.nginx-http.service=nginx
+      - traefik.http.routers.nginx-http.middlewares=catch-all
+
+      # For HTTPS, catch the server hostname as nothing is hosted there
+      - traefik.http.routers.nginx-https.rule=Host(`artemis.${DOMAIN}`)
+      - traefik.http.routers.nginx-https.entrypoints=https
+      - traefik.http.routers.nginx-https.tls=true
+      - traefik.http.routers.nginx-https.tls.certresolver=${CERT_RESOLVER}
+      - traefik.http.routers.nginx-https.service=nginx
+      - traefik.http.routers.nginx-https.middlewares=catch-all
+
+      - traefik.http.services.nginx.loadbalancer.server.port=80
+      
+      # Middleware to send HTTP errors to nginx
+      - traefik.http.middlewares.error-pages.errors.status=400-599
+      - traefik.http.middlewares.error-pages.errors.query=/{status}.html
+      - traefik.http.middlewares.error-pages.errors.service=nginx
+
+      # Chain the catch-all middlewares together
+      - traefik.http.middlewares.catch-all.chain.middlewares=crowdsec-bouncer,error-pages
+    volumes:
+      # Friendly error page html
+      - ./error-pages:/usr/share/nginx/error-pages
+      # Simple configuration to handle errors
+      - ./default.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - backend

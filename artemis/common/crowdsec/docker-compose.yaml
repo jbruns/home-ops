@@ -1,0 +1,23 @@
+services:
+  crowdsec:
+    image: crowdsecurity/crowdsec:v1.6.3
+    container_name: crowdsec
+    restart: unless-stopped
+    environment:
+      # https://hub.docker.com/r/crowdsecurity/crowdsec
+      - TZ=${TZ}
+      # https://app.crowdsec.net/hub/collections
+      - COLLECTIONS=crowdsecurity/traefik crowdsecurity/http-cve
+    volumes:
+      - crowdsec_log:/var/log/crowdsec
+      - crowdsec_data:/var/lib/crowdsec/data
+      - crowdsec_config:/etc/crowdsec
+      # Allow Crowdsec to read and parse Traefik access logs
+      - traefik_log:/var/log/traefik:ro
+    networks:
+      - backend
+
+volumes:
+  crowdsec_log:
+  crowdsec_config:
+  crowdsec_data:
