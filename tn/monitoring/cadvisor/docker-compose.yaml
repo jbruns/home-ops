@@ -7,17 +7,16 @@ services:
     command:
       # https://github.com/google/cadvisor/blob/master/docs/running.md#with-docker
       # https://github.com/google/cadvisor/issues/3139
-      - --disable_metrics=referenced_memory,advtcp,cpu_topology,cpuset,hugetlb,memory_numa,process,referenced_memory,resctrl,sched,tcp,udp
+      - --disable_metrics=referenced_memory,process
       # https://github.com/google/cadvisor/issues/2523
       - --docker_only=true
       - --housekeeping_interval=10s
 
     volumes:
+      - /:/rootfs:ro
       - /var/run:/var/run:ro
       - /sys:/sys:ro
-      - ${DOCKER_DATA_ROOT}/image:${DOCKER_DATA_ROOT}/image:ro
-      - ${DOCKER_DATA_ROOT}/overlay2:${DOCKER_DATA_ROOT}/overlay2:ro
-      - ${DOCKER_DATA_ROOT}/containers:${DOCKER_DATA_ROOT}/containers:ro
+      - ${DOCKER_DATA_ROOT}:${DOCKER_DATA_ROOT}:ro
       - /dev/disk:/dev/disk:ro
     ports:
       # fallback internal
