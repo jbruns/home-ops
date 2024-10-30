@@ -1,0 +1,20 @@
+{
+	"data": "ENC[AES256_GCM,data:NaCuk6TYrQ==,iv:vSnjc8ZG+BEsRjFj4eCwfeuWdbQWpczwnAEW8ObhE3w=,tag:z5UPvLARp1YATeA9vZMgwQ==,type:str]",
+	"sops": {
+		"kms": null,
+		"gcp_kms": null,
+		"azure_kv": null,
+		"hc_vault": null,
+		"age": [
+			{
+				"recipient": "age1hgayx0xta2t248c8xhu2pex68z5tqak5487es2m7ccp5gjducanq0egash",
+				"enc": "-----BEGIN AGE ENCRYPTED FILE-----\nYWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBIVkxOVXJUZ2N2QnVGVXJZ\nTjRzWE5VUVk2Mi84UTZXaXg4SXlKeFl4azNjCmlldVVBODRhZVVOQmNWMFlSQzM5\nSkVNS08ycHBuamRPejcrNXROdzM3YlEKLS0tIElpZm90QlZZajYycXY0d29ubi9I\nUHRleXl4VUdpSWVPanpXK0w5ZmhsbVUKoxh1f3siHaLnjErJAExP1ql8F222P3LA\nPMRTUhnEqWw6qgOZO/cCoLoUhF+0YWTkpFceUufYPT/qpHmgxkYV6Q==\n-----END AGE ENCRYPTED FILE-----\n"
+			}
+		],
+		"lastmodified": "2024-10-30T01:54:38Z",
+		"mac": "ENC[AES256_GCM,data:CS5ZwfteChHmxYM2c+u6afoOl1ldyPFbIonf3lDQUVXkfpI5mGlU7sv2lxDEduBtjuKaqDY2GN/zcbOFulNgllwFhgMSzOjXi5zdtv8noMky4PKhutYsqRI0qo9VDdAOJkQczIj9G7NfROa5fHDk7OCnuxk/9PZZyHpDpKzNudU=,iv:yJJxbDAcv1WtjAK/7Lp/AFwyd45uALdtTIpeVTWpb1I=,tag:oR3S+9hVlbcu4B01ZqRPxQ==,type:str]",
+		"pgp": null,
+		"unencrypted_suffix": "_unencrypted",
+		"version": "3.9.1"
+	}
+}
