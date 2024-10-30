@@ -27,6 +27,7 @@ services:
       # nextcloud
       - nextcloud_data:/backup/nextcloud_data:ro
       # open-webui
+      - ollama_data:/backup/ollama_data:ro
       - open-webui_data:/backup/openwebui_data:ro
       # redis
       - redis_data:/backup/redis_data:ro
