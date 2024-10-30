@@ -31,7 +31,7 @@ services:
       - SMTP_PORT=${NEXTCLOUD_SMTP_PORT}
       - SMTP_HOST=${NEXTCLOUD_SMTP_HOST}
       - SMTP_NAME=${NEXTCLOUD_SMTP_NAME}
-      - SMTP_PASSWORD_FILE=/run/secrets/smtp_password
+      - SMTP_PASSWORD_FILE=/run/secrets/nextcloud_smtp_password
       
       # Reverse proxy
       - OVERWRITEHOST=nextcloud.${ALT_DOMAIN_HOME}
@@ -49,7 +49,7 @@ services:
       - mysql_password
       - nextcloud_admin_user
       - nextcloud_admin_password
-      - smtp_password
+      - nextcloud_smtp_password
 
     labels:
       logging: promtail
@@ -191,8 +191,8 @@ secrets:
     file: ./nextcloud_admin_user.txt
   nextcloud_admin_password:
     file: ./nextcloud_admin_password.txt
-  smtp_password:
-    file: ./smtp_password.txt
+  nextcloud_smtp_password:
+    file: ./nextcloud_smtp_password.txt
 
 volumes:
   nextcloud_data:
