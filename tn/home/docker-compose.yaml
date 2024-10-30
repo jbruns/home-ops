@@ -22,8 +22,17 @@ services:
       # backup: no traffic in or out
     volumes: 
       # Backup source volumes
+      # mariadb
+      - mariadb_data:/backup/mariadb_data:ro
       # nextcloud
-      - nextcloud_config:/backup/nextcloud_config:ro
+      - nextcloud_data:/backup/nextcloud_data:ro
+      # open-webui
+      - openwebui_data:/backup/openwebui_data:ro
+      # redis
+      - redis_data:/backup/redis_data:ro
+      # vaultwarden
+      - vaultwarden_data:/backup/vaultwarden_data:ro
+      
       # Backup target
       - ${ZFS_POOL_ROOT_HDD}/docker_backups:/archive
     logging:
@@ -43,4 +52,8 @@ networks:
 
 # Remaining services in the stack have their own Compose configuration.
 include:
+  - ./mariadb/docker-compose.yaml
   - ./nextcloud/docker-compose.yaml
+  - ./open-webui/docker-compose.yaml
+  - ./redis/docker-compose.yaml
+  - ./vaultwarden/docker-compose.yaml
