@@ -149,6 +149,7 @@ services:
     # https://github.com/xperimental/nextcloud-exporter/pkgs/container/nextcloud-exporter
     image: ghcr.io/xperimental/nextcloud-exporter:0.7.0
     restart: unless-stopped
+    container_name: nextcloud-exporter
     # https://github.com/xperimental/nextcloud-exporter#configuration-file
     command:
       - '--config-file /etc/nextcloud-exporter/config.yaml'
