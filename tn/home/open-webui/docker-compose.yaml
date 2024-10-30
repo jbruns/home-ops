@@ -110,4 +110,5 @@ services:
       - backend
 
 volumes:
+  ollama_data:
   open-webui_data:
