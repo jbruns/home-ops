@@ -172,7 +172,11 @@ services:
         max-file: 1
         tag: "{{.Name}}"
     volumes:
-      - ./nextcloud_exporter_config.yaml:/etc/nextcloud_exporter/config.yaml:ro
+      - type: bind
+        source: ./nextcloud_exporter_config.yaml
+        target: /etc/nextcloud_exporter/config.yaml
+        read_only: true
+        x-sops: true
     networks:
       - backend
 
