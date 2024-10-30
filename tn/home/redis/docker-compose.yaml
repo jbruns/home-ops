@@ -7,7 +7,7 @@ services:
     container_name: redis
     restart: unless-stopped
     environment:
-      - REDIS_ARGS="--requirepass ${REDIS_PASSWORD} --save 60 --loglevel warning"
+      - REDIS_ARGS="--requirepass ${REDIS_PASSWORD} --save 60 1000 --appendonly yes --loglevel warning"
     labels:
       logging: promtail
       logging_jobname: containerlogs
@@ -23,9 +23,6 @@ services:
           # nextcloud
           - network: common_backend
             container: nextcloud
-          # vaultwarden
-          - network: common_backend
-            container: vaultwarden
     volumes:
       - redis_data:/data
     networks:
