@@ -6,8 +6,8 @@ services:
     container_name: vaultwarden
     environment:
       # https://github.com/dani-garcia/vaultwarden/blob/main/.env.template
-      - DOMAIN="https://vault.${ALT_DOMAIN_HOME}"
-      - HELO_NAME="vault.${ALT_DOMAIN_HOME}"
+      - DOMAIN=https://vault.${ALT_DOMAIN_HOME}
+      - HELO_NAME=vault.${ALT_DOMAIN_HOME}
       # https://github.com/dani-garcia/vaultwarden/wiki/Enabling-admin-page#secure-the-admin_token
       - ADMIN_TOKEN_FILE=/run/secrets/admin_token
       - DATABASE_URL_FILE=/run/secrets/database_url
