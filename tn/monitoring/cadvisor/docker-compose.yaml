@@ -16,6 +16,8 @@ services:
       - /var/run:/var/run:ro
       - /sys:/sys:ro
       - ${DOCKER_DATA_ROOT}/image:${DOCKER_DATA_ROOT}/image:ro
+      - ${DOCKER_DATA_ROOT}/overlay2:${DOCKER_DATA_ROOT}/overlay2:ro
+      - ${DOCKER_DATA_ROOT}/containers:${DOCKER_DATA_ROOT}/containers:ro
       - /dev/disk:/dev/disk:ro
     ports:
       # fallback internal
