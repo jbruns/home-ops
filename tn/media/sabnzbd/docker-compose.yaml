@@ -1,14 +1,12 @@
 services:
   sabnzbd:
     restart: unless-stopped
-    # https://hotio.dev/containers/sabnzbd
+    # https://github.com/onedr0p/containers/pkgs/container/sabnzbd
     # https://github.com/sabnzbd/sabnzbd
-    image: ghcr.io/hotio/sabnzbd:release-4.3.3
+    image: ghcr.io/onedr0p/sabnzbd:4.3.3
+    user: ${SABNZBD_UID}:${MEDIA_GID}
     container_name: sabnzbd
     environment:
-      - PUID=${SABNZBD_UID}
-      - PGID=${MEDIA_GID}
-      - UMASK=002
       - TZ=${TZ}
     labels:
       logging: promtail
