@@ -1,14 +1,15 @@
 services:
   plex:
     restart: unless-stopped
-    # https://hub.docker.com/r/plexinc/pms-docker
+    # https://github.com/onedr0p/containers/pkgs/container/plex
     # https://github.com/plexinc/pms-docker
-    image: plexinc/pms-docker:1.41.0.8994-f2c27da23
+    image: ghcr.io/onedr0p/plex:1.40.5.8854-f36c552fd
+    user: ${PLEX_UID}:${MEDIA_GID}
+    group_add:
+      - 107 # render
+      - 44 # video
     container_name: plex
     environment:
-      # https://github.com/plexinc/pms-docker?tab=readme-ov-file#parameters
-      - PLEX_UID=${PLEX_UID}
-      - PLEX_GID=${MEDIA_GID}
       - TZ=${TZ}
 
       # - NVIDIA_VISIBLE_DEVICES=all
@@ -74,7 +75,6 @@ services:
       - plex_config:/config
       - plex_transcode:/transcode
       - ${ZFS_POOL_ROOT_HDD}/media:/data:ro
-      - ${ZFS_POOL_ROOT_HDD}/media/plex_recordings:/recordings
     networks:
       - backend
 #    deploy:
