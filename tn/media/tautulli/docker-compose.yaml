@@ -1,13 +1,12 @@
 services:
   tautulli:
     restart: unless-stopped
-    # https://github.com/Tautulli/Tautulli/pkgs/container/tautulli
+    # https://github.com/onedr0p/containers/pkgs/container/tautulli
     # https://github.com/Tautulli/Tautulli
-    image: ghcr.io/tautulli/tautulli:v2.14.6
+    image: ghcr.io/onedr0p/tautulli:2.14.6
+    user: ${TAUTULLI_UID}:${TAUTULLI:GID}
     container_name: tautulli
     environment:
-      - PUID=${TAUTULLI_UID}
-      - PGID=${TAUTULLI_GID}
       - TZ=${TZ}
     labels:
       logging: promtail
