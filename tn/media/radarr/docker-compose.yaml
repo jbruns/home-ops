@@ -1,14 +1,12 @@
 services:
   radarr:
     restart: unless-stopped
-    # https://hotio.dev/containers/radarr
+    # https://github.com/onedr0p/containers/pkgs/container/radarr
     # https://github.com/Radarr/Radarr
-    image: ghcr.io/hotio/radarr:release-5.11.0.9244
+    image: ghcr.io/onedr0p/radarr:5.14.0
+    user: ${RADARR_UID}:${MEDIA:GID}
     container_name: radarr
     environment:
-      - PUID=${RADARR_UID}
-      - PGID=${MEDIA_GID}
-      - UMASK=002
       - TZ=${TZ}
     labels:
       logging: promtail
