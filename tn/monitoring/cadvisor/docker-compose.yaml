@@ -12,11 +12,16 @@ services:
       - --docker_only=true
       - --housekeeping_interval=10s
     volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:ro
+      # Adjusted to enable specific metrics above
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - /sys:/sys:ro
-      - ${DOCKER_DATA_ROOT}:${DOCKER_DATA_ROOT}:ro
+      - /proc:/rootfs/proc:ro
       - /dev/disk:/dev/disk:ro
+      - /etc/machine-id:/rootfs/etc/machine-id:ro
+      - ${DOCKER_DATA_ROOT}/containers:/rootfs/${DOCKER_DATA_ROOT}/containers:ro
+      - ${DOCKER_DATA_ROOT}/overlay2:/rootfs/${DOCKER_DATA_ROOT}/overlay2:ro
+      - ${DOCKER_DATA_ROOT}/image:/rootfs/${DOCKER_DATA_ROOT}/image:ro
+
     networks:
       - backend
     labels:
