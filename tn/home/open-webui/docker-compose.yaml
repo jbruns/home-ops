@@ -7,8 +7,6 @@ services:
     container_name: ollama
     # https://github.com/ollama/ollama/issues/6543
     # user: ${HOME_UID}:${HOME_GID}
-    security_opt:
-      - no-new-privileges=true
     labels:
       logging: promtail
       logging_jobname: containerlogs
@@ -57,9 +55,8 @@ services:
     image: ghcr.io/open-webui/open-webui:0.3.35
     restart: unless-stopped
     container_name: open-webui
-    user: ${HOME_UID}:${HOME_GID}
-    security_opt:
-      - no-new-privileges=true
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
     labels:
       logging: promtail
       logging_jobname: containerlogs
