@@ -5,6 +5,12 @@ services:
     image: ollama/ollama:0.3.14
     restart: unless-stopped
     container_name: ollama
+    user: ${HOME_UID}:${HOME_GID}
+    group_add:
+      - 44 # video
+      - 107 # render
+    security_opt:
+      - no-new-privileges=true
     labels:
       logging: promtail
       logging_jobname: containerlogs
@@ -53,6 +59,9 @@ services:
     image: ghcr.io/open-webui/open-webui:0.3.35
     restart: unless-stopped
     container_name: open-webui
+    user: ${HOME_UID}:${HOME_GID}
+    security_opt:
+      - no-new-privileges=true
     labels:
       logging: promtail
       logging_jobname: containerlogs
