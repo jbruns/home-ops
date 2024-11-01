@@ -86,6 +86,9 @@ services:
     # https://github.com/TOomaAh/emby_exporter_go
     image: bagul/goemby_exporter:v1.0.11
     container_name: emby-exporter
+    user: ${EMBY_UID}:${MEDIA_GID}
+    security_opt:
+      - no-new-privileges=true
     environment:
       - CONFIG_FILE=/config/config.yaml
       - TZ=${TZ}
@@ -108,7 +111,7 @@ services:
         max-file: 1
         tag: "{{.Name}}"
     volumes:
-      - ./emby_exporter_config.yaml:/config/config.yaml
+      - ./emby_exporter_config.yaml:/config/config.yaml:ro
     networks:
       - backend
 
