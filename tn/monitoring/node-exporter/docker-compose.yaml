@@ -21,7 +21,7 @@ services:
 
       # Enable Whalewall for this service
       whalewall.enabled: true
-      # loki: Communicate with monitoring data sources.
+      # node-exporter: Communicate with prometheus
       whalewall.rules: |
         output:
           # prometheus: data collection
