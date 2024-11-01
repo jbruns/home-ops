@@ -1,6 +1,6 @@
 services:
   nginx:
-    image: nginx:1.27.2
+    image: nginxinc/nginx-unprivileged:1.27.2
     container_name: nginx
     user: ${COMMON_UID}:${COMMON_GID}
     security_opt:
@@ -53,8 +53,8 @@ services:
         tag: "{{.Name}}"
     volumes:
       # Friendly error page html
-      - ./error-pages:/usr/share/nginx/error-pages
+      - ./error-pages:/usr/share/nginx/error-pages:ro
       # Simple configuration to handle errors
-      - ./default.conf:/etc/nginx/conf.d/default.conf
+      - ./default.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
       - backend
