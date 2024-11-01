@@ -55,11 +55,24 @@ Running notes as development continues...
 
 -commit, push. bring up stack in portainer. WARNING: services will be in first-run state and unsecured. suggest stopping all containers and bringing up as you are ready to configure.
 
--change ownership:
---media_nextpvr_* to nextpvr:nextpvr
---media_navidrome_data to navidrome:navidrome
---media_xteve_* to xteve:xteve
+# home:
 
+-home/env.template:
+-commit, push. bring up stack in portainer. WARNING: services will be in first-run state and unsecured. suggest stopping all containers and bringing up as you are ready to configure.
+
+-change ownership:
+--home_*/_data/ to apps:apps
+--monitoring_*/_data/ to apps:apps
+--common_*/_data/ to apps:apps
+--media_emby_*/_data/ to emby:emby
+--media_navidrome_*/_data/ to navidrome:navidrome
+--media_nextpvr_*/_data/ to nextpvr:nextpvr
+--media_plex_*/_data/ to plex:plex
+--media_radarr_*/_data/ to radarr:radarr
+--media_sabnzbd_*/_data/ to sabnzbd:sabnzbd
+--media_sonarr_*/_data/ to sonarr:sonarr
+--media_tautulli_*/_data/ to tautulli:tautulli
+--media_xteve_*/_data/ to xteve:xteve
 
 ## adding/removing a service:
 -subdirectory under stack_name/docker-compose.yaml
