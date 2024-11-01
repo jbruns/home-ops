@@ -53,8 +53,10 @@ services:
         tag: "{{.Name}}"
     volumes:
       # Friendly error page html
-      - ./error-pages:/usr/share/nginx/error-pages:ro
+      - ./error-pages:/srv/http/default:ro
       # Simple configuration to handle errors
       - ./default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./error-pages/snippets/error_pages.conf:/etc/nginx/snippets/error_pages.conf:ro
+      - ./error-pages/snippets/error_pages_content.conf:/etc/nginx/snippets/error_pages_content.conf:ro
     networks:
       - backend
