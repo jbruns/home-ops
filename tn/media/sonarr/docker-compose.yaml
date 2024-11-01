@@ -69,6 +69,9 @@ services:
     # https://github.com/onedr0p/exportarr
     image: ghcr.io/onedr0p/exportarr:v2.0.1
     container_name: sonarr-exporter
+    user: ${SONARR_UID}:${MEDIA_GID}
+    security_opt:
+      - no-new-privileges=true
     command: ["sonarr"]
     environment:
       # https://github.com/onedr0p/exportarr#configuration

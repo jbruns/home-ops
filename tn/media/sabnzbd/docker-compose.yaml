@@ -74,6 +74,9 @@ services:
     # https://github.com/onedr0p/exportarr
     image: ghcr.io/onedr0p/exportarr:v2.0.1
     container_name: sabnzbd-exporter
+    user: ${SABNZBD_UID}:${MEDIA_GID}
+    security_opt:
+      - no-new-privileges=true
     command: ["sabnzbd"]
     environment:
       # https://github.com/onedr0p/exportarr#configuration

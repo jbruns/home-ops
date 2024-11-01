@@ -93,6 +93,9 @@ services:
     # https://github.com/jsclayton/prometheus-plex-exporter
     image: ghcr.io/jsclayton/prometheus-plex-exporter
     container_name: plex-exporter
+    user: ${PLEX_UID}:${MEDIA_GID}
+    security_opt:
+      - no-new-privileges=true
     # https://github.com/jsclayton/prometheus-plex-exporter?tab=readme-ov-file#configuration
     environment:
       - PLEX_SERVER=http://plex:32400
