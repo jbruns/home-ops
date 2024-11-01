@@ -2,13 +2,11 @@ services:
   loki:
     image: grafana/loki:3.2.1
     container_name: loki
-    user: root
-    ports:
-      - 3100:3100
+    user: ${MONITORING_UID}:${MONITORING_GID}
     command: -config.file=/etc/loki/loki.yaml
     volumes:
-      - ./loki.yaml:/etc/loki/loki.yaml
-      - ./rules.yaml:/etc/loki/rules/fake/loki-rules.yml
+      - ./loki.yaml:/etc/loki/loki.yaml:ro
+      - ./rules.yaml:/etc/loki/rules/fake/loki-rules.yml:ro
     networks:
       - backend
     labels:
