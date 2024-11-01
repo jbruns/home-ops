@@ -7,20 +7,16 @@ services:
     command:
       # https://github.com/google/cadvisor/blob/master/docs/running.md#with-docker
       # https://github.com/google/cadvisor/issues/3139
-      - --disable_metrics=referenced_memory,process
+      - --enable_metrics=cpu,cpuLoad,disk,diskIO,memory,network
       # https://github.com/google/cadvisor/issues/2523
       - --docker_only=true
       - --housekeeping_interval=10s
-
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
       - /sys:/sys:ro
       - ${DOCKER_DATA_ROOT}:${DOCKER_DATA_ROOT}:ro
       - /dev/disk:/dev/disk:ro
-    ports:
-      # fallback internal
-      - 8080:8080
     networks:
       - backend
     labels:
@@ -39,7 +35,6 @@ services:
           # prometheus: data collection
           - network: common_backend
             container: prometheus
-
     logging:
       driver: json-file
       options:
