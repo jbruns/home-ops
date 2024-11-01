@@ -9,7 +9,7 @@ services:
     environment:
       # https://offen.github.io/docker-volume-backup/reference
       - BACKUP_FILENAME=media-%Y-%m-%dT%H-%M-%S.tar.gz
-      - BACKUP_CRON_EXPRESSION=15 4 * * *
+      - BACKUP_CRON_EXPRESSION=35 4 * * *
       - BACKUP_PRUNING_PREFIX=media-
       - BACKUP_RETENTION_DAYS=7
     labels:
