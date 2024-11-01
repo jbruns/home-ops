@@ -5,6 +5,9 @@ services:
     # https://hub.docker.com/r/redis/redis-stack-server/tags
     image: redis/redis-stack-server:7.4.0-v1
     container_name: redis
+    user: ${HOME_UID}:${HOME_GID}
+    security_opt:
+      - no-new-privileges=true
     restart: unless-stopped
     environment:
       - REDIS_ARGS=--requirepass ${REDIS_PASSWORD} --save 60 1000 --appendonly yes --loglevel warning

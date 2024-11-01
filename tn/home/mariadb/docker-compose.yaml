@@ -3,6 +3,9 @@ services:
     # https://hub.docker.com/_/mariadb
     image: mariadb:11.4.3
     container_name: mariadb
+    user: ${HOME_UID}:${HOME_GID}
+    security_opt:
+      - no-new-privileges=true
     restart: unless-stopped
     environment:
       # https://mariadb.com/kb/en/mariadb-server-docker-official-image-environment-variables/

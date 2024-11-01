@@ -4,6 +4,9 @@ services:
     image: vaultwarden/server:1.32.3
     restart: unless-stopped
     container_name: vaultwarden
+    user: ${HOME_UID}:${HOME_GID}
+    security_opt:
+      - no-new-privileges=true
     environment:
       # https://github.com/dani-garcia/vaultwarden/blob/main/.env.template
       - DOMAIN=https://vault.${ALT_DOMAIN_HOME}
