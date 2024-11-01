@@ -4,9 +4,6 @@ services:
     image: nextcloud:30.0.1
     restart: unless-stopped
     container_name: nextcloud
-    user: ${HOME_UID}:${HOME_GID}
-    security_opt:
-      - no-new-privileges=true
     environment:
       # https://github.com/nextcloud/Docker/#auto-configuration-via-environment-variables
       # https://github.com/nextcloud/Docker/?tab=readme-ov-file#docker-secrets
