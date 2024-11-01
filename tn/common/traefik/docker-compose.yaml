@@ -2,6 +2,11 @@ services:
   traefik:
     image: traefik:v3.2.0
     container_name: traefik
+    user: ${COMMON_UID}:${COMMON_GID}
+    group_add:
+      - ${DOCKER_GID}
+    security_opt:
+      no-new-privileges: true
     restart: unless-stopped
     command:
       # Debug-level logging as necessary

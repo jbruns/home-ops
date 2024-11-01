@@ -2,6 +2,11 @@ services:
   portainer:
     image: portainer/portainer-ee:2.21.3
     container_name: portainer
+    user: ${COMMON_UID}:${COMMON_GID}
+    group_add:
+      - ${DOCKER_GID}
+    security_opt:
+      no-new-privileges: true
     restart: unless-stopped
     environment:
       - COMPOSE_UNPACKER_IMAGE=jbruns/compose-unpacker:2.21.3-sops

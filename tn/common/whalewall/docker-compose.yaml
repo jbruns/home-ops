@@ -1,10 +1,10 @@
 services:
   # https://github.com/capnspacehook/whalewall
   whalewall:
-    cap_add: 
-      - NET_ADMIN
     image: ghcr.io/capnspacehook/whalewall
     container_name: whalewall
+    cap_add: 
+      - NET_ADMIN
     network_mode: host
     labels:
       logging: promtail

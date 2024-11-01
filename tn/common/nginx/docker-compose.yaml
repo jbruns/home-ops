@@ -2,6 +2,9 @@ services:
   nginx:
     image: nginx:1.27.2
     container_name: nginx
+    user: ${COMMON_UID}:${COMMON_GID}
+    security_opt:
+      no-new-privileges: true
     restart: unless-stopped
     labels:
       logging: promtail

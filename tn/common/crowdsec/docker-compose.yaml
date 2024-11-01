@@ -2,6 +2,9 @@ services:
   crowdsec:
     image: crowdsecurity/crowdsec:v1.6.3
     container_name: crowdsec
+    user: ${COMMON_UID}:${COMMON_GID}
+    security_opt:
+      no-new-privileges: true
     restart: unless-stopped
     environment:
       # https://hub.docker.com/r/crowdsecurity/crowdsec
