@@ -3,6 +3,8 @@ services:
     image: prom/alertmanager:v0.27.0
     container_name: alertmanager
     user: ${MONITORING_UID}:${MONITORING_GID}
+    security_opt:
+      - no-new-privileges=true
     command:
       - '--config.file=/etc/alertmanager/config.yml'
       - '--web.config.file=/etc/alertmanager/web.yml'

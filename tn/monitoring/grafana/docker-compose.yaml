@@ -4,6 +4,8 @@ services:
     image: grafana/grafana:11.3.0
     container_name: grafana
     user: ${MONITORING_UID}:${MONITORING_GID}
+    security_opt:
+      - no-new-privileges=true
     restart: unless-stopped
     environment:
       # https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana

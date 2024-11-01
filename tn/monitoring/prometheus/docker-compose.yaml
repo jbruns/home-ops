@@ -3,6 +3,8 @@ services:
     image: prom/prometheus:v2.55.0
     container_name: prometheus
     user: ${MONITORING_UID}:${MONITORING_GID}
+    security_opt:
+      - no-new-privileges=true
     restart: unless-stopped
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
