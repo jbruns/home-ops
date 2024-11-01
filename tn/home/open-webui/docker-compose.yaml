@@ -5,10 +5,8 @@ services:
     image: ollama/ollama:0.3.14
     restart: unless-stopped
     container_name: ollama
-    user: ${HOME_UID}:${HOME_GID}
-    group_add:
-      - 44 # video
-      - 107 # render
+    # https://github.com/ollama/ollama/issues/6543
+    # user: ${HOME_UID}:${HOME_GID}
     security_opt:
       - no-new-privileges=true
     labels:
