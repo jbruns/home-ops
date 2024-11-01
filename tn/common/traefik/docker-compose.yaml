@@ -6,7 +6,7 @@ services:
     group_add:
       - ${DOCKER_GID}
     security_opt:
-      no-new-privileges: true
+      - no-new-privileges=true
     restart: unless-stopped
     command:
       # Debug-level logging as necessary
