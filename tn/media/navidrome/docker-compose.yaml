@@ -6,6 +6,8 @@ services:
     image: deluan/navidrome:0.53.3
     container_name: navidrome
     user: ${NAVIDROME_UID}:${MEDIA_GID}
+    security_opt:
+      - no-new-privileges=true
     environment:
       # https://www.navidrome.org/docs/usage/configuration-options/#environment-variables
       - ND_ENABLETRANSCODINGCONFIG=true

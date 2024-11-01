@@ -5,6 +5,8 @@ services:
     # https://github.com/sabnzbd/sabnzbd
     image: ghcr.io/onedr0p/sabnzbd:4.3.3
     user: ${SABNZBD_UID}:${MEDIA_GID}
+    security_opt:
+      - no-new-privileges=true
     container_name: sabnzbd
     environment:
       - TZ=${TZ}

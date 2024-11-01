@@ -8,6 +8,8 @@ services:
     group_add:
       - 107 # render
       - 44 # video
+    security_opt:
+      - no-new-privileges=true
     container_name: plex
     environment:
       - TZ=${TZ}

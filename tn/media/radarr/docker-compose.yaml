@@ -5,6 +5,8 @@ services:
     # https://github.com/Radarr/Radarr
     image: ghcr.io/onedr0p/radarr:5.14.0
     user: ${RADARR_UID}:${MEDIA_GID}
+    security_opt:
+      - no-new-privileges=true
     container_name: radarr
     environment:
       - TZ=${TZ}

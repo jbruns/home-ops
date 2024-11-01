@@ -6,6 +6,8 @@ services:
     image: nextpvr/nextpvr_amd64:stable
     container_name: nextpvr
     user: ${NEXTPVR_UID}:${NEXTPVR_GID}
+    security_opt:
+      - no-new-privileges=true
     labels:
       logging: promtail
       logging_jobname: containerlogs

@@ -5,6 +5,8 @@ services:
     # https://github.com/Tautulli/Tautulli
     image: ghcr.io/onedr0p/tautulli:2.14.6
     user: ${TAUTULLI_UID}:${TAUTULLI_GID}
+    security_opt:
+      - no-new-privileges=true
     container_name: tautulli
     environment:
       - TZ=${TZ}

@@ -5,6 +5,8 @@ services:
     # https://github.com/Sonarr/Sonarr
     image: ghcr.io/onedr0p/sonarr:4.0.10
     user: ${SONARR_UID}:${MEDIA_GID}
+    security_opt:
+      - no-new-privileges=true
     container_name: sonarr
     environment:
       - TZ=${TZ}
