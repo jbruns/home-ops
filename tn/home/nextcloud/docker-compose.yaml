@@ -150,6 +150,9 @@ services:
     image: ghcr.io/xperimental/nextcloud-exporter:0.7.0
     restart: unless-stopped
     container_name: nextcloud-exporter
+    user: ${HOME_UID}:${HOME_GID}
+    security_opt:
+      - no-new-privileges=true
     # https://github.com/xperimental/nextcloud-exporter#configuration-file
     command:
       - '--config-file /etc/nextcloud-exporter/config.yaml'
