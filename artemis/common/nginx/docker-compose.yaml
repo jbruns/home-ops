@@ -1,39 +1,62 @@
 services:
   nginx:
-    image: nginx:1.27.2
+    image: nginxinc/nginx-unprivileged:1.27.2
     container_name: nginx
+    user: ${COMMON_UID}:${COMMON_GID}
+    security_opt:
+      - no-new-privileges=true
     restart: unless-stopped
     labels:
-      - traefik.enable=true
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: common
+
+      traefik.enable: true
 
       # Catch-all for any undefined hostname. Handle error pages.
-      - traefik.http.routers.nginx-http.rule=HostRegexp(`.+`)
-      - traefik.http.routers.nginx-http.priority=1
-      - traefik.http.routers.nginx-http.entrypoints=http
-      - traefik.http.routers.nginx-http.service=nginx
-      - traefik.http.routers.nginx-http.middlewares=catch-all
+      traefik.http.routers.nginx-http.rule: HostRegexp(`.+`)
+      traefik.http.routers.nginx-http.priority: 1
+      traefik.http.routers.nginx-http.entrypoints: http
+      traefik.http.routers.nginx-http.service: nginx
+      traefik.http.routers.nginx-http.middlewares: catch-all
 
       # For HTTPS, catch the server hostname as nothing is hosted there
-      - traefik.http.routers.nginx-https.rule=Host(`artemis.${DOMAIN}`)
-      - traefik.http.routers.nginx-https.entrypoints=https
-      - traefik.http.routers.nginx-https.tls=true
-      - traefik.http.routers.nginx-https.tls.certresolver=${CERT_RESOLVER}
-      - traefik.http.routers.nginx-https.service=nginx
-      - traefik.http.routers.nginx-https.middlewares=catch-all
+      traefik.http.routers.nginx-https.rule: Host(`${DOMAIN}`)
+      traefik.http.routers.nginx-https.entrypoints: https
+      traefik.http.routers.nginx-https.tls: true
+      traefik.http.routers.nginx-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.nginx-https.service: nginx
+      traefik.http.routers.nginx-https.middlewares: catch-all
 
-      - traefik.http.services.nginx.loadbalancer.server.port=80
+      traefik.http.services.nginx.loadbalancer.server.port: 80
       
       # Middleware to send HTTP errors to nginx
-      - traefik.http.middlewares.error-pages.errors.status=400-599
-      - traefik.http.middlewares.error-pages.errors.query=/{status}.html
-      - traefik.http.middlewares.error-pages.errors.service=nginx
+      traefik.http.middlewares.error-pages.errors.status: 400-599
+      traefik.http.middlewares.error-pages.errors.query: /{status}.html
+      traefik.http.middlewares.error-pages.errors.service: nginx
 
       # Chain the catch-all middlewares together
-      - traefik.http.middlewares.catch-all.chain.middlewares=crowdsec-bouncer,error-pages
+      traefik.http.middlewares.catch-all.chain.middlewares: crowdsec-bouncer,error-pages
+
+      # Enable Whalewall for this service
+      whalewall.enabled: true
+      # nginx: does not need to communicate outbound, other than to the reverse proxy.
+      whalewall.rules: |
+        output:
+          - network: common_backend
+            container: traefik
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
     volumes:
       # Friendly error page html
-      - ./error-pages:/usr/share/nginx/error-pages
+      - ./error-pages:/srv/http/default:ro
       # Simple configuration to handle errors
-      - ./default.conf:/etc/nginx/conf.d/default.conf
+      - ./default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./error-pages/snippets/error_pages.conf:/etc/nginx/snippets/error_pages.conf:ro
+      - ./error-pages/snippets/error_pages_content.conf:/etc/nginx/snippets/error_pages_content.conf:ro
     networks:
       - backend

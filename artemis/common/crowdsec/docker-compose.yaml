@@ -2,12 +2,49 @@ services:
   crowdsec:
     image: crowdsecurity/crowdsec:v1.6.3
     container_name: crowdsec
+    user: ${COMMON_UID}:${COMMON_GID}
+    security_opt:
+      - no-new-privileges=true
     restart: unless-stopped
     environment:
       # https://hub.docker.com/r/crowdsecurity/crowdsec
       - TZ=${TZ}
       # https://app.crowdsec.net/hub/collections
       - COLLECTIONS=crowdsecurity/traefik crowdsecurity/http-cve
+    labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: common
+
+      # Enable Whalewall for this service
+      whalewall.enabled: true
+      # crowdsec: communicate with traefik and to WAN over selected protocols.
+      whalewall.rules: |
+        output:
+          - log_prefix: "dns"
+            proto: udp
+            dst_ports:
+              - 53
+          - log_prefix: "https"
+            proto: tcp
+            dst_ports:
+              - 443
+          - log_prefix: "http"
+            proto: tcp
+            dst_ports:
+              - 80
+          # allow communication to traefik
+          - network: common_backend
+            container: traefik
+          # metrics collection
+          - network: common_backend
+            container: prometheus
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
     volumes:
       - crowdsec_log:/var/log/crowdsec
       - crowdsec_data:/var/lib/crowdsec/data
