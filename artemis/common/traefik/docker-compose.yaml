@@ -93,17 +93,14 @@ services:
           external:
             allow: true
         output:
-          - log_prefix: "dns"
-            proto: udp
+          # DNS
+          - proto: udp
             dst_ports:
               - 53
-          - log_prefix: "https"
-            proto: tcp
+          # HTTP/S
+          - proto: tcp
             dst_ports:
               - 443
-          - log_prefix: "http"
-            proto: tcp
-            dst_ports:
               - 80
           # allow communication to crowdsec
           - network: common_backend

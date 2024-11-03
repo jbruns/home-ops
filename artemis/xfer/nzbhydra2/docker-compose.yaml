@@ -32,18 +32,18 @@ services:
       # nzbhydra2: Communicate with traefik and to WAN over selected protocols.
       whalewall.rules: |
         output:
-          - log_prefix: "dns"
-            proto: udp
+          # DNS
+          - proto: udp
             dst_ports:
               - 53
-          - log_prefix: "https"
-            proto: tcp
+          # HTTP/S
+          - proto: tcp
             dst_ports:
               - 443
-          - log_prefix: "http"
-            proto: tcp
-            dst_ports:
               - 80
+          # reverse proxy
+          - network: common_backend
+            container: traefik
           # allow communication to traefik
           - network: common_backend
             container: traefik
