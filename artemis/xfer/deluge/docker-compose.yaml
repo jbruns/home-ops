@@ -10,25 +10,56 @@ services:
       - PGID=${DELUGE_GID}
       - TZ=${TZ}
     labels:
-      - traefik.enable=true
+      traefik.enable: true
 
       # Listen on http, but redirect all requests to https
-      - traefik.http.routers.deluge-http.rule=Host(`deluge.${DOMAIN}`)
-      - traefik.http.routers.deluge-http.entrypoints=http
-      - traefik.http.routers.deluge-http.middlewares=redirect-https
+      traefik.http.routers.deluge-http.rule: Host(`deluge.${DOMAIN}`)
+      traefik.http.routers.deluge-http.entrypoints: http
+      traefik.http.routers.deluge-http.middlewares: redirect-https
 
       # Direct all https requests to the service, checking with crowdsec first
-      - traefik.http.routers.deluge-https.rule=Host(`deluge.${DOMAIN}`)
-      - traefik.http.routers.deluge-https.entrypoints=https
-      - traefik.http.routers.deluge-https.tls=true
-      - traefik.http.routers.deluge-https.tls.certresolver=${CERT_RESOLVER}
-      - traefik.http.routers.deluge-https.service=deluge
-      - traefik.http.routers.deluge-https.middlewares=crowdsec-bouncer
+      traefik.http.routers.deluge-https.rule: Host(`deluge.${DOMAIN}`)
+      traefik.http.routers.deluge-https.entrypoints: https
+      traefik.http.routers.deluge-https.tls: true
+      traefik.http.routers.deluge-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.deluge-https.service: deluge
+      traefik.http.routers.deluge-https.middlewares: crowdsec-bouncer
 
-      - traefik.http.services.deluge.loadbalancer.server.port=8112
-    expose:
-      # Daemon inbound - local communication only
-      - 58846
+      traefik.http.services.deluge.loadbalancer.server.port: 8112
+
+      # Enable Whalewall for this service
+      whalewall.enabled: true
+      # deluge: Allow published ports inbound. Communicate with traefik, autobrr and to WAN over selected protocols.
+      whalewall.rules: |
+        mapped_ports:
+          external:
+            allow: true
+        output:
+          - log_prefix: "dns"
+            proto: udp
+            dst_ports:
+              - 53
+          - log_prefix: "https"
+            proto: tcp
+            dst_ports:
+              - 443
+          - log_prefix: "http"
+            proto: tcp
+            dst_ports:
+              - 80
+          # ephemeral ports for bt traffic
+          - proto: tcp
+            dst_ports:
+              - 1024-65535
+          - proto: udp
+            dst_ports:
+              - 1024-65535
+          # allow communication to traefik
+          - network: common_backend
+            container: traefik
+          # autobrr client communication
+          - network: common_backend
+            container: autobrr
     ports:
       # Bittorrent inbound
       - 31727:31727
