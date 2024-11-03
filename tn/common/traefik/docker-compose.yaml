@@ -130,6 +130,8 @@ services:
       - traefik_log:/var/log/traefik
       # ACME/TLS configuration
       - traefik_le:/letsencrypt
+      # Plugins storage
+      - traefik_plugins-storage:/plugins-storage
       # Allow Traefik to get updates from the Docker engine
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
@@ -141,3 +143,4 @@ services:
 volumes:
   traefik_log:
   traefik_le:
+  traefik_plugins-storage:
