@@ -27,34 +27,6 @@ services:
       traefik.http.routers.autobrr-https.middlewares: crowdsec-bouncer
 
       traefik.http.services.autobrr.loadbalancer.server.port: 7474
-
-      # Enable Whalewall for this service
-      whalewall.enabled: true
-      # autobrr: Communicate with traefik, deluge and to WAN over selected protocols.
-      whalewall.rules: |
-        output:
-          - log_prefix: "dns"
-            proto: udp
-            dst_ports:
-              - 53
-          - log_prefix: "https"
-            proto: tcp
-            dst_ports:
-              - 443
-          - log_prefix: "http"
-            proto: tcp
-            dst_ports:
-              - 80
-          - log_prefix: "irc"
-            proto: tcp
-            dst_ports:
-              - 6660-7000
-          # allow communication to traefik
-          - network: common_backend
-            container: traefik
-          # deluge management
-          - network: common_backend
-            container: deluge
     volumes:
       - autobrr_config:/config
     networks:
