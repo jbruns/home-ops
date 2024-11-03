@@ -1,0 +1,54 @@
+global:
+  scrape_interval: 15s
+  external_labels:
+    namespace: local
+
+rule_files:
+  - /etc/prometheus/recording-rules.yml
+  - /etc/prometheus/alerting-rules.yml
+
+alerting:
+  alertmanagers:
+    - scheme: http
+      static_configs:
+        - targets: ['alertmanager:9093']
+
+scrape_configs:
+  # COMMON STACK
+  - job_name: traefik
+    static_configs:
+      - targets: [ 'traefik:8082']
+        labels:
+          container: 'traefik'
+
+  - job_name: crowdsec
+    static_configs:
+      - targets: [ 'crowdsec:6060']
+        labels:
+          container: 'crowdsec'
+          
+  # core monitoring services. likely do not need to be modified.
+  - job_name: prometheus
+    static_configs:
+      - targets: [ 'localhost:9090' ]
+        labels:
+          container: 'prometheus'
+
+  - job_name: alertmanager
+    static_configs:
+      - targets: [ 'alertmanager:9093' ]
+        labels:
+          container: 'alertmanager'
+
+  - job_name: node-exporter
+    static_configs:
+      - targets: [ 'node-exporter:9100' ]
+        labels:
+          container: 'node-exporter'
+
+  - job_name: cadvisor
+    static_configs:
+      - targets: [ 'cadvisor:8080' ]
+        labels:
+          container: 'cadvisor'
+

@@ -1,0 +1,35 @@
+services:
+  promtail:
+    image:  grafana/promtail:3.2.1
+    container_name: promtail
+    volumes:
+      - ./docker-config.yml:/etc/promtail/docker-config.yml:ro
+      - ${DOCKER_DATA_ROOT}/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: -config.file=/etc/promtail/docker-config.yml
+    networks:
+      - backend
+    labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: monitoring
+
+      # Enable Whalewall for this service
+      whalewall.enabled: true
+      # promtail: Communicate with monitoring data sources.
+      whalewall.rules: |
+        output:
+          # loki: data collection
+          - network: common_backend
+            container: loki
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+
+networks:
+  backend:
+    name: common_backend
+    external: true

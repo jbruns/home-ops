@@ -1,0 +1,97 @@
+services:
+  grafana:
+    # https://hub.docker.com/r/grafana/grafana/tags
+    image: grafana/grafana:11.3.0
+    container_name: grafana
+    user: ${MONITORING_UID}:${MONITORING_GID}
+    security_opt:
+      - no-new-privileges=true
+    restart: unless-stopped
+    environment:
+      # https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana
+      # GF_<SectionName>_<KeyName>
+      - GF_LOG_MODE=console
+      - GF_LOG_LEVEL=critical
+      - GF_FEATURE_TOGGLES_ENABLE=lokiLogsDataplane
+      - GF_INSTALL_PLUGINS=grafana-polystat-panel,https://storage.googleapis.com/integration-artifacts/grafana-lokiexplore-app/grafana-lokiexplore-app-latest.zip;grafana-lokiexplore-app
+      - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
+    volumes:
+      - type: bind
+        source: ./provisioning/datasources.yml
+        target: /etc/grafana/provisioning/datasources/provisioning-datasources.yaml
+        read_only: true
+        # Stored encrypted in repo
+        x-sops: true
+      - ./provisioning/dashboards.yml:/etc/grafana/provisioning/dashboards/provisioning-dashboards.yaml:ro
+      - ./plugins/app.yaml:/etc/grafana/provisioning/plugins/app.yaml:ro
+      - ./dashboards/node-metrics.json:/var/lib/grafana/dashboards/node-metrics.json:ro
+      - ./dashboards/container-metrics.json:/var/lib/grafana/dashboards/container-metrics.json:ro
+      - ./dashboards/log-search.json:/var/lib/grafana/dashboards/log-search.json:ro
+
+      - grafana_data:/var/lib/grafana
+    networks:
+      - backend
+    labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: monitoring
+
+      traefik.enable: true
+
+      # Listen on http, but redirect all requests to https
+      traefik.http.routers.grafana-http.rule: Host(`grafana.${DOMAIN}`)
+      traefik.http.routers.grafana-http.entrypoints: http
+      traefik.http.routers.grafana-http.middlewares: redirect-https
+
+      # Direct all https requests to the service, checking with crowdsec first
+      traefik.http.routers.grafana-https.rule: Host(`grafana.${DOMAIN}`)
+      traefik.http.routers.grafana-https.entrypoints: https
+      traefik.http.routers.grafana-https.tls: true
+      traefik.http.routers.grafana-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.grafana-https.service: grafana
+      traefik.http.routers.grafana-https.middlewares: crowdsec-bouncer
+
+      traefik.http.services.grafana.loadbalancer.server.port: 3000
+
+      # Enable Whalewall for this service
+      whalewall.enabled: true
+      # grafana: Communicate with traefik, monitoring data sources and to WAN over selected protocols.
+      whalewall.rules: |
+        output:
+          - log_prefix: "dns"
+            proto: udp
+            dst_ports:
+              - 53
+          - log_prefix: "https"
+            proto: tcp
+            dst_ports:
+              - 443
+          - log_prefix: "http"
+            proto: tcp
+            dst_ports:
+              - 80
+          # traefik: reverse proxy
+          - network: common_backend
+            container: traefik
+          # prometheus, loki, alertmanager: data collection
+          - network: common_backend
+            container: prometheus
+          - network: common_backend
+            container: loki
+          - network: common_backend
+            container: alertmanager
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+
+volumes:
+  grafana_data:
+
+networks:
+  backend:
+    name: common_backend
+    external: true

@@ -1,0 +1,94 @@
+services:  
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: alertmanager
+    user: ${MONITORING_UID}:${MONITORING_GID}
+    security_opt:
+      - no-new-privileges=true
+    command:
+      - '--config.file=/etc/alertmanager/config.yml'
+      - '--web.config.file=/etc/alertmanager/web.yml'
+      - '--log.level=error'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=https://alertmanager.${DOMAIN}'
+    ports:
+      # fallback internal
+      - 9093:9093
+    volumes:
+      - type: bind
+        source: ./config.yml
+        target: /etc/alertmanager/config.yml
+        read_only: true
+        # Stored encrypted in repo
+        x-sops: true
+      - type: bind
+        source: ./web.yml
+        target: /etc/alertmanager/web.yml
+        read_only: true
+        # Stored encrypted in repo
+        x-sops: true
+      - alertmanager_data:/alertmanager
+    networks:
+      - backend
+    labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: monitoring
+
+      traefik.enable: true
+
+      # Listen on http, but redirect all requests to https
+      traefik.http.routers.alertmanager-http.rule: Host(`alertmanager.${DOMAIN}`)
+      traefik.http.routers.alertmanager-http.entrypoints: http
+      traefik.http.routers.alertmanager-http.middlewares: redirect-https
+
+      # Direct all https requests to the service, checking with crowdsec first
+      traefik.http.routers.alertmanager-https.rule: Host(`alertmanager.${DOMAIN}`)
+      traefik.http.routers.alertmanager-https.entrypoints: https
+      traefik.http.routers.alertmanager-https.tls: true
+      traefik.http.routers.alertmanager-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.alertmanager-https.service: alertmanager
+      traefik.http.routers.alertmanager-https.middlewares: crowdsec-bouncer
+
+      traefik.http.services.alertmanager.loadbalancer.server.port: 9093
+
+      # Enable Whalewall for this service
+      whalewall.enabled: true
+      # alertmanager: Allow published ports inbound. Communicate with traefik, monitoring data sources and to WAN over selected protocols.
+      whalewall.rules: |
+        mapped_ports:
+          external:
+            allow: true
+        output:
+          - log_prefix: "dns"
+            proto: udp
+            dst_ports:
+              - 53
+          - log_prefix: "https"
+            proto: tcp
+            dst_ports:
+              - 443
+          - log_prefix: "http"
+            proto: tcp
+            dst_ports:
+              - 80
+          # traefik: reverse proxy
+          - network: common_backend
+            container: traefik
+          # prometheus, loki, grafana: data collection
+          - network: common_backend
+            container: prometheus
+          - network: common_backend
+            container: loki
+          - network: common_backend
+            container: grafana
+
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+
+volumes:
+  alertmanager_data:

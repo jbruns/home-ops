@@ -1,0 +1,19 @@
+# MONITORING STACK
+## With thanks to https://github.com/ruanbekker/docker-monitoring-stack-gpnc
+## Per-stack instances of services (e.g. for backups) are declared here.
+
+# When referring to a network called 'backend', we mean the common stack's backend network
+networks:
+  backend:
+    name: common_backend
+    external: true
+
+# Remaining services in the stack have their own Compose configuration.
+include:
+  - ./alertmanager/docker-compose.yaml
+  - ./cadvisor/docker-compose.yaml
+  - ./grafana/docker-compose.yaml
+  - ./loki/docker-compose.yaml
+  - ./node-exporter/docker-compose.yaml
+  - ./prometheus/docker-compose.yaml
+  - ./promtail/docker-compose.yaml
