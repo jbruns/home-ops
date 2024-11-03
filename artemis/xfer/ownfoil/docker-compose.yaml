@@ -12,22 +12,43 @@ services:
       - PASSWORD=${HINOX_PASSWORD}
       - SAVE_ENABLED=false
     labels:
-      - traefik.enable=true
+      traefik.enable: true
 
       # Listen on http, but redirect all requests to https
-      - traefik.http.routers.ownfoil-http.rule=Host(`hinox.${DOMAIN}`)
-      - traefik.http.routers.ownfoil-http.entrypoints=http
-      - traefik.http.routers.ownfoil-http.middlewares=redirect-https
+      traefik.http.routers.ownfoil-http.rule: Host(`hinox.${DOMAIN}`)
+      traefik.http.routers.ownfoil-http.entrypoints: http
+      traefik.http.routers.ownfoil-http.middlewares: redirect-https
 
       # Direct all https requests to the service, checking with crowdsec first
-      - traefik.http.routers.ownfoil-https.rule=Host(`hinox.${DOMAIN}`)
-      - traefik.http.routers.ownfoil-https.entrypoints=https
-      - traefik.http.routers.ownfoil-https.tls=true
-      - traefik.http.routers.ownfoil-https.tls.certresolver=${CERT_RESOLVER}
-      - traefik.http.routers.ownfoil-https.service=ownfoil
-      - traefik.http.routers.ownfoil-https.middlewares=crowdsec-bouncer
+      traefik.http.routers.ownfoil-https.rule: Host(`hinox.${DOMAIN}`)
+      traefik.http.routers.ownfoil-https.entrypoints: https
+      traefik.http.routers.ownfoil-https.tls: true
+      traefik.http.routers.ownfoil-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.ownfoil-https.service: ownfoil
+      traefik.http.routers.ownfoil-https.middlewares: crowdsec-bouncer
 
-      - traefik.http.services.ownfoil.loadbalancer.server.port=80
+      traefik.http.services.ownfoil.loadbalancer.server.port: 80
+
+      # Enable Whalewall for this service
+      whalewall.enabled: true
+      # ownfoil: Communicate with traefik and to WAN over selected protocols.
+      whalewall.rules: |
+        output:
+          - log_prefix: "dns"
+            proto: udp
+            dst_ports:
+              - 53
+          - log_prefix: "https"
+            proto: tcp
+            dst_ports:
+              - 443
+          - log_prefix: "http"
+            proto: tcp
+            dst_ports:
+              - 80
+          # allow communication to traefik
+          - network: common_backend
+            container: traefik
     volumes:
       - ${GAMES_ROOT}:/games
     networks:
