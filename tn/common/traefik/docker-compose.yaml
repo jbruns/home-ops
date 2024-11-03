@@ -65,7 +65,7 @@ services:
       traefik.http.routers.traefik-https.service: api@internal
       traefik.http.routers.traefik-https.middlewares: traefik-dashboard
 
-      traefik.http.middlewares.traefik-auth.basicauth.users: ${TRAEFIK_PASSWORD_HASH}
+      traefik.http.middlewares.traefik-auth.basicauth.users: ${TRAEFIK_USER}:${TRAEFIK_PASSWORD_HASH}
       traefik.http.middlewares.traefik-dashboard.chain.middlewares: crowdsec-bouncer,traefik-auth
 
       # Default TLS certificate
