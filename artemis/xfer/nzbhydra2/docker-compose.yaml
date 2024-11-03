@@ -6,26 +6,47 @@ services:
     restart: unless-stopped
     environment:
       # https://docs.linuxserver.io/images/docker-nzbhydra2/#environment-variables-e
-      - PUID=${NZBHYDRA2_UID}
-      - PGID=${NZBHYDRA2_GID}
+      - PUID=${XFER_UID}
+      - PGID=${XFER_GID}
       - TZ=${TZ}
     labels:
-      - traefik.enable=true
+      traefik.enable: true
 
       # Listen on http, but redirect all requests to https
-      - traefik.http.routers.nzbhydra2-http.rule=Host(`hydra.${DOMAIN}`)
-      - traefik.http.routers.nzbhydra2-http.entrypoints=http
-      - traefik.http.routers.nzbhydra2-http.middlewares=redirect-https
+      traefik.http.routers.nzbhydra2-http.rule: Host(`hydra.${DOMAIN}`)
+      traefik.http.routers.nzbhydra2-http.entrypoints: http
+      traefik.http.routers.nzbhydra2-http.middlewares: redirect-https
 
       # Direct all https requests to the service, checking with crowdsec first
-      - traefik.http.routers.nzbhydra2-https.rule=Host(`hydra.${DOMAIN}`)
-      - traefik.http.routers.nzbhydra2-https.entrypoints=https
-      - traefik.http.routers.nzbhydra2-https.tls=true
-      - traefik.http.routers.nzbhydra2-https.tls.certresolver=${CERT_RESOLVER}
-      - traefik.http.routers.nzbhydra2-https.service=nzbhydra2
-      - traefik.http.routers.nzbhydra2-https.middlewares=crowdsec-bouncer
+      traefik.http.routers.nzbhydra2-https.rule: Host(`hydra.${DOMAIN}`)
+      traefik.http.routers.nzbhydra2-https.entrypoints: https
+      traefik.http.routers.nzbhydra2-https.tls: true
+      traefik.http.routers.nzbhydra2-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.nzbhydra2-https.service: nzbhydra2
+      traefik.http.routers.nzbhydra2-https.middlewares: crowdsec-bouncer
 
-      - traefik.http.services.nzbhydra2.loadbalancer.server.port=5076
+      traefik.http.services.nzbhydra2.loadbalancer.server.port: 5076
+
+      # Enable Whalewall for this service
+      whalewall.enabled: true
+      # nzbhydra2: Communicate with traefik and to WAN over selected protocols.
+      whalewall.rules: |
+        output:
+          - log_prefix: "dns"
+            proto: udp
+            dst_ports:
+              - 53
+          - log_prefix: "https"
+            proto: tcp
+            dst_ports:
+              - 443
+          - log_prefix: "http"
+            proto: tcp
+            dst_ports:
+              - 80
+          # allow communication to traefik
+          - network: common_backend
+            container: traefik
     volumes:
       - nzbhydra2_config:/config
       - nzbhydra2_downloads:/downloads
