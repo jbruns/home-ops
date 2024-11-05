@@ -1,0 +1,74 @@
+services:
+  streammaster:
+    restart: unless-stopped
+    # https://hub.docker.com/r/senexcrenshaw/streammaster/tags
+    # https://github.com/SenexCrenshaw/StreamMaster
+    image: senexcrenshaw/streammaster:0.17.4
+    container_name: streammaster
+    environment:
+      - PUID=${XTEVE_UID}
+      - PGID=${XTEVE_GID}
+      - POSTGRES_USER_FILE=/var/run/secrets/streammaster-postgres-user
+      - POSTGRES_PASSWORD_FILE=/var/run/secrets/streammaster-postgres-password
+      - POSTGRES_HOST=postgres
+    secrets:
+      - streammaster-postgres-user
+      - streammaster-postgres-password
+    labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: media
+
+      traefik.enable: true
+
+      # Listen on http, but redirect all requests to https
+      traefik.http.routers.streammaster-http.rule: Host(`streammaster.${DOMAIN}`)
+      traefik.http.routers.streammaster-http.entrypoints: http
+      traefik.http.routers.streammaster-http.middlewares: redirect-https
+
+      # Direct all https requests to the service, checking with crowdsec first
+      traefik.http.routers.streammaster-https.rule: Host(`streammaster.${DOMAIN}`)
+      traefik.http.routers.streammaster-https.entrypoints: https
+      traefik.http.routers.streammaster-https.tls: true
+      traefik.http.routers.streammaster-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.streammaster-https.service: streammaster
+      traefik.http.routers.streammaster-https.middlewares: crowdsec-bouncer
+
+      traefik.http.services.streammaster.loadbalancer.server.port: 7095
+
+      # Enable Whalewall for this service
+      whalewall.enabled: true
+      # streammaster: Communicate with traefik and to WAN over selected protocols.
+      whalewall.rules: |
+        output:
+          # DNS
+          - proto: udp
+            dst_ports:
+              - 53
+          # HTTP/S
+          - proto: tcp
+            dst_ports:
+              - 443
+              - 80
+          # reverse proxy
+          - network: common_backend
+            container: traefik
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+    volumes:
+      - streammaster_config:/config
+    networks:
+      - backend
+
+secrets:
+  streammaster-postgres-user:
+    file: ./postgres-user.txt
+  streammaster-postgres-password:
+    file: ./postgres-password.txt
+
+volumes:
+  streammaster_config:
