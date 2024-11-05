@@ -36,6 +36,8 @@ services:
       - sabnzbd_config:/backup/sabnzbd_config:ro
       # sonarr
       - sonarr_config:/backup/sonarr_config:ro
+      # streammaster
+      - streammaster_config:/backup/streammaster_config:ro
       # tautulli
       - tautulli_config:/backup/tautulli_config:ro
       # xteve
@@ -67,5 +69,6 @@ include:
   - ./radarr/docker-compose.yaml
   - ./sabnzbd/docker-compose.yaml
   - ./sonarr/docker-compose.yaml
+  - ./streammaster/docker-compose.yaml
   - ./tautulli/docker-compose.yaml
   - ./xteve/docker-compose.yaml
