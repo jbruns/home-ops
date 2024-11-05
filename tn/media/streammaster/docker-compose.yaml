@@ -10,7 +10,6 @@ services:
       - PGID=${XTEVE_GID}
       - POSTGRES_USER_FILE=/var/run/secrets/streammaster-postgres-user
       - POSTGRES_PASSWORD_FILE=/var/run/secrets/streammaster-postgres-password
-      - POSTGRES_HOST=postgres
     secrets:
       - streammaster-postgres-user
       - streammaster-postgres-password
