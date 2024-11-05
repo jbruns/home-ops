@@ -31,7 +31,15 @@ services:
       traefik.http.routers.streammaster-https.tls: true
       traefik.http.routers.streammaster-https.tls.certresolver: ${CERT_RESOLVER}
       traefik.http.routers.streammaster-https.service: streammaster
-      traefik.http.routers.streammaster-https.middlewares: crowdsec-bouncer
+      traefik.http.routers.streammaster-https.middlewares: streammaster-chain
+
+      # Middleware to redirect local testing url patterns
+      traefik.http.middlewares.streammaster-redirectregex.redirectregex.permanent: true
+      traefik.http.middlewares.streammaster-redirectregex.redirectregex.regex: 'https://(.*)/s/(.*)'
+      traefik.http.middlewares.streammaster-redirectregex.redirectregex.replacement: 'https://$${1}'
+
+      # Chain all middlewares together
+      traefik.http.middlewares.streammaster-chain.chain.middlewares: crowdsec-bouncer, streammaster-redirectregex
 
       traefik.http.services.streammaster.loadbalancer.server.port: 7095
 
