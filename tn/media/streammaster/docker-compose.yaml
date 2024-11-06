@@ -3,7 +3,7 @@ services:
     restart: unless-stopped
     # https://hub.docker.com/r/senexcrenshaw/streammaster/tags
     # https://github.com/SenexCrenshaw/StreamMaster
-    image: senexcrenshaw/streammaster:0.17.4
+    image: senexcrenshaw/streammaster:0.17.9
     container_name: streammaster
     environment:
       - PUID=${XTEVE_UID}
