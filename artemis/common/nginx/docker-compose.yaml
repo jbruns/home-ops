@@ -20,8 +20,9 @@ services:
       traefik.http.routers.nginx-http.service: nginx
       traefik.http.routers.nginx-http.middlewares: catch-all
 
-      # For HTTPS, catch the server hostname as nothing is hosted there
-      traefik.http.routers.nginx-https.rule: Host(`${DOMAIN}`)
+      # Catch-all over HTTPS
+      traefik.http.routers.nginx-https.rule: HostRegexp(`.+`)
+      traefik.http.routers.nginx-https.priority: 1      
       traefik.http.routers.nginx-https.entrypoints: https
       traefik.http.routers.nginx-https.tls: true
       traefik.http.routers.nginx-https.tls.certresolver: ${CERT_RESOLVER}
