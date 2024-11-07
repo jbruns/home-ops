@@ -10,6 +10,11 @@ services:
       - PGID=${DELUGE_GID}
       - TZ=${TZ}
     labels:
+      # logs collection
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: xfer
+
       traefik.enable: true
 
       # Listen on http, but redirect all requests to https
@@ -26,6 +31,39 @@ services:
       traefik.http.routers.deluge-https.middlewares: crowdsec-bouncer
 
       traefik.http.services.deluge.loadbalancer.server.port: 8112
+
+      # network policy
+      whalewall.enabled: true
+      whalewall.rules: |
+        mapped_ports:
+          external:
+            allow: true
+        output:
+          # DNS
+          - proto: udp
+            dst_ports:
+              - 53
+          # HTTP/S
+          - proto: tcp
+            dst_ports:
+              - 80
+              - 443
+          # bt on unpriv ports
+          - proto: tcp
+            dst_ports:
+              - 1024-65535
+          # reverse proxy
+          - network: common_backend
+            container: traefik
+          # transfers
+          - network: common_backend
+            container: autobrr
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
     ports:
       # Bittorrent inbound
       - 31727:31727

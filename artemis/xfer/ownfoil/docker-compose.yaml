@@ -12,6 +12,11 @@ services:
       - PASSWORD=${HINOX_PASSWORD}
       - SAVE_ENABLED=false
     labels:
+      # logs collection
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: xfer
+
       traefik.enable: true
 
       # Listen on http, but redirect all requests to https
@@ -31,7 +36,6 @@ services:
 
       # network policy
       whalewall.enabled: true
-      # ownfoil: Communicate with traefik and to WAN over selected protocols.
       whalewall.rules: |
         output:
           # DNS
@@ -46,9 +50,12 @@ services:
           # reverse proxy
           - network: common_backend
             container: traefik
-          # allow communication to traefik
-          - network: common_backend
-            container: traefik
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
     volumes:
       - ${GAMES_ROOT}:/games
     networks:

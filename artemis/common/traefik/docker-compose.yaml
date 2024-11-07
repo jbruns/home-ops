@@ -102,7 +102,7 @@ services:
             dst_ports:
               - 443
               - 80
-          # allow communication to crowdsec
+          # crowdsec-bouncer
           - network: common_backend
             container: crowdsec
           # metrics collection

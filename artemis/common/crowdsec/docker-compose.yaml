@@ -18,7 +18,6 @@ services:
 
       # network policy
       whalewall.enabled: true
-      # crowdsec: communicate with traefik and to WAN over selected protocols.
       whalewall.rules: |
         output:
           # DNS

@@ -40,7 +40,6 @@ services:
 
       # network policy
       whalewall.enabled: true
-      # nginx: does not need to communicate outbound, other than to the reverse proxy.
       whalewall.rules: |
         output:
           - network: common_backend
