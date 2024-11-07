@@ -52,6 +52,9 @@ services:
           - proto: tcp
             dst_ports:
               - 1024-65535
+          - proto: udp
+            dst_ports:
+              - 1024-65535
           # reverse proxy
           - network: common_backend
             container: traefik
