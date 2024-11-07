@@ -17,7 +17,7 @@ services:
       logging_jobname: containerlogs
       stackname: common
 
-      # Enable whalewall for this service
+      # network policy
       whalewall.enabled: true
       # backup: no traffic in or out
     volumes: 

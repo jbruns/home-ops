@@ -23,6 +23,7 @@ services:
       - database_url
       - smtp_password
     labels:
+      # logs collection
       logging: promtail
       logging_jobname: containerlogs
       stackname: home
@@ -54,24 +55,20 @@ services:
       
       traefik.http.services.vaultwarden.loadbalancer.server.port: 80
 
-      # Enable Whalewall for this service
+      # network policy
       whalewall.enabled: true
-      # vaultwarden: communicate with traefik, mariadb and to WAN over selected protocols.
       whalewall.rules: |
         output:
-          - log_prefix: "dns"
-            proto: udp
+          # DNS
+          - proto: udp
             dst_ports:
               - 53
-          - log_prefix: "https"
-            proto: tcp
-            dst_ports:
-              - 443
-          - log_prefix: "http"
-            proto: tcp
+          # HTTP/S
+          - proto: tcp
             dst_ports:
               - 80
-          # allow communication to traefik
+              - 443
+          # reverse proxy
           - network: common_backend
             container: traefik
           # database services

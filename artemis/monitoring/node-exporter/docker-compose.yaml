@@ -19,7 +19,7 @@ services:
       logging_jobname: containerlogs
       stackname: monitoring
 
-      # Enable Whalewall for this service
+      # network policy
       whalewall.enabled: true
       # node-exporter: Communicate with prometheus
       whalewall.rules: |

@@ -13,11 +13,12 @@ services:
       - BACKUP_PRUNING_PREFIX=home-
       - BACKUP_RETENTION_DAYS=7
     labels:
+      # logs collection
       logging: promtail
       logging_jobname: containerlogs
       stackname: home
 
-      # Enable whalewall for this service
+      # network policy
       whalewall.enabled: true
       # backup: no traffic in or out
     volumes: 

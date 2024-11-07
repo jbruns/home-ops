@@ -8,27 +8,24 @@ services:
     # https://github.com/ollama/ollama/issues/6543
     # user: ${HOME_UID}:${HOME_GID}
     labels:
+      # logs collection
       logging: promtail
       logging_jobname: containerlogs
       stackname: home    
-      # Enable Whalewall for this service
+      # network policy
       whalewall.enabled: true
-      # ollama: communicate with open-webui, and WAN over selected protocols.
       whalewall.rules: |
         output:
-          - log_prefix: "dns"
-            proto: udp
+          # DNS
+          - proto: udp
             dst_ports:
               - 53
-          - log_prefix: "https"
-            proto: tcp
-            dst_ports:
-              - 443
-          - log_prefix: "http"
-            proto: tcp
+          # HTTP/S
+          - proto: tcp
             dst_ports:
               - 80
-          # frontends
+              - 443
+          # frontend
           - network: common_backend
             container: open-webui
     logging:
@@ -58,6 +55,7 @@ services:
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
     labels:
+      # logs collection
       logging: promtail
       logging_jobname: containerlogs
       stackname: home
@@ -79,24 +77,20 @@ services:
 
       traefik.http.services.open-webui.loadbalancer.server.port: 9000
 
-      # Enable Whalewall for this service
+      # network policy
       whalewall.enabled: true
-      # open-webui: communicate with traefik and to WAN over selected protocols.
       whalewall.rules: |
         output:
-          - log_prefix: "dns"
-            proto: udp
+          # DNS
+          - proto: udp
             dst_ports:
               - 53
-          - log_prefix: "https"
-            proto: tcp
-            dst_ports:
-              - 443
-          - log_prefix: "http"
-            proto: tcp
+          # HTTP/S
+          - proto: tcp
             dst_ports:
               - 80
-          # allow communication to traefik
+              - 443
+          # reverse proxy
           - network: common_backend
             container: traefik
           # LLM backend

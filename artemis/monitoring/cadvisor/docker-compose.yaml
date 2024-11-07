@@ -29,7 +29,7 @@ services:
       logging_jobname: containerlogs
       stackname: monitoring
 
-      # Enable Whalewall for this service
+      # network policy
       whalewall.enabled: true
       # cadvisor: Allow published ports inbound. Communicate with monitoring data sources.
       whalewall.rules: |

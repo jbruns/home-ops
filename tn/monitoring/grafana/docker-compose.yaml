@@ -16,23 +16,8 @@ services:
       - GF_INSTALL_PLUGINS=grafana-polystat-panel,https://storage.googleapis.com/integration-artifacts/grafana-lokiexplore-app/grafana-lokiexplore-app-latest.zip;grafana-lokiexplore-app
       - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER}
       - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
-    volumes:
-      - type: bind
-        source: ./provisioning/datasources.yml
-        target: /etc/grafana/provisioning/datasources/provisioning-datasources.yaml
-        read_only: true
-        # Stored encrypted in repo
-        x-sops: true
-      - ./provisioning/dashboards.yml:/etc/grafana/provisioning/dashboards/provisioning-dashboards.yaml:ro
-      - ./plugins/app.yaml:/etc/grafana/provisioning/plugins/app.yaml:ro
-      - ./dashboards/node-metrics.json:/var/lib/grafana/dashboards/node-metrics.json:ro
-      - ./dashboards/container-metrics.json:/var/lib/grafana/dashboards/container-metrics.json:ro
-      - ./dashboards/log-search.json:/var/lib/grafana/dashboards/log-search.json:ro
-
-      - grafana_data:/var/lib/grafana
-    networks:
-      - backend
     labels:
+      # logs collection
       logging: promtail
       logging_jobname: containerlogs
       stackname: monitoring
@@ -54,24 +39,20 @@ services:
 
       traefik.http.services.grafana.loadbalancer.server.port: 3000
 
-      # Enable Whalewall for this service
+      # network policy
       whalewall.enabled: true
-      # grafana: Communicate with traefik, monitoring data sources and to WAN over selected protocols.
       whalewall.rules: |
         output:
-          - log_prefix: "dns"
-            proto: udp
+          # DNS
+          - proto: udp
             dst_ports:
               - 53
-          - log_prefix: "https"
-            proto: tcp
-            dst_ports:
-              - 443
-          - log_prefix: "http"
-            proto: tcp
+          # HTTP/S
+          - proto: tcp
             dst_ports:
               - 80
-          # traefik: reverse proxy
+              - 443
+          # reverse proxy
           - network: common_backend
             container: traefik
           # prometheus, loki, alertmanager: data collection
@@ -87,11 +68,22 @@ services:
         max-size: 1m
         max-file: 1
         tag: "{{.Name}}"
+    volumes:
+      - type: bind
+        source: ./provisioning/datasources.yml
+        target: /etc/grafana/provisioning/datasources/provisioning-datasources.yaml
+        read_only: true
+        # Stored encrypted in repo
+        x-sops: true
+      - ./provisioning/dashboards.yml:/etc/grafana/provisioning/dashboards/provisioning-dashboards.yaml:ro
+      - ./plugins/app.yaml:/etc/grafana/provisioning/plugins/app.yaml:ro
+      - ./dashboards/node-metrics.json:/var/lib/grafana/dashboards/node-metrics.json:ro
+      - ./dashboards/container-metrics.json:/var/lib/grafana/dashboards/container-metrics.json:ro
+      - ./dashboards/log-search.json:/var/lib/grafana/dashboards/log-search.json:ro
+
+      - grafana_data:/var/lib/grafana
+    networks:
+      - backend
 
 volumes:
   grafana_data:
-
-networks:
-  backend:
-    name: common_backend
-    external: true

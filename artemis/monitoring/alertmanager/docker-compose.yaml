@@ -52,7 +52,7 @@ services:
 
       traefik.http.services.alertmanager.loadbalancer.server.port: 9093
 
-      # Enable Whalewall for this service
+      # network policy
       whalewall.enabled: true
       # alertmanager: Allow published ports inbound. Communicate with traefik, monitoring data sources and to WAN over selected protocols.
       whalewall.rules: |

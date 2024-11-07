@@ -1,12 +1,13 @@
 services:
   # https://github.com/capnspacehook/whalewall
   whalewall:
-    image: ghcr.io/capnspacehook/whalewall
+    image: ghcr.io/capnspacehook/whalewall:sha-c1366f90469a2182a18c04e34d26746a62f2cb21
     container_name: whalewall
     cap_add: 
       - NET_ADMIN
     network_mode: host
     labels:
+      # logs collection
       logging: promtail
       logging_jobname: containerlogs
       stackname: common
@@ -18,6 +19,7 @@ services:
         tag: "{{.Name}}"
     volumes:
       - whalewall_data:/data
+      # for notification of container start/stop
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
 volumes:

@@ -1,16 +1,17 @@
 services:
   sabnzbd:
-    restart: unless-stopped
     # https://github.com/onedr0p/containers/pkgs/container/sabnzbd
     # https://github.com/sabnzbd/sabnzbd
     image: ghcr.io/onedr0p/sabnzbd:4.3.3
-    user: ${SABNZBD_UID}:${MEDIA_GID}
+    user: ${SABNZBD_UID}:${MEDIA_SHARED_GID}
     security_opt:
       - no-new-privileges=true
     container_name: sabnzbd
+    restart: unless-stopped
     environment:
       - TZ=${TZ}
     labels:
+      # logs collection
       logging: promtail
       logging_jobname: containerlogs
       stackname: media
@@ -32,31 +33,30 @@ services:
 
       traefik.http.services.sabnzbd.loadbalancer.server.port: 8080
 
-      # Enable Whalewall for this service
+      # network policy
       whalewall.enabled: true
-      # sabnzbd: Communicate with traefik and to WAN over selected protocols.
       whalewall.rules: |
         output:
-          - log_prefix: "dns"
-            proto: udp
+          # DNS
+          - proto: udp
             dst_ports:
               - 53
-          - log_prefix: "https"
-            proto: tcp
-            dst_ports:
-              - 443
-          - log_prefix: "http"
-            proto: tcp
+          # HTTP/S
+          - proto: tcp
             dst_ports:
               - 80
-          # NNTP(S)
+              - 443
+          # NNTP/S
           - proto: tcp
             dst_ports:
               - 119
               - 563
-          # allow communication to traefik
+          # reverse proxy
           - network: common_backend
             container: traefik
+          # metrics collection
+          - network: common_backend
+            container: sabnzbd-exporter
     logging:
       driver: json-file
       options:
@@ -70,13 +70,13 @@ services:
       - backend
 
   sabnzbd-exporter:
-    restart: unless-stopped
     # https://github.com/onedr0p/exportarr
     image: ghcr.io/onedr0p/exportarr:v2.0.1
     container_name: sabnzbd-exporter
-    user: ${SABNZBD_UID}:${MEDIA_GID}
+    user: ${MEDIA_UID}:${MEDIA_GID}
     security_opt:
       - no-new-privileges=true
+    restart: unless-stopped
     command: ["sabnzbd"]
     environment:
       # https://github.com/onedr0p/exportarr#configuration
@@ -84,17 +84,19 @@ services:
       - URL="http://sabnzbd:8080"
       - APIKEY=${SABNZBD_API_KEY}
     labels:
+      # logs collection
       logging: promtail
       logging_jobname: containerlogs
       stackname: media
       
+      # network policy
       whalewall.enabled: true
       whalewall.rules: |
         output:
-          # allow communication to retreive metrics
+          # metrics collection
           - network: common_backend
             container: sabnzbd
-          # allow prometheus to scrape metrics
+          # metrics scrape
           - network: common_backend
             container: prometheus
     logging:
@@ -108,8 +110,3 @@ services:
 
 volumes:
   sabnzbd_config:
-
-networks:
-  backend:
-    name: common_backend
-    external: true

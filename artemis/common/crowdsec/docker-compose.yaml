@@ -16,7 +16,7 @@ services:
       logging_jobname: containerlogs
       stackname: common
 
-      # Enable Whalewall for this service
+      # network policy
       whalewall.enabled: true
       # crowdsec: communicate with traefik and to WAN over selected protocols.
       whalewall.rules: |

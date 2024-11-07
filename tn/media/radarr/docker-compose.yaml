@@ -1,16 +1,17 @@
 services:
   radarr:
-    restart: unless-stopped
     # https://github.com/onedr0p/containers/pkgs/container/radarr
     # https://github.com/Radarr/Radarr
     image: ghcr.io/onedr0p/radarr:5.14.0
-    user: ${RADARR_UID}:${MEDIA_GID}
+    user: ${RADARR_UID}:${MEDIA_SHARED_GID}
     security_opt:
       - no-new-privileges=true
     container_name: radarr
+    restart: unless-stopped
     environment:
       - TZ=${TZ}
     labels:
+      # logs collection
       logging: promtail
       logging_jobname: containerlogs
       stackname: media
@@ -32,26 +33,25 @@ services:
 
       traefik.http.services.radarr.loadbalancer.server.port: 7878
 
-      # Enable Whalewall for this service
+      # network policy
       whalewall.enabled: true
-      # radarr: Communicate with traefik and to WAN over selected protocols.
       whalewall.rules: |
         output:
-          - log_prefix: "dns"
-            proto: udp
+          # DNS
+          - proto: udp
             dst_ports:
               - 53
-          - log_prefix: "https"
-            proto: tcp
-            dst_ports:
-              - 443
-          - log_prefix: "http"
-            proto: tcp
+          # HTTP/S
+          - proto: tcp
             dst_ports:
               - 80
-          # allow communication to traefik
+              - 443
+          # reverse proxy
           - network: common_backend
             container: traefik
+          # metrics collection
+          - network: common_backend
+            container: radarr-exporter
     logging:
       driver: json-file
       options:
@@ -65,13 +65,13 @@ services:
       - backend
 
   radarr-exporter:
-    restart: unless-stopped
     # https://github.com/onedr0p/exportarr
     image: ghcr.io/onedr0p/exportarr:v2.0.1
     container_name: radarr-exporter
-    user: ${RADARR_UID}:${MEDIA_GID}
+    user: ${MEDIA_UID}:${MEDIA_GID}
     security_opt:
       - no-new-privileges=true
+    restart: unless-stopped
     command: ["radarr"]
     environment:
       # https://github.com/onedr0p/exportarr#configuration
@@ -79,17 +79,19 @@ services:
       - URL="http://radarr:7878"
       - APIKEY=${RADARR_API_KEY}
     labels:
+      # logs collection
       logging: promtail
       logging_jobname: containerlogs
       stackname: media
       
+      # network policy
       whalewall.enabled: true
       whalewall.rules: |
         output:
-          # allow communication to retreive metrics
+          # metrics collection
           - network: common_backend
             container: radarr
-          # allow prometheus to scrape metrics
+          # metrics scrape
           - network: common_backend
             container: prometheus
     logging:
@@ -103,8 +105,3 @@ services:
 
 volumes:
   radarr_config:
-
-networks:
-  backend:
-    name: common_backend
-    external: true

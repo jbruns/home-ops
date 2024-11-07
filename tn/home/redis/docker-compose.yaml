@@ -9,18 +9,19 @@ services:
     environment:
       - REDIS_ARGS=--requirepass ${REDIS_PASSWORD} --save 60 1000 --appendonly yes --loglevel warning
     labels:
+      # logs collection
       logging: promtail
       logging_jobname: containerlogs
       stackname: home
-      # Enable Whalewall for this service
+
+      # network policy
       whalewall.enabled: true
-      # redis: communicate with dependent services
       whalewall.rules: |
         output:
           # metrics collection
           - network: common_backend
-            container: nextcloud-exporter
-          # nextcloud
+            container: redis-exporter
+          # nextcloud cache
           - network: common_backend
             container: nextcloud
     volumes:
@@ -36,17 +37,17 @@ services:
     user: ${HOME_UID}:${HOME_GID}
     security_opt:
       - no-new-privileges=true
-    # https://github.com/oliver006/redis_exporter?tab=readme-ov-file#command-line-flags
     environment:
+      # https://github.com/oliver006/redis_exporter?tab=readme-ov-file#command-line-flags
       - REDIS_ADDR="redis://redis:6379"
       - REDIS_PASSWORD=${REDIS_PASSWORD}
     labels:
+      # logs collection
       logging: promtail
       logging_jobname: containerlogs
       stackname: home
-      # Enable Whalewall for this service
+      # network policy
       whalewall.enabled: true
-      # redis-exporter: communicate with redis and prometheus
       whalewall.rules: |
         output:
           # metrics collection

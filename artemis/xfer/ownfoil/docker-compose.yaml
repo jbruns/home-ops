@@ -29,7 +29,7 @@ services:
 
       traefik.http.services.ownfoil.loadbalancer.server.port: 80
 
-      # Enable Whalewall for this service
+      # network policy
       whalewall.enabled: true
       # ownfoil: Communicate with traefik and to WAN over selected protocols.
       whalewall.rules: |

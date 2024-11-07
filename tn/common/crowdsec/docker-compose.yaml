@@ -12,31 +12,28 @@ services:
       # https://app.crowdsec.net/hub/collections
       - COLLECTIONS=crowdsecurity/traefik crowdsecurity/http-cve
     labels:
+      # logs collection
       logging: promtail
       logging_jobname: containerlogs
       stackname: common
 
-      # Enable Whalewall for this service
+      # network policy
       whalewall.enabled: true
-      # crowdsec: communicate with traefik and to WAN over selected protocols.
       whalewall.rules: |
         output:
-          - log_prefix: "dns"
-            proto: udp
+          # DNS
+          - proto: udp
             dst_ports:
               - 53
-          - log_prefix: "https"
-            proto: tcp
-            dst_ports:
-              - 443
-          - log_prefix: "http"
-            proto: tcp
+          # HTTP/S
+          - proto: tcp
             dst_ports:
               - 80
-          # allow communication to traefik
+              - 443
+          # reverse proxy
           - network: common_backend
             container: traefik
-          # metrics collection
+          # metrics scrape
           - network: common_backend
             container: prometheus
     logging:

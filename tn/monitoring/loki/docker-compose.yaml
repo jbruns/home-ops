@@ -5,20 +5,16 @@ services:
     user: ${MONITORING_UID}:${MONITORING_GID}
     security_opt:
       - no-new-privileges=true
+    restart: unless-stopped
     command: -config.file=/etc/loki/loki.yaml
-    volumes:
-      - ./loki.yaml:/etc/loki/loki.yaml:ro
-      - ./rules.yaml:/etc/loki/rules/fake/loki-rules.yml:ro
-    networks:
-      - backend
     labels:
+      # logs collection
       logging: promtail
       logging_jobname: containerlogs
       stackname: monitoring
 
-      # Enable Whalewall for this service
+      # network policy
       whalewall.enabled: true
-      # loki: Communicate with monitoring data sources.
       whalewall.rules: |
         output:
           # prometheus, grafana, alertmanager, promtail: data collection
@@ -30,10 +26,14 @@ services:
             container: alertmanager
           - network: common_backend
             container: promtail
-
     logging:
       driver: json-file
       options:
         max-size: 1m
         max-file: 1
         tag: "{{.Name}}"
+    volumes:
+      - ./loki.yaml:/etc/loki/loki.yaml:ro
+      - ./rules.yaml:/etc/loki/rules/fake/loki-rules.yml:ro
+    networks:
+      - backend

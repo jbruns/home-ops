@@ -5,32 +5,15 @@ services:
     user: ${MONITORING_UID}:${MONITORING_GID}
     security_opt:
       - no-new-privileges=true
+    restart: unless-stopped
     command:
       - '--config.file=/etc/alertmanager/config.yml'
       - '--web.config.file=/etc/alertmanager/web.yml'
       - '--log.level=error'
       - '--storage.path=/alertmanager'
       - '--web.external-url=https://alertmanager.${DOMAIN}'
-    ports:
-      # fallback internal
-      - 9093:9093
-    volumes:
-      - type: bind
-        source: ./config.yml
-        target: /etc/alertmanager/config.yml
-        read_only: true
-        # Stored encrypted in repo
-        x-sops: true
-      - type: bind
-        source: ./web.yml
-        target: /etc/alertmanager/web.yml
-        read_only: true
-        # Stored encrypted in repo
-        x-sops: true
-      - alertmanager_data:/alertmanager
-    networks:
-      - backend
     labels:
+      # logs collection
       logging: promtail
       logging_jobname: containerlogs
       stackname: monitoring
@@ -52,27 +35,20 @@ services:
 
       traefik.http.services.alertmanager.loadbalancer.server.port: 9093
 
-      # Enable Whalewall for this service
+      # network policy
       whalewall.enabled: true
-      # alertmanager: Allow published ports inbound. Communicate with traefik, monitoring data sources and to WAN over selected protocols.
       whalewall.rules: |
-        mapped_ports:
-          external:
-            allow: true
         output:
-          - log_prefix: "dns"
-            proto: udp
+          # DNS
+          - proto: udp
             dst_ports:
               - 53
-          - log_prefix: "https"
-            proto: tcp
-            dst_ports:
-              - 443
-          - log_prefix: "http"
-            proto: tcp
+          # HTTP/S
+          - proto: tcp
             dst_ports:
               - 80
-          # traefik: reverse proxy
+              - 443
+          # reverse proxy
           - network: common_backend
             container: traefik
           # prometheus, loki, grafana: data collection
@@ -82,13 +58,28 @@ services:
             container: loki
           - network: common_backend
             container: grafana
-
     logging:
       driver: json-file
       options:
         max-size: 1m
         max-file: 1
         tag: "{{.Name}}"
+    volumes:
+      - type: bind
+        source: ./config.yml
+        target: /etc/alertmanager/config.yml
+        read_only: true
+        # Stored encrypted in repo
+        x-sops: true
+      - type: bind
+        source: ./web.yml
+        target: /etc/alertmanager/web.yml
+        read_only: true
+        # Stored encrypted in repo
+        x-sops: true
+      - alertmanager_data:/alertmanager
+    networks:
+      - backend
 
 volumes:
   alertmanager_data:

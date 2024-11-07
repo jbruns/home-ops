@@ -10,13 +10,13 @@ services:
     secrets:
       - mariadb_root_password
     labels:
+      # logs collection
       logging: promtail
       logging_jobname: containerlogs
       stackname: home
 
-      # Enable Whalewall for this service
+      # network policy
       whalewall.enabled: true
-      # mariadb: communicate with dependent services.
       whalewall.rules: |
           # nextcloud database
           - network: common_backend

@@ -1,16 +1,17 @@
 services:
   tautulli:
-    restart: unless-stopped
     # https://github.com/onedr0p/containers/pkgs/container/tautulli
     # https://github.com/Tautulli/Tautulli
     image: ghcr.io/onedr0p/tautulli:2.14.6
-    user: ${TAUTULLI_UID}:${TAUTULLI_GID}
+    container_name: tautulli
+    user: ${MEDIA_UID}:${MEDIA_GID}
     security_opt:
       - no-new-privileges=true
-    container_name: tautulli
+    restart: unless-stopped
     environment:
       - TZ=${TZ}
     labels:
+      # logs collection
       logging: promtail
       logging_jobname: containerlogs
       stackname: media
@@ -32,24 +33,20 @@ services:
 
       traefik.http.services.tautulli.loadbalancer.server.port: 8181
 
-      # Enable Whalewall for this service
+      # network policy
       whalewall.enabled: true
-      # tautulli: Communicate with traefik and to WAN over selected protocols.
       whalewall.rules: |
         output:
-          - log_prefix: "dns"
-            proto: udp
+          # DNS
+          - proto: udp
             dst_ports:
               - 53
-          - log_prefix: "https"
-            proto: tcp
-            dst_ports:
-              - 443
-          - log_prefix: "http"
-            proto: tcp
+          # HTTP/S
+          - proto: tcp
             dst_ports:
               - 80
-          # allow communication to traefik
+              - 443
+          # reverse proxy
           - network: common_backend
             container: traefik
     logging:
@@ -65,8 +62,3 @@ services:
 
 volumes:
   tautulli_config:
-
-networks:
-  backend:
-    name: common_backend
-    external: true

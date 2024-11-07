@@ -7,6 +7,7 @@ services:
       - no-new-privileges=true
     restart: unless-stopped
     labels:
+      # logs collection
       logging: promtail
       logging_jobname: containerlogs
       stackname: common
@@ -38,9 +39,8 @@ services:
       # Chain the catch-all middlewares together
       traefik.http.middlewares.catch-all.chain.middlewares: crowdsec-bouncer,error-pages
 
-      # Enable Whalewall for this service
+      # network policy
       whalewall.enabled: true
-      # nginx: does not need to communicate outbound, other than to the reverse proxy.
       whalewall.rules: |
         output:
           - network: common_backend

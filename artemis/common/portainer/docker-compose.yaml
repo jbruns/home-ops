@@ -32,7 +32,7 @@ services:
 
       traefik.http.services.portainer.loadbalancer.server.port: 9000
 
-      # Enable Whalewall for this service
+      # network policy
       whalewall.enabled: true
       # portainer: communicate with traefik and to WAN over selected protocols.
       whalewall.rules: |

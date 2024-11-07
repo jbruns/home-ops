@@ -15,24 +15,8 @@ services:
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
       - '--web.external-url=http://prometheus.${DOMAIN}'
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - type: bind
-        source: ./web.yml
-        target: /etc/prometheus/web.yml
-        read_only: true
-        # Stored encrypted in repo
-        x-sops: true
-      - ./recording-rules.yml:/etc/prometheus/recording-rules.yml:ro
-      - ./alerting-rules.yml:/etc/prometheus/alerting-rules.yml:ro
-
-      - prometheus_data:/prometheus
-    ports:
-      # fallback internal
-      - 9090:9090
-    networks:
-      - backend
     labels:
+      # logs collection
       logging: promtail
       logging_jobname: containerlogs
       stackname: monitoring
@@ -54,7 +38,7 @@ services:
 
       traefik.http.services.prometheus.loadbalancer.server.port: 9090
 
-      # Enable Whalewall for this service
+      # network policy
       whalewall.enabled: true
       # prometheus: Communicate with traefik, monitoring data sources.
       whalewall.rules: |
@@ -64,7 +48,7 @@ services:
             proto: tcp
             dst_ports:
               - 1024-65535
-          # traefik: reverse proxy
+          # reverse proxy
           - network: common_backend
             container: traefik
           # grafana, alertmanager: data collection
@@ -72,18 +56,26 @@ services:
             container: grafana
           - network: common_backend
             container: alertmanager
-
     logging:
       driver: json-file
       options:
         max-size: 1m
         max-file: 1
         tag: "{{.Name}}"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - type: bind
+        source: ./web.yml
+        target: /etc/prometheus/web.yml
+        read_only: true
+        # Stored encrypted in repo
+        x-sops: true
+      - ./recording-rules.yml:/etc/prometheus/recording-rules.yml:ro
+      - ./alerting-rules.yml:/etc/prometheus/alerting-rules.yml:ro
+
+      - prometheus_data:/prometheus
+    networks:
+      - backend
 
 volumes:
   prometheus_data:
-
-networks:
-  backend:
-    name: common_backend
-    external: true

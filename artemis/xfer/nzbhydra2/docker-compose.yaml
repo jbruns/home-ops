@@ -27,7 +27,7 @@ services:
 
       traefik.http.services.nzbhydra2.loadbalancer.server.port: 5076
 
-      # Enable Whalewall for this service
+      # network policy
       whalewall.enabled: true
       # nzbhydra2: Communicate with traefik and to WAN over selected protocols.
       whalewall.rules: |

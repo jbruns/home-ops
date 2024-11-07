@@ -1,19 +1,20 @@
 services:
   streammaster:
-    restart: unless-stopped
     # https://hub.docker.com/r/senexcrenshaw/streammaster/tags
     # https://github.com/SenexCrenshaw/StreamMaster
     image: senexcrenshaw/streammaster:0.17.9
     container_name: streammaster
+    restart: unless-stopped
     environment:
-      - PUID=${XTEVE_UID}
-      - PGID=${XTEVE_GID}
+      - PUID=${MEDIA_UID}
+      - PGID=${MEDIA_GID}
       - POSTGRES_USER_FILE=/var/run/secrets/streammaster-postgres-user
       - POSTGRES_PASSWORD_FILE=/var/run/secrets/streammaster-postgres-password
     secrets:
       - streammaster-postgres-user
       - streammaster-postgres-password
     labels:
+      # logs collection
       logging: promtail
       logging_jobname: containerlogs
       stackname: media
@@ -43,9 +44,8 @@ services:
 
       traefik.http.services.streammaster.loadbalancer.server.port: 7095
 
-      # Enable Whalewall for this service
+      # network policy
       whalewall.enabled: true
-      # streammaster: Communicate with traefik and to WAN over selected protocols.
       whalewall.rules: |
         output:
           # DNS

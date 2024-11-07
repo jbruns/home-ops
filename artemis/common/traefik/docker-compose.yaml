@@ -85,7 +85,7 @@ services:
       ## Redirect to HTTPS
       traefik.http.middlewares.redirect-https.redirectScheme.scheme: https
 
-      # Enable Whalewall for this service
+      # network policy
       whalewall.enabled: true
       # traefik: allow requests inbound from external addresses. allow outbound dns/http/https.
       whalewall.rules: |

@@ -2,21 +2,16 @@ services:
   promtail:
     image:  grafana/promtail:3.2.1
     container_name: promtail
-    volumes:
-      - ./docker-config.yml:/etc/promtail/docker-config.yml:ro
-      - ${DOCKER_DATA_ROOT}/containers:/var/lib/docker/containers:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
     command: -config.file=/etc/promtail/docker-config.yml
-    networks:
-      - backend
     labels:
+      # logs collection
       logging: promtail
       logging_jobname: containerlogs
       stackname: monitoring
 
-      # Enable Whalewall for this service
+      # network policy
       whalewall.enabled: true
-      # promtail: Communicate with monitoring data sources.
       whalewall.rules: |
         output:
           # loki: data collection
@@ -28,8 +23,9 @@ services:
         max-size: 1m
         max-file: 1
         tag: "{{.Name}}"
-
-networks:
-  backend:
-    name: common_backend
-    external: true
+    volumes:
+      - ./docker-config.yml:/etc/promtail/docker-config.yml:ro
+      - ${DOCKER_DATA_ROOT}/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - backend

@@ -1,0 +1,26 @@
+services:
+  ersatztv:
+    restart: unless-stopped
+    image: ersatztv/ersatztv:v0.8.8
+    container_name: ersatztv
+    environment:
+      - TZ=${TZ}
+    ports:
+      - 8409:8409
+    labels:
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: media
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+    volumes:
+      - ersatztv_config:/config
+    networks:
+      - backend
+
+volumes:
+  ersatztv_config:
