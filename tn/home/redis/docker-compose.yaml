@@ -39,7 +39,7 @@ services:
       - no-new-privileges=true
     environment:
       # https://github.com/oliver006/redis_exporter?tab=readme-ov-file#command-line-flags
-      - REDIS_ADDR="redis://redis:6379"
+      - REDIS_ADDR=redis://redis:6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
     labels:
       # logs collection
