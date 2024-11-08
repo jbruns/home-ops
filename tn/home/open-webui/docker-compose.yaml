@@ -38,13 +38,13 @@ services:
       - ollama_data:/root/.ollama
     networks:
       - backend
-#    deploy:
-#      resources:
-#        reservations:
-#          devices:
-#            - driver: nvidia
-#              count: 1
-#              capabilities: [gpu]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
   
   open-webui:
     # https://github.com/open-webui/open-webui/pkgs/container/open-webui
