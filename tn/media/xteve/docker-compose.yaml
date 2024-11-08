@@ -6,8 +6,6 @@ services:
     restart: unless-stopped
     environment:
       - TZ=${TZ}
-      - XTEVE_UID=${MEDIA_UID}
-      - XTEVE_GID=${MEDIA_GID}
     labels:
       # logs collection
       logging: promtail
