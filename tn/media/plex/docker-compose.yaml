@@ -14,8 +14,8 @@ services:
     environment:
       - TZ=${TZ}
 
-      # - NVIDIA_VISIBLE_DEVICES=all
-      # - NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
     labels:
       # logs collection
       logging: promtail
@@ -80,13 +80,13 @@ services:
       - ${ZFS_POOL_ROOT_HDD}/media/plex_recordings:/recordings
     networks:
       - backend
-#    deploy:
-#      resources:
-#        reservations:
-#          devices:
-#            - driver: nvidia
-#              count: 1
-#              capabilities: [gpu]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 
   plex-exporter:
     # https://github.com/jsclayton/prometheus-plex-exporter
