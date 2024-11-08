@@ -191,7 +191,7 @@ services:
     volumes:
       - type: bind
         source: ./nextcloud_exporter_config.yaml
-        target: /etc/nextcloud_exporter/config.yaml
+        target: /etc/nextcloud-exporter/config.yaml
         read_only: true
         x-sops: true
     networks:
