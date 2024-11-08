@@ -132,6 +132,17 @@ services:
       logging: promtail
       logging_jobname: containerlogs
       stackname: home
+
+      # network policy
+      whalewall.enabled: true
+      whalewall.rules: |
+        output:
+          # memory cache
+          - network: common_backend
+            container: redis
+          # database
+          - network: common_backend
+            container: mariadb
     logging:
       driver: json-file
       options:
@@ -140,7 +151,8 @@ services:
         tag: "{{.Name}}"
     volumes:
       - nextcloud_data:/var/www/html
-    # no network connectivity required
+    networks:
+      - backend
 
 
   nextcloud-exporter:
@@ -154,7 +166,7 @@ services:
       - no-new-privileges=true
     # https://github.com/xperimental/nextcloud-exporter#configuration-file
     command:
-      - '--config-file /etc/nextcloud-exporter/config.yaml'
+      - '-c /etc/nextcloud-exporter/config.yaml'
     labels:
       logging: promtail
       logging_jobname: containerlogs
