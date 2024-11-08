@@ -18,6 +18,7 @@ services:
       # network policy
       whalewall.enabled: true
       whalewall.rules: |
+        output:
           # nextcloud database
           - network: common_backend
             container: nextcloud
