@@ -76,7 +76,7 @@ services:
     environment:
       # https://github.com/onedr0p/exportarr#configuration
       - PORT=9708
-      - URL="http://radarr:7878"
+      - URL=http://radarr:7878
       - APIKEY=${RADARR_API_KEY}
     labels:
       # logs collection

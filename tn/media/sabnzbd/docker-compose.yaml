@@ -81,7 +81,7 @@ services:
     environment:
       # https://github.com/onedr0p/exportarr#configuration
       - PORT=9711
-      - URL="http://sabnzbd:8080"
+      - URL=http://sabnzbd:8080
       - APIKEY=${SABNZBD_API_KEY}
     labels:
       # logs collection
