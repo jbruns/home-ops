@@ -81,43 +81,5 @@ services:
               count: 1
               capabilities: [gpu]
 
-  emby-exporter:
-    # https://github.com/TOomaAh/emby_exporter_go
-    image: bagul/goemby_exporter:v1.0.11
-    container_name: emby-exporter
-    user: ${MEDIA_UID}:${MEDIA_GID}
-    security_opt:
-      - no-new-privileges=true
-    restart: unless-stopped
-    environment:
-      - CONFIG_FILE=/config/config.yaml
-      - TZ=${TZ}
-    labels:
-      # logs collection
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: media
-      
-      # network policy
-      whalewall.enabled: true
-      whalewall.rules: |
-        output:
-          # metrics collection
-          - network: common_backend
-            container: emby
-          # metrics scrape
-          - network: common_backend
-            container: prometheus
-    logging:
-      driver: json-file
-      options:
-        max-size: 1m
-        max-file: 1
-        tag: "{{.Name}}"
-    volumes:
-      - ./emby_exporter_config.yaml:/config/config.yaml:ro
-    networks:
-      - backend
-
 volumes:
   emby_config:
