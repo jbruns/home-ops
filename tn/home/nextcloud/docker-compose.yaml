@@ -77,12 +77,19 @@ services:
       traefik.http.middlewares.nextcloud-redirectregex.redirectregex.regex: 'https://(.*)/.well-known/(?:card|cal)dav'
       traefik.http.middlewares.nextcloud-redirectregex.redirectregex.replacement: 'https://$${1}/remote.php/dav'
 
-      # Middleware for Strict-Transport-Security
-      traefik.http.middlewares.nextcloud-hsts.headers.stsSeconds: 15552000
-      traefik.http.middlewares.nextcloud-hsts.headers.stsIncludeSubdomains: true
+      # Middleware for custom Nextcloud headers
+      traefik.http.middlewares.nextcloud-headers.headers.referrerPolicy: no-referrer
+      traefik.http.middlewares.nextcloud-headers.headers.SSLRedirect: true
+      traefik.http.middlewares.nextcloud-headers.headers.STSSeconds: 315360000
+      traefik.http.middlewares.nextcloud-headers.headers.browserXSSFilter: true
+      traefik.http.middlewares.nextcloud-headers.headers.contentTypeNosniff: true
+      traefik.http.middlewares.nextcloud-headers.headers.forceSTSHeader: true
+      traefik.http.middlewares.nextcloud-headers.headers.STSIncludeSubdomains: true
+      traefik.http.middlewares.nextcloud-headers.headers.STSPreload: true
+      traefik.http.middlewares.nextcloud-headers.headers.customFrameOptionsValue: SAMEORIGIN
 
       # Chain all Nextcloud middlewares together
-      traefik.http.middlewares.nextcloud-chain.chain.middlewares: crowdsec-bouncer, nextcloud-redirectregex, nextcloud-hsts
+      traefik.http.middlewares.nextcloud-chain.chain.middlewares: crowdsec-bouncer, nextcloud-redirectregex, nextcloud-headers
 
       traefik.http.services.nextcloud.loadbalancer.server.port: 80
 
