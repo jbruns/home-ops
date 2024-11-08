@@ -48,7 +48,7 @@ services:
       traefik.http.middlewares.vaultwarden-headers.headers.customBrowserXSSValue: 0
       traefik.http.middlewares.vaultwarden-headers.headers.customFrameOptionsValue: SAMEORIGIN
       traefik.http.middlewares.vaultwarden-headers.headers.contentTypeNosniff: true
-      traefik.http.middlewares.vaultwarden-headers.headers.customResponseHeaders: 'X-Robots-Tag=noindex,nofollow'
+      traefik.http.middlewares.vaultwarden-headers.headers.customResponseHeaders.X-Robots-Tag: 'noindex,nofollow'
 
       # Chain all Vaultwarden middlewares together
       traefik.http.middlewares.vaultwarden-chain.chain.middlewares: crowdsec-bouncer, vaultwarden-headers
