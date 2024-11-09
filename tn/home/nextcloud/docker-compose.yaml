@@ -24,10 +24,16 @@ services:
       traefik.http.routers.nextcloud-https.tls.certresolver: ${CERT_RESOLVER}
       traefik.http.routers.nextcloud-https.service: nextcloud
       traefik.http.routers.nextcloud-https.middlewares: nextcloud-chain
-      
-      # Middleware for headers
+
+      # Middleware for Nextcloud-specific headers
       traefik.http.middlewares.nextcloud-headers.headers.hostsProxyHeaders: X-Forwarded-Host
       traefik.http.middlewares.nextcloud-headers.headers.referrerPolicy: same-origin
+      traefik.http.middlewares.nextcloud-headers.headers.stsSeconds: 31536000
+      traefik.http.middlewares.nextcloud-headers.headers.stsIncludeSubdomains: true
+      traefik.http.middlewares.nextcloud-headers.headers.stsPreload: true
+      traefik.http.middlewares.nextcloud-headers.headers.contentTypeNosniff: true
+      traefik.http.middlewares.nextcloud-headers.headers.customResponseHeaders.X-Robots-Tag: 'noindex,nofollow'
+
 
       # Middleware for service discovery (https://docs.nextcloud.com/server/latest/admin_manual/configuration_server/reverse_proxy_configuration.html#service-discovery)
       traefik.http.middlewares.nextcloud-redirectregex.redirectregex.permanent: true
