@@ -9,7 +9,7 @@ services:
     environment:
       # https://offen.github.io/docker-volume-backup/reference
       - BACKUP_FILENAME=common-%Y-%m-%dT%H-%M-%S.tar.gz
-      - BACKUP_CRON_EXPRESSION=5 4 * * *
+      - BACKUP_CRON_EXPRESSION=5 1 * * *
       - BACKUP_PRUNING_PREFIX=common-
       - BACKUP_RETENTION_DAYS=7
     labels:
@@ -36,7 +36,7 @@ services:
       - whalewall_data:/backup/whalewall_data:ro
 
       # Backup target
-      - ${ZFS_POOL_ROOT_HDD}/docker_backups:/archive
+      - ${ZFS_POOL_ROOT_HDD}/docker-backups:/archive
     logging:
       driver: json-file
       options:
