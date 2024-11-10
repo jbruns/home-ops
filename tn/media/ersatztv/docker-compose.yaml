@@ -1,16 +1,50 @@
 services:
   ersatztv:
-    restart: unless-stopped
     image: ersatztv/ersatztv:v0.8.8
     container_name: ersatztv
+    restart: unless-stopped
+    user: ${MEDIA_UID}:${MEDIA_SHARED_GID}
     environment:
       - TZ=${TZ}
-    ports:
-      - 8409:8409
     labels:
+      # logs collection
       logging: promtail
       logging_jobname: containerlogs
       stackname: media
+
+      traefik.enable: true
+
+      # Listen on http, but redirect all requests to https
+      traefik.http.routers.emby-http.rule: Host(`emby.${DOMAIN}`)
+      traefik.http.routers.emby-http.entrypoints: http
+      traefik.http.routers.emby-http.middlewares: redirect-https
+
+      # Direct all https requests to the service, checking with crowdsec first
+      traefik.http.routers.emby-https.rule: Host(`emby.${DOMAIN}`)
+      traefik.http.routers.emby-https.entrypoints: https
+      traefik.http.routers.emby-https.tls: true
+      traefik.http.routers.emby-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.emby-https.service: emby
+      traefik.http.routers.emby-https.middlewares: crowdsec-bouncer
+
+      traefik.http.services.emby.loadbalancer.server.port: 8409
+
+      # network policy
+      whalewall.enabled: true
+      whalewall.rules: |
+        output:
+          # DNS
+          - proto: udp
+            dst_ports:
+              - 53
+          # HTTP/S
+          - proto: tcp
+            dst_ports:
+              - 80
+              - 443
+          # reverse proxy
+          - network: common_backend
+            container: traefik
     logging:
       driver: json-file
       options:
@@ -19,6 +53,7 @@ services:
         tag: "{{.Name}}"
     volumes:
       - ersatztv_config:/config
+      - ${ZFS_POOL_ROOT_HDD}/media/ersatztv_data:/data
     networks:
       - backend
 
