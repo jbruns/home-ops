@@ -10,7 +10,7 @@ services:
     environment:
       # https://offen.github.io/docker-volume-backup/reference
       - BACKUP_FILENAME=monitoring-%Y-%m-%dT%H-%M-%S.tar.gz
-      - BACKUP_CRON_EXPRESSION=55 4 * * *
+      - BACKUP_CRON_EXPRESSION=10 2 * * *
       - BACKUP_PRUNING_PREFIX=monitoring-
       - BACKUP_RETENTION_DAYS=7
     labels:
@@ -37,11 +37,10 @@ services:
       # loki
       # node-exporter
       # prometheus
-      - prometheus_data:/backup/prometheus_data:ro
       # promtail
 
       # Backup target
-      - ${ZFS_POOL_ROOT_HDD}/docker_backups:/archive
+      - ${ZFS_POOL_ROOT_HDD}/docker-backups:/archive
     networks:
       - backend
 
