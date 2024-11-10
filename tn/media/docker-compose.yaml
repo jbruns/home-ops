@@ -9,7 +9,7 @@ services:
     environment:
       # https://offen.github.io/docker-volume-backup/reference
       - BACKUP_FILENAME=media-%Y-%m-%dT%H-%M-%S.tar.gz
-      - BACKUP_CRON_EXPRESSION=35 4 * * *
+      - BACKUP_CRON_EXPRESSION=40 1 * * *
       - BACKUP_PRUNING_PREFIX=media-
       - BACKUP_RETENTION_DAYS=7
     labels:
@@ -24,6 +24,8 @@ services:
       # Backup source volumes
       # emby
       - emby_config:/backup/emby_config:ro
+      # ersatztv
+      - ersatztv_config:/backup/ersatztv_config:ro
       # navidrome
       - navidrome_data:/backup/navidrome_data:ro
       # nextpvr
@@ -44,7 +46,7 @@ services:
       - xteve_config:/backup/xteve_config:ro
 
       # Backup target
-      - ${ZFS_POOL_ROOT_HDD}/docker_backups:/archive
+      - ${ZFS_POOL_ROOT_HDD}/docker-backups:/archive
     logging:
       driver: json-file
       options:
@@ -63,6 +65,7 @@ networks:
 # Remaining services in the stack have their own Compose configuration.
 include:
   - ./emby/docker-compose.yaml
+  - ./ersatztv/docker-compose.yaml
   - ./navidrome/docker-compose.yaml
   - ./nextpvr/docker-compose.yaml
   - ./plex/docker-compose.yaml
