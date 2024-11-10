@@ -1,6 +1,6 @@
 services:
   ersatztv:
-    image: ersatztv/ersatztv:v0.8.8
+    image: jasongdove/ersatztv:v0.8.8
     container_name: ersatztv
     restart: unless-stopped
     user: ${MEDIA_UID}:${MEDIA_SHARED_GID}
