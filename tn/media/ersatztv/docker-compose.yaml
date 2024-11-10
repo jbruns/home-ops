@@ -19,13 +19,27 @@ services:
       traefik.http.routers.ersatztv-http.entrypoints: http
       traefik.http.routers.ersatztv-http.middlewares: redirect-https
 
-      # Direct all https requests to the service, checking with crowdsec first
+      # Direct all https requests to the service, checking with crowdsec first, apply basic auth
       traefik.http.routers.ersatztv-https.rule: Host(`ersatztv.${DOMAIN}`)
       traefik.http.routers.ersatztv-https.entrypoints: https
       traefik.http.routers.ersatztv-https.tls: true
       traefik.http.routers.ersatztv-https.tls.certresolver: ${CERT_RESOLVER}
       traefik.http.routers.ersatztv-https.service: ersatztv
-      traefik.http.routers.ersatztv-https.middlewares: crowdsec-bouncer
+      traefik.http.routers.ersatztv-https.middlewares: ersatztv-chain
+
+      # Specific path may pass without basic auth
+      traefik.http.routers.ersatztv-https-unauth.rule: Host(`ersatztv.${DOMAIN}`) && PathPrefix(`/iptv`)
+      traefik.http.routers.ersatztv-https-unauth.entrypoints: https
+      traefik.http.routers.ersatztv-https-unauth.tls: true
+      traefik.http.routers.ersatztv-https-unauth.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.ersatztv-https-unauth.service: ersatztv
+      traefik.http.routers.ersatztv-https-unauth.middlewares: crowdsec-bouncer
+
+      # Basic auth middleware
+      traefik.http.middlewares.ersatztv-auth.basicauth.users: ${ERSATZTV_USER}:${ERSATZTV_PASSWORD_HASH}
+      
+      # Chain middlewares including basic auth
+      traefik.http.middlewares.ersatztv-chain.chain.middlewares: crowdsec-bouncer,ersatztv-auth
 
       traefik.http.services.ersatztv.loadbalancer.server.port: 8409
 
