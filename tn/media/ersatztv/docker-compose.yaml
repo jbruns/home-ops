@@ -31,7 +31,7 @@ services:
       traefik.http.routers.ersatztv-https-unauth.rule: Host(`ersatztv.${DOMAIN}`) && PathPrefix(`/iptv`)
       traefik.http.routers.ersatztv-https-unauth.entrypoints: https
       traefik.http.routers.ersatztv-https-unauth.tls: true
-      traefik.http.routers.ersatztv-https-unauth.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.ersatztv-https-unauth.tls.certresolver: ${CERT_RESOLVER}
       traefik.http.routers.ersatztv-https-unauth.service: ersatztv
       traefik.http.routers.ersatztv-https-unauth.middlewares: crowdsec-bouncer
 
