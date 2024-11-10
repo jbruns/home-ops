@@ -15,19 +15,19 @@ services:
       traefik.enable: true
 
       # Listen on http, but redirect all requests to https
-      traefik.http.routers.emby-http.rule: Host(`ersatztv.${DOMAIN}`)
-      traefik.http.routers.emby-http.entrypoints: http
-      traefik.http.routers.emby-http.middlewares: redirect-https
+      traefik.http.routers.ersatztv-http.rule: Host(`ersatztv.${DOMAIN}`)
+      traefik.http.routers.ersatztv-http.entrypoints: http
+      traefik.http.routers.ersatztv-http.middlewares: redirect-https
 
       # Direct all https requests to the service, checking with crowdsec first
-      traefik.http.routers.emby-https.rule: Host(`ersatztv.${DOMAIN}`)
-      traefik.http.routers.emby-https.entrypoints: https
-      traefik.http.routers.emby-https.tls: true
-      traefik.http.routers.emby-https.tls.certresolver: ${CERT_RESOLVER}
-      traefik.http.routers.emby-https.service: emby
-      traefik.http.routers.emby-https.middlewares: crowdsec-bouncer
+      traefik.http.routers.ersatztv-https.rule: Host(`ersatztv.${DOMAIN}`)
+      traefik.http.routers.ersatztv-https.entrypoints: https
+      traefik.http.routers.ersatztv-https.tls: true
+      traefik.http.routers.ersatztv-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.ersatztv-https.service: ersatztv
+      traefik.http.routers.ersatztv-https.middlewares: crowdsec-bouncer
 
-      traefik.http.services.emby.loadbalancer.server.port: 8409
+      traefik.http.services.ersatztv.loadbalancer.server.port: 8409
 
       # network policy
       whalewall.enabled: true
