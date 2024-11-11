@@ -70,7 +70,6 @@ services:
       # constrain due to s6
       - ${ZFS_POOL_ROOT_HDD}/media/tv:/data/tv:ro
       - ${ZFS_POOL_ROOT_HDD}/media/movies:/data/movies:ro
-      - ${ZFS_POOL_ROOT_HDD}/media/music_videos:/data/music_videos:ro
       - ${ZFS_POOL_ROOT_HDD}/media/emby_recordings:/recordings
     networks:
       - backend
