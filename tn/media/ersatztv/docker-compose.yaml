@@ -68,7 +68,6 @@ services:
     volumes:
       - ersatztv_config:/config
       - ersatztv_transcode:/transcode
-      - ${ZFS_POOL_ROOT_HDD}/media/ersatztv_data:/data
     networks:
       - backend
 
