@@ -2,7 +2,7 @@ services:
   ollama:
     # https://hub.docker.com/r/ollama/ollama/tags
     # https://github.com/ollama/ollama/blob/main/envconfig/config.go#L233
-    image: ollama/ollama:0.4.1
+    image: ollama/ollama:0.4.2
     restart: unless-stopped
     container_name: ollama
     # https://github.com/ollama/ollama/issues/6543
