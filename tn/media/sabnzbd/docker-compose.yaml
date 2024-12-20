@@ -2,7 +2,7 @@ services:
   sabnzbd:
     # https://github.com/onedr0p/containers/pkgs/container/sabnzbd
     # https://github.com/sabnzbd/sabnzbd
-    image: ghcr.io/onedr0p/sabnzbd:4.4.0
+    image: ghcr.io/onedr0p/sabnzbd:4.4.1
     user: ${SABNZBD_UID}:${MEDIA_SHARED_GID}
     security_opt:
       - no-new-privileges=true
