@@ -118,7 +118,7 @@ services:
   nextcloud-exporter:
     # https://github.com/xperimental/nextcloud-exporter
     # https://github.com/xperimental/nextcloud-exporter/pkgs/container/nextcloud-exporter
-    image: ghcr.io/xperimental/nextcloud-exporter:0.7.0
+    image: ghcr.io/xperimental/nextcloud-exporter:0.8.0
     restart: unless-stopped
     container_name: nextcloud-exporter
     user: ${HOME_UID}:${HOME_GID}
