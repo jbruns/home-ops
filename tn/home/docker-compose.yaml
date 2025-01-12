@@ -3,7 +3,7 @@
 services:
   home-backup:
     # https://github.com/offen/docker-volume-backup
-    image: offen/docker-volume-backup:v2.43.0
+    image: offen/docker-volume-backup:v2.43.1
     container_name: home-backup
     restart: unless-stopped
     environment:

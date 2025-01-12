@@ -4,7 +4,7 @@ services:
   media-backup:
     restart: unless-stopped
     # https://github.com/offen/docker-volume-backup    
-    image: offen/docker-volume-backup:v2.43.0
+    image: offen/docker-volume-backup:v2.43.1
     container_name: media-backup
     environment:
       # https://offen.github.io/docker-volume-backup/reference
