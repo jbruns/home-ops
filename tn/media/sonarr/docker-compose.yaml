@@ -2,7 +2,7 @@ services:
   sonarr:
     # https://github.com/onedr0p/containers/pkgs/container/sonarr
     # https://github.com/Sonarr/Sonarr
-    image: ghcr.io/onedr0p/sonarr:4.0.11
+    image: ghcr.io/onedr0p/sonarr:4.0.12
     user: ${SONARR_UID}:${MEDIA_SHARED_GID}
     security_opt:
       - no-new-privileges=true
