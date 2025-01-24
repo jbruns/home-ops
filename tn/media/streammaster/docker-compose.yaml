@@ -2,7 +2,7 @@ services:
   streammaster:
     # https://hub.docker.com/r/senexcrenshaw/streammaster/tags
     # https://github.com/SenexCrenshaw/StreamMaster
-    image: senexcrenshaw/streammaster:main-1.0.1.1
+    image: senexcrenshaw/streammaster:main-1.0.1.7
     container_name: streammaster
     restart: unless-stopped
     environment:
