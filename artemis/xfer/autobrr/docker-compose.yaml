@@ -1,7 +1,7 @@
 services:
   autobrr:
     # https://github.com/autobrr/autobrr/pkgs/container/autobrr
-    image: ghcr.io/autobrr/autobrr:v1.57
+    image: ghcr.io/autobrr/autobrr:v1.58
     container_name: autobrr
     user: ${XFER_UID}:${XFER_GID}
     security_opt:
