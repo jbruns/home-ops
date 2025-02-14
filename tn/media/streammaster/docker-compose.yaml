@@ -81,6 +81,41 @@ services:
               count: 1
               capabilities: [gpu]
 
+
+  streammaster-watchdog:
+    image: sergeantpanda/streammasterwatchdog:1.1.2
+    container_name: streammaster-watchdog
+    user: ${MEDIA_UID}:${MEDIA_GID}
+    security_opt:
+      - no-new-privileges=true
+    environment:
+      - SERVER_URL=http://streammaster:7095
+      - USERNAME=${STREAMMASTER_USERNAME}
+      - PASSWORD=${STREAMMASTER_PASSWORD}
+      - TZ=${TZ}
+    restart: unless-stopped
+    labels:
+      # logs collection
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: media
+
+      # network policy
+      whalewall.enabled: true
+      whalewall.rules: |
+        output:
+          # streammaster api
+          - network: common_backend
+            container: streammaster
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+    networks:
+      - backend
+
 secrets:
   streammaster-postgres-user:
     file: ./postgres-user.txt
