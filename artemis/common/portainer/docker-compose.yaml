@@ -1,6 +1,6 @@
 services:
   portainer:
-    image: portainer/portainer-ee:2.22.0
+    image: portainer/portainer-ee:2.26.1
     container_name: portainer
     user: ${COMMON_UID}:${COMMON_GID}
     group_add:
@@ -9,7 +9,7 @@ services:
       - no-new-privileges=true
     restart: unless-stopped
     environment:
-      - COMPOSE_UNPACKER_IMAGE=jbruns/compose-unpacker:2.21.3-sops
+      - COMPOSE_UNPACKER_IMAGE=jbruns/compose-unpacker:2.26.0-sops
     labels:
       logging: promtail
       logging_jobname: containerlogs
