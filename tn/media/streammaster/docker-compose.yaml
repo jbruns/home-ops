@@ -22,6 +22,58 @@ services:
       logging_jobname: containerlogs
       stackname: media
 
+      # network policy
+      whalewall.enabled: true
+      whalewall.rules: |
+        output:
+          # DNS
+          - proto: udp
+            dst_ports:
+              - 53
+          # HTTP/S
+          - proto: tcp
+            dst_ports:
+              - 443
+              - 80
+          # reverse proxy
+          - network: common_backend
+            container: traefik
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+    volumes:
+      - streammaster_config:/config
+    network_mode: "service:streammaster-gluetun"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  streammaster-gluetun:
+    image: qmcgaw/gluetun:v3.40.0
+    container_name: streammaster-gluetun
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      - VPN_SERVICE_PROVIDER=${STREAMMASTER_GLUETUN_PROVIDER}
+      - VPN_TYPE=${STREAMMASTER_GLUETUN_TYPE}
+      - WIREGUARD_PRIVATE_KEY=${STREAMMASTER_GLUETUN_WG_PRIVATE_KEY}
+      - SERVER_COUNTRIES=${STREAMMASTER_GLUETUN_COUNTRIES}
+      - SERVER_CITIES=${STREAMMASTER_GLUETUN_CITIES}
+    labels:
+      # logs collection
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: media
+
       traefik.enable: true
 
       # Listen on http, but redirect all requests to https
@@ -47,40 +99,14 @@ services:
 
       traefik.http.services.streammaster.loadbalancer.server.port: 7095
 
-      # network policy
-      whalewall.enabled: true
-      whalewall.rules: |
-        output:
-          # DNS
-          - proto: udp
-            dst_ports:
-              - 53
-          # HTTP/S
-          - proto: tcp
-            dst_ports:
-              - 443
-              - 80
-          # reverse proxy
-          - network: common_backend
-            container: traefik
     logging:
       driver: json-file
       options:
         max-size: 1m
         max-file: 1
         tag: "{{.Name}}"
-    volumes:
-      - streammaster_config:/config
     networks:
       - backend
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-
 
   streammaster-watchdog:
     image: sergeantpanda/streammasterwatchdog:1.1.2
