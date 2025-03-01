@@ -47,11 +47,6 @@ services:
       - backend
 
 networks:
-  # bind to a secondary IP adddress on the SCALE host, so that we stay out of the way of the webui and other services.
-  proxy:
-    driver: bridge
-    driver_opts:
-      com.docker.network.bridge.host_binding_ipv4: ${DOCKER_HOST_IPV4}
   backend:
     driver: bridge
     driver_opts:
