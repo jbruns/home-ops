@@ -109,7 +109,7 @@ services:
       - backend
 
   streammaster-watchdog:
-    image: sergeantpanda/streammasterwatchdog:1.1.2
+    image: sergeantpanda/streammasterwatchdog:1.1.3
     container_name: streammaster-watchdog
     user: ${MEDIA_UID}:${MEDIA_GID}
     security_opt:
