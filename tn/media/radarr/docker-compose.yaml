@@ -1,6 +1,6 @@
 services:
   radarr:
-    # https://github.com/onedr0p/containers/pkgs/container/radarr
+    # https://github.com/home-operations/containers/pkgs/container/radarr
     # https://github.com/Radarr/Radarr
     image: ghcr.io/home-operations/radarr:5.20.2
     user: ${RADARR_UID}:${MEDIA_SHARED_GID}

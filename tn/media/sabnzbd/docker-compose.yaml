@@ -1,6 +1,6 @@
 services:
   sabnzbd:
-    # https://github.com/onedr0p/containers/pkgs/container/sabnzbd
+    # https://github.com/home-operations/containers/pkgs/container/sabnzbd
     # https://github.com/sabnzbd/sabnzbd
     image: ghcr.io/home-operations/sabnzbd:4.4.1
     user: ${SABNZBD_UID}:${MEDIA_SHARED_GID}

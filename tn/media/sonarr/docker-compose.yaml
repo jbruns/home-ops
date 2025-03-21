@@ -1,6 +1,6 @@
 services:
   sonarr:
-    # https://github.com/onedr0p/containers/pkgs/container/sonarr
+    # https://github.com/home-operations/containers/pkgs/container/sonarr
     # https://github.com/Sonarr/Sonarr
     image: ghcr.io/home-operations/sonarr:4.0.14.2938
     user: ${SONARR_UID}:${MEDIA_SHARED_GID}

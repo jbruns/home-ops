@@ -1,6 +1,6 @@
 services:
   plex:
-    # https://github.com/onedr0p/containers/pkgs/container/plex
+    # https://github.com/home-operations/containers/pkgs/container/plex
     # https://github.com/plexinc/pms-docker
     image: ghcr.io/home-operations/plex:1.41.5
     container_name: plex
