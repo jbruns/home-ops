@@ -25,11 +25,9 @@ services:
             dst_ports:
               - 80
               - 443
-          # frontends
+          # frontend
           - network: common_backend
             container: open-webui
-          - network: common_backend
-            container: nextcloud
     logging:
       driver: json-file
       options:
