@@ -27,6 +27,8 @@ services:
       - mariadb_data:/backup/mariadb_data:ro
       # nextcloud
       - nextcloud_data:/backup/nextcloud_data:ro
+      # obsidian-livesync
+      - couchdb_data:/backup/couchdb_data:ro
       # open-webui
       - ollama_data:/backup/ollama_data:ro
       - open-webui_data:/backup/openwebui_data:ro
@@ -56,6 +58,7 @@ networks:
 include:
   - ./mariadb/docker-compose.yaml
   - ./nextcloud/docker-compose.yaml
+  - ./obsidian-livesync/docker-compose.yaml
   - ./open-webui/docker-compose.yaml
   - ./redis/docker-compose.yaml
   - ./vaultwarden/docker-compose.yaml
