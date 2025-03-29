@@ -1,7 +1,7 @@
 services:
   mariadb:
     # https://hub.docker.com/_/mariadb
-    image: mariadb:11.4.3
+    image: mariadb:11.4.5
     container_name: mariadb
     restart: unless-stopped
     environment:
