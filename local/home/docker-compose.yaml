@@ -1,0 +1,11 @@
+# When referring to a network called 'backend', we mean the common stack's backend network
+networks:
+  backend:
+    name: common_backend
+    external: true
+
+# Remaining services in the stack have their own Compose configuration.
+include:
+  - ./discord-ollama/docker-compose.yaml
+  - ./ollama/docker-compose.yaml
+  - ./redis/docker-compose.yaml

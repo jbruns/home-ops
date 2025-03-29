@@ -1,0 +1,40 @@
+services:
+  discord-ollama:
+    image: kevinthedang/discord-ollama:0.8.3
+    restart: unless-stopped
+    container_name: discord-ollama
+    environment:
+      - CLIENT_TOKEN=${CLIENT_TOKEN}
+      - OLLAMA_IP=172.31.0.4
+      - REDIS_IP=172.31.0.3
+      - MODEL=gemma3:12b
+    labels:
+      # logs collection
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: home
+      # network policy
+      whalewall.enabled: true
+      whalewall.rules: |
+        output:
+          # DNS
+          - proto: udp
+            dst_ports:
+              - 53
+          # HTTP/S
+          - proto: tcp
+            dst_ports:
+              - 80
+              - 443
+          # LLM backend
+          - network: common_backend
+            container: ollama  
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+    networks:
+      backend:
+        ipv4_address: 172.31.0.5

@@ -1,0 +1,53 @@
+services:
+  ollama:
+    # https://hub.docker.com/r/ollama/ollama/tags
+    # https://github.com/ollama/ollama/blob/main/envconfig/config.go#L233
+    image: ollama/ollama:0.6.0
+    restart: unless-stopped
+    container_name: ollama
+    # https://github.com/ollama/ollama/issues/6543
+    # user: ${HOME_UID}:${HOME_GID}
+    labels:
+      # logs collection
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: home    
+      # network policy
+      whalewall.enabled: true
+      whalewall.rules: |
+        output:
+          # DNS
+          - proto: udp
+            dst_ports:
+              - 53
+          # HTTP/S
+          - proto: tcp
+            dst_ports:
+              - 80
+              - 443
+          # frontends
+          - network: common_backend
+            container: open-webui
+          - network: common_backend
+            container: discord-ollama
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      backend:
+        ipv4_address: 172.31.0.4
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+volumes:
+  ollama_data:

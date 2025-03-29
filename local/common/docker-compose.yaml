@@ -1,0 +1,6 @@
+networks:
+  backend:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${COMMON_BACKEND_SUBNET_V4}

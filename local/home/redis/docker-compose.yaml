@@ -1,0 +1,31 @@
+services:
+  redis:
+    # https://redis.io/docs/latest/operate/oss_and_stack/install/install-stack/docker/
+    # https://github.com/redis-stack/redis-stack
+    # https://hub.docker.com/r/redis/redis-stack-server/tags
+    image: redis/redis-stack-server:7.4.0-v1
+    container_name: redis
+    restart: unless-stopped
+    labels:
+      # logs collection
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: home
+
+      # network policy
+      whalewall.enabled: true
+      whalewall.rules: |
+        output:
+          # metrics collection
+          - network: common_backend
+            container: redis-exporter
+          # nextcloud cache
+          - network: common_backend
+            container: nextcloud
+    volumes:
+      - redis_data:/data
+    networks:
+      backend:
+        ipv4_address: 172.31.0.3
+volumes:
+  redis_data:
