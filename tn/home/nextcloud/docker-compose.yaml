@@ -70,6 +70,9 @@ services:
           # database
           - network: common_backend
             container: mariadb
+          # LLM backend
+          - network: common_backend
+            container: ollama
     logging:
       driver: json-file
       options:
