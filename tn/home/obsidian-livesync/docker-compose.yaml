@@ -14,6 +14,8 @@ services:
       logging_jobname: containerlogs
       stackname: home
 
+      traefik.enable: true
+      
       # Listen on http, but redirect all requests to https
       traefik.http.routers.ols-http.rule: Host(`ols.${ALT_DOMAIN_HOME}`)
       traefik.http.routers.ols-http.entrypoints: http
