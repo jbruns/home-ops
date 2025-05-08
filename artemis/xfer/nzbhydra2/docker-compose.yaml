@@ -1,7 +1,7 @@
 services:
   nzbhydra2:
     # https://github.com/linuxserver/docker-nzbhydra2/pkgs/container/nzbhydra2
-    image: lscr.io/linuxserver/nzbhydra2:7.12.3
+    image: lscr.io/linuxserver/nzbhydra2:7.13.0
     container_name: nzbhydra2
     restart: unless-stopped
     environment:
