@@ -66,7 +66,7 @@ services:
 
   radarr-exporter:
     # https://github.com/onedr0p/exportarr
-    image: ghcr.io/onedr0p/exportarr:v2.1.0
+    image: ghcr.io/onedr0p/exportarr:v2.2.0
     container_name: radarr-exporter
     user: ${MEDIA_UID}:${MEDIA_GID}
     security_opt:
