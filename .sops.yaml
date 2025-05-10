@@ -2,5 +2,3 @@
 creation_rules:
     - path_regex: .*tn.*
       age: 'age1hgayx0xta2t248c8xhu2pex68z5tqak5487es2m7ccp5gjducanq0egash'
-    - path_regex: .*artemis.*
-      age: 'age1rajs5e23d9635ejd9deth35awm239d7akqlqe24rxp7u0nfhepyqmchdj4'
