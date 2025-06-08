@@ -2,7 +2,7 @@ services:
   radarr:
     # https://github.com/home-operations/containers/pkgs/container/radarr
     # https://github.com/Radarr/Radarr
-    image: ghcr.io/home-operations/radarr:5.23.1
+    image: ghcr.io/home-operations/radarr:5.26.1
     user: ${RADARR_UID}:${MEDIA_SHARED_GID}
     security_opt:
       - no-new-privileges=true
