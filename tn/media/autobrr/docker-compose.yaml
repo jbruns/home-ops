@@ -1,0 +1,71 @@
+services:
+  autobrr:
+    # https://github.com/autobrr/autobrr/pkgs/container/autobrr
+    image: ghcr.io/autobrr/autobrr:v1.62
+    container_name: autobrr
+    user: ${XFER_UID}:${XFER_SHARED_GID}
+    security_opt:
+      - no-new-privileges=true
+    restart: unless-stopped
+    environment:
+      # https://autobrr.com/installation/docker#environment-variables
+      - TZ=${TZ}
+    labels:
+      # logs collection
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: asot-xfer
+
+      traefik.enable: true
+
+      # Listen on http, but redirect all requests to https
+      traefik.http.routers.autobrr-http.rule: Host(`brr.${DOMAIN}`)
+      traefik.http.routers.autobrr-http.entrypoints: http
+      traefik.http.routers.autobrr-http.middlewares: redirect-https
+
+      # Direct all https requests to the service, checking with crowdsec first
+      traefik.http.routers.autobrr-https.rule: Host(`brr.${DOMAIN}`)
+      traefik.http.routers.autobrr-https.entrypoints: https
+      traefik.http.routers.autobrr-https.tls: true
+      traefik.http.routers.autobrr-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.autobrr-https.service: autobrr
+      traefik.http.routers.autobrr-https.middlewares: crowdsec-bouncer
+
+      traefik.http.services.autobrr.loadbalancer.server.port: 7474
+
+      # network policy
+      whalewall.enabled: true
+      whalewall.rules: |
+        output:
+          # DNS
+          - proto: udp
+            dst_ports:
+              - 53
+          # HTTP/S
+          - proto: tcp
+            dst_ports:
+              - 80
+              - 443
+          # IRC
+          - proto: tcp
+            dst_ports:
+              - 6667-7000
+          # reverse proxy
+          - network: common_backend
+            container: traefik
+          # transfers
+          - network: common_backend
+            container: qbittorrent
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+    volumes:
+      - autobrr_config:/config
+    networks:
+      - backend
+
+volumes:
+  autobrr_config:

@@ -1,0 +1,82 @@
+services:
+  qbittorrent:
+    # https://github.com/linuxserver/docker-qbittorrent
+    image: ghcr.io/linuxserver/qbittorrent:5.1.0
+    container_name: qbittorrent
+    restart: unless-stopped
+    environment:
+      # https://docs.linuxserver.io/images/docker-qbittorrent
+      - PUID=${QBITTORRENT_UID}
+      - PGID=${XFER_SHARED_GID}
+      - TZ=${TZ}
+      - TORRENTING_PORT=31728
+    labels:
+      # logs collection
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: xfer
+
+      traefik.enable: true
+
+      # Listen on http, but redirect all requests to https
+      traefik.http.routers.qbittorrent-http.rule: Host(`qbt.${DOMAIN}`)
+      traefik.http.routers.qbittorrent-http.entrypoints: http
+      traefik.http.routers.qbittorrent-http.middlewares: redirect-https
+
+      # Direct all https requests to the service, checking with crowdsec first
+      traefik.http.routers.qbittorrent-https.rule: Host(`qbt.${DOMAIN}`)
+      traefik.http.routers.qbittorrent-https.entrypoints: https
+      traefik.http.routers.qbittorrent-https.tls: true
+      traefik.http.routers.qbittorrent-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.qbittorrent-https.service: qbittorrent
+      traefik.http.routers.qbittorrent-https.middlewares: crowdsec-bouncer
+
+      traefik.http.services.qbittorrent.loadbalancer.server.port: 8080
+
+      # network policy
+      whalewall.enabled: true
+      whalewall.rules: |
+        mapped_ports:
+          external:
+            allow: true
+        output:
+          # DNS
+          - proto: udp
+            dst_ports:
+              - 53
+          # HTTP/S
+          - proto: tcp
+            dst_ports:
+              - 80
+              - 443
+          # bt on unpriv ports
+          - proto: tcp
+            dst_ports:
+              - 1024-65535
+          - proto: udp
+            dst_ports:
+              - 1024-65535
+          # reverse proxy
+          - network: common_backend
+            container: traefik
+          # transfers
+          - network: common_backend
+            container: autobrr
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+    ports:
+      # Bittorrent inbound
+      - 31728:31728
+      - 31728:31728/udp
+    volumes:
+      - qbittorrent_config:/config
+      - ${DOWNLOADS_ROOT}:/downloads
+    networks:
+      - backend
+
+volumes:
+  qbittorrent_config:
