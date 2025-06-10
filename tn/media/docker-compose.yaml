@@ -22,6 +22,8 @@ services:
       # backup: no traffic in or out
     volumes: 
       # Backup source volumes
+      # autobrr
+      - autobrr_config:/backup/autobrr_config:ro
       # emby
       - emby_config:/backup/emby_config:ro
       # ersatztv
@@ -30,6 +32,8 @@ services:
       - navidrome_data:/backup/navidrome_data:ro
       # nextpvr
       - nextpvr_config:/backup/nextpvr_config:ro
+      # qbittorrent
+      - qbittorrent_config:/backup/qbittorrent_config:ro
       # plex
       - plex_config:/backup/plex_config:ro
       # radarr
@@ -62,11 +66,13 @@ networks:
 
 # Remaining services in the stack have their own Compose configuration.
 include:
+  - ./autobrr/docker-compose.yaml
   - ./emby/docker-compose.yaml
   - ./ersatztv/docker-compose.yaml
   - ./navidrome/docker-compose.yaml
   - ./nextpvr/docker-compose.yaml
   - ./plex/docker-compose.yaml
+  - ./qbittorrent/docker-compose.yaml
   - ./radarr/docker-compose.yaml
   - ./sabnzbd/docker-compose.yaml
   - ./sonarr/docker-compose.yaml
