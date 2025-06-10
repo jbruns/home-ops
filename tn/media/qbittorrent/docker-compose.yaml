@@ -7,24 +7,24 @@ services:
     environment:
       # https://docs.linuxserver.io/images/docker-qbittorrent
       - PUID=${QBITTORRENT_UID}
-      - PGID=${XFER_SHARED_GID}
+      - PGID=${MEDIA_SHARED_GID}
       - TZ=${TZ}
       - TORRENTING_PORT=31728
     labels:
       # logs collection
       logging: promtail
       logging_jobname: containerlogs
-      stackname: xfer
+      stackname: media
 
       traefik.enable: true
 
       # Listen on http, but redirect all requests to https
-      traefik.http.routers.qbittorrent-http.rule: Host(`qbt.${DOMAIN}`)
+      traefik.http.routers.qbittorrent-http.rule: Host(`qbittorrent.${DOMAIN}`)
       traefik.http.routers.qbittorrent-http.entrypoints: http
       traefik.http.routers.qbittorrent-http.middlewares: redirect-https
 
       # Direct all https requests to the service, checking with crowdsec first
-      traefik.http.routers.qbittorrent-https.rule: Host(`qbt.${DOMAIN}`)
+      traefik.http.routers.qbittorrent-https.rule: Host(`qbittorrent.${DOMAIN}`)
       traefik.http.routers.qbittorrent-https.entrypoints: https
       traefik.http.routers.qbittorrent-https.tls: true
       traefik.http.routers.qbittorrent-https.tls.certresolver: ${CERT_RESOLVER}
@@ -74,7 +74,7 @@ services:
       - 31728:31728/udp
     volumes:
       - qbittorrent_config:/config
-      - ${DOWNLOADS_ROOT}:/downloads
+      - ${ZFS_POOL_ROOT_HDD}/media/tordl:/data/tordl
     networks:
       - backend
 
