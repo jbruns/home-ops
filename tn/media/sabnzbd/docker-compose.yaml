@@ -66,6 +66,8 @@ services:
     volumes:
       - sabnzbd_config:/config
       - ${ZFS_POOL_ROOT_HDD}/media/nzbdl:/data/nzbdl
+      - ${ZFS_POOL_ROOT_HDD}/media/audiobooks:/data/audiobooks
+      - ./abr_mover.py:/config/scripts/abr_mover.py:ro
     networks:
       - backend
 
