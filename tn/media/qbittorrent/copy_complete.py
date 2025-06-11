@@ -47,8 +47,11 @@ def main():
         print("File copied successfully.")
         return
 
+    # Escape bracket characters in the root directory path
+    root_dir_escaped = glob.escape(args.root_dir)
+
     # Find all audio files in the root directory
-    audio_files = glob.glob(os.path.join(args.root_dir, "*.m4b")) + glob.glob(os.path.join(args.root_dir, "*.mp3"))
+    audio_files = glob.glob(os.path.join(root_dir_escaped, "*.m4b")) + glob.glob(os.path.join(root_dir_escaped, "*.mp3"))
     
     if len(audio_files) == 0:
         print("No audio files found in the root directory.")
@@ -74,7 +77,7 @@ def main():
         # Ensure destination directory exists
         os.makedirs(target_dir, exist_ok=True)
         
-        print(f"Copying multiple audio files with parent directory: {args.root_dir} -> {target_dir}")
+        print(f"Copying multiple audio files with parent directory: {parent_dir} -> {target_dir}")
         
         # Copy each audio file to the target directory
         for audio_file in audio_files:
