@@ -76,7 +76,7 @@ services:
       - qbittorrent_config:/config
       - ${ZFS_POOL_ROOT_HDD}/media/tordl:/data/tordl
       - ${ZFS_POOL_ROOT_HDD}/media/audiobooks:/data/audiobooks
-      - ./copy_complete.sh:/config/scripts/copy_complete.sh:ro
+      - ./copy_complete.py:/config/scripts/copy_complete.py:ro
     networks:
       - backend
 
