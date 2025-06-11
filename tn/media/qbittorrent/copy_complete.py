@@ -27,6 +27,26 @@ def main():
     print(f"Category: {args.category}")
     print(f"Destination: {destination_path}")
     
+    # Check if root_dir is a file
+    if os.path.isfile(args.root_dir):
+        # Validate file extension
+        file_extension = os.path.splitext(args.root_dir)[1].lower()
+        if file_extension not in ['.m4b', '.mp3']:
+            print(f"File '{args.root_dir}' does not have a valid audio extension (.m4b or .mp3). Taking no action.")
+            return
+
+        # Copy the file to the destination_path
+        target_path = os.path.join(destination_path, os.path.basename(args.root_dir))
+        print(f"Copying file: {args.root_dir} -> {target_path}")
+
+        # Ensure destination directory exists
+        os.makedirs(destination_path, exist_ok=True)
+
+        # Copy the file
+        shutil.copy2(args.root_dir, target_path)
+        print("File copied successfully.")
+        return
+
     # Find all audio files in the root directory
     audio_files = glob.glob(os.path.join(args.root_dir, "*.m4b")) + glob.glob(os.path.join(args.root_dir, "*.mp3"))
     
