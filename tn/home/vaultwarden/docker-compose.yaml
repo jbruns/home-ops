@@ -68,6 +68,10 @@ services:
             dst_ports:
               - 80
               - 443
+          # SMTP
+          - proto: tcp
+            dst_ports:
+              - 587
           # reverse proxy
           - network: common_backend
             container: traefik
