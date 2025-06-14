@@ -5,7 +5,7 @@ services:
   monitoring-backup:
     restart: unless-stopped
     # https://github.com/offen/docker-volume-backup    
-    image: offen/docker-volume-backup:v2.43.3
+    image: offen/docker-volume-backup:v2.43.4
     container_name: monitoring-backup
     environment:
       # https://offen.github.io/docker-volume-backup/reference
