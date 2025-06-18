@@ -26,8 +26,6 @@ services:
       - autobrr_config:/backup/autobrr_config:ro
       # emby
       - emby_config:/backup/emby_config:ro
-      # ersatztv
-      - ersatztv_config:/backup/ersatztv_config:ro
       # navidrome
       - navidrome_data:/backup/navidrome_data:ro
       # nextpvr
@@ -42,8 +40,6 @@ services:
       - sabnzbd_config:/backup/sabnzbd_config:ro
       # sonarr
       - sonarr_config:/backup/sonarr_config:ro
-      # streammaster
-      - streammaster_config:/backup/streammaster_config:ro
       # tautulli
       - tautulli_config:/backup/tautulli_config:ro
 
@@ -68,7 +64,6 @@ networks:
 include:
   - ./autobrr/docker-compose.yaml
   - ./emby/docker-compose.yaml
-  - ./ersatztv/docker-compose.yaml
   - ./navidrome/docker-compose.yaml
   - ./nextpvr/docker-compose.yaml
   - ./plex/docker-compose.yaml
@@ -76,5 +71,4 @@ include:
   - ./radarr/docker-compose.yaml
   - ./sabnzbd/docker-compose.yaml
   - ./sonarr/docker-compose.yaml
-  - ./streammaster/docker-compose.yaml
   - ./tautulli/docker-compose.yaml
