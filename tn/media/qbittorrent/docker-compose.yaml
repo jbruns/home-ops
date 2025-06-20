@@ -1,7 +1,7 @@
 services:
   qbittorrent:
     # https://github.com/linuxserver/docker-qbittorrent
-    image: ghcr.io/linuxserver/qbittorrent:5.1.0
+    image: ghcr.io/linuxserver/qbittorrent:20.04.1
     container_name: qbittorrent
     restart: unless-stopped
     environment:
