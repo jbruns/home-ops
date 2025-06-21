@@ -26,10 +26,10 @@ services:
       traefik.http.routers.syncthing-https.entrypoints: https
       traefik.http.routers.syncthing-https.tls: true
       traefik.http.routers.syncthing-https.tls.certresolver: ${CERT_RESOLVER}
-      traefik.http.routers.syncthing-https.service: open-webui
+      traefik.http.routers.syncthing-https.service: syncthing
       traefik.http.routers.syncthing-https.middlewares: crowdsec-bouncer
 
-      traefik.http.services.open-webui.loadbalancer.server.port: 8384
+      traefik.http.services.syncthing.loadbalancer.server.port: 8384
 
       # network policy
       whalewall.enabled: true
