@@ -58,4 +58,5 @@ include:
   - ./nextcloud/docker-compose.yaml
   - ./open-webui/docker-compose.yaml
   - ./redis/docker-compose.yaml
+  - ./syncthing/docker-compose.yaml
   - ./vaultwarden/docker-compose.yaml
