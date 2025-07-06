@@ -43,6 +43,10 @@ services:
       # prometheus: Communicate with traefik, monitoring data sources.
       whalewall.rules: |
         output:
+          # DNS
+          - proto: udp
+            dst_ports:
+              - 53
           # allow communication with metrics exporters
           - network: common_backend
             proto: tcp

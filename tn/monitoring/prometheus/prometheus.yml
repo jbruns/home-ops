@@ -97,4 +97,7 @@ scrape_configs:
       - targets: [ 'cadvisor:8080' ]
         labels:
           container: 'cadvisor'
-
+  
+  - job_name: homeassistant
+    static_configs:
+      - targets: [ 'ha.lan.bruns.house:9100' ]
