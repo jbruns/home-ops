@@ -54,6 +54,7 @@ networks:
 include:
   - ./alertmanager/docker-compose.yaml
   - ./cadvisor/docker-compose.yaml
+  - ./dcgm-exporter/docker-compose.yaml
   - ./grafana/docker-compose.yaml
   - ./loki/docker-compose.yaml
   - ./node-exporter/docker-compose.yaml

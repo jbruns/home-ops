@@ -1,0 +1,35 @@
+services:
+  dcgm-exporter:
+    image: nvidia/dcgm-exporter:4.2.3-4.1.3-ubuntu22.04
+    container_name: dcgm-exporter
+    restart: unless-stopped
+    cap_add:
+      - SYS_ADMIN
+    labels:
+      # logs collection
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: monitoring
+
+      # network policy
+      whalewall.enabled: true
+      whalewall.rules: |
+        output:
+          # prometheus: data collection
+          - network: common_backend
+            container: prometheus
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+    networks:
+      - backend
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
