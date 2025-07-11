@@ -75,12 +75,7 @@ services:
         read_only: true
         # Stored encrypted in repo
         x-sops: true
-      - ./provisioning/dashboards.yml:/etc/grafana/provisioning/dashboards/provisioning-dashboards.yaml:ro
       - ./plugins/app.yaml:/etc/grafana/provisioning/plugins/app.yaml:ro
-      - ./dashboards/node-metrics.json:/var/lib/grafana/dashboards/node-metrics.json:ro
-      - ./dashboards/container-metrics.json:/var/lib/grafana/dashboards/container-metrics.json:ro
-      - ./dashboards/log-search.json:/var/lib/grafana/dashboards/log-search.json:ro
-
       - grafana_data:/var/lib/grafana
     networks:
       - backend
