@@ -12,6 +12,9 @@ services:
       # https://app.crowdsec.net/hub/collections
       - COLLECTIONS=crowdsecurity/traefik crowdsecurity/http-cve
     labels:
+      stack-back.volumes: true
+      stack-back.volumes.include: "crowdsec_data,crowdsec_config"
+
       # logs collection
       logging: promtail
       logging_jobname: containerlogs
