@@ -2,16 +2,11 @@
 ## Per-stack instances of services (e.g. for backups) are declared here.
 services:
   common-backup:
-    # https://github.com/offen/docker-volume-backup
-    image: offen/docker-volume-backup:v2.43.4
-    container_name: common-backup
+    # https://github.com/lawndoc/stack-back
+    image: ghcr.io/lawndoc/stack-back:v1.4.5
     restart: unless-stopped
-    environment:
-      # https://offen.github.io/docker-volume-backup/reference
-      - BACKUP_FILENAME=common-%Y-%m-%dT%H-%M-%S.tar.gz
-      - BACKUP_CRON_EXPRESSION=5 1 * * *
-      - BACKUP_PRUNING_PREFIX=common-
-      - BACKUP_RETENTION_DAYS=7
+    container_name: common-backup
+    env_file: ./stack-back.env
     labels:
       logging: promtail
       logging_jobname: containerlogs
@@ -19,24 +14,21 @@ services:
 
       # network policy
       whalewall.enabled: true
-      # backup: no traffic in or out
+      whalewall.rules: |
+        output:
+          # DNS
+          - proto: udp
+            dst_ports:
+              - 53
+          # HTTP/S
+          - proto: tcp
+            dst_ports:
+              - 443
+              - 80
     volumes: 
-      # Backup source volumes
-      # crowdsec
-      - crowdsec_config:/backup/crowdsec_config:ro
-      - crowdsec_data:/backup/crowdsec_data:ro
-      - crowdsec_log:/backup/crowdsec_log:ro
-      # nginx
-      # portainer
-      - portainer_data:/backup/portainer_data:ro
-      # traefik
-      - traefik_le:/backup/traefik_le:ro
-      - traefik_log:/backup/traefik_log:ro
-      # whalewall
-      - whalewall_data:/backup/whalewall_data:ro
-
-      # Backup target
-      - ${ZFS_POOL_ROOT_HDD}/docker-backups:/archive
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - backup_cache:/cache
+      - ${ZFS_POOL_ROOT_HDD}/docker-backups:/backups
     logging:
       driver: json-file
       options:
