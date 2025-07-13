@@ -23,6 +23,9 @@ services:
       - database_url
       - smtp_password
     labels:
+      stack-back.volumes: true
+      stack-back.volumes.include: "vaultwarden_data"
+      
       # logs collection
       logging: promtail
       logging_jobname: containerlogs

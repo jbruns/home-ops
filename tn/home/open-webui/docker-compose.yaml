@@ -55,6 +55,9 @@ services:
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
     labels:
+      stack-back.volumes: true
+      stack-back.volumes.include: "open-webui_data"
+      
       # logs collection
       logging: promtail
       logging_jobname: containerlogs

@@ -1,50 +1,5 @@
 # HOME STACK
 ## Per-stack instances of services (e.g. for backups) are declared here.
-services:
-  home-backup:
-    # https://github.com/offen/docker-volume-backup
-    image: offen/docker-volume-backup:v2.43.4
-    container_name: home-backup
-    restart: unless-stopped
-    environment:
-      # https://offen.github.io/docker-volume-backup/reference
-      - BACKUP_FILENAME=home-%Y-%m-%dT%H-%M-%S.tar.gz
-      - BACKUP_CRON_EXPRESSION=10 1 * * *
-      - BACKUP_PRUNING_PREFIX=home-
-      - BACKUP_RETENTION_DAYS=7
-    labels:
-      # logs collection
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: home
-
-      # network policy
-      whalewall.enabled: true
-      # backup: no traffic in or out
-    volumes: 
-      # Backup source volumes
-      # mariadb
-      - mariadb_data:/backup/mariadb_data:ro
-      # nextcloud
-      - nextcloud_data:/backup/nextcloud_data:ro
-      # open-webui
-      - ollama_data:/backup/ollama_data:ro
-      - open-webui_data:/backup/openwebui_data:ro
-      # redis
-      - redis_data:/backup/redis_data:ro
-      # vaultwarden
-      - vaultwarden_data:/backup/vaultwarden_data:ro
-
-      # Backup target
-      - ${ZFS_POOL_ROOT_HDD}/docker-backups:/archive
-    logging:
-      driver: json-file
-      options:
-        max-size: 1m
-        max-file: 1
-        tag: "{{.Name}}"
-    networks:
-      - backend
 
 # When referring to a network called 'backend', we mean the common stack's backend network
 networks:
