@@ -1,58 +1,5 @@
 # MEDIA STACK
 ## Per-stack instances of services (e.g. for backups) are declared here.
-services:
-  media-backup:
-    restart: unless-stopped
-    # https://github.com/offen/docker-volume-backup    
-    image: offen/docker-volume-backup:v2.43.4
-    container_name: media-backup
-    environment:
-      # https://offen.github.io/docker-volume-backup/reference
-      - BACKUP_FILENAME=media-%Y-%m-%dT%H-%M-%S.tar.gz
-      - BACKUP_CRON_EXPRESSION=40 1 * * *
-      - BACKUP_PRUNING_PREFIX=media-
-      - BACKUP_RETENTION_DAYS=7
-    labels:
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: media
-
-      # network policy
-      whalewall.enabled: true
-      # backup: no traffic in or out
-    volumes: 
-      # Backup source volumes
-      # autobrr
-      - autobrr_config:/backup/autobrr_config:ro
-      # emby
-      - emby_config:/backup/emby_config:ro
-      # navidrome
-      - navidrome_data:/backup/navidrome_data:ro
-      # nextpvr
-      - nextpvr_config:/backup/nextpvr_config:ro
-      # qbittorrent
-      - qbittorrent_config:/backup/qbittorrent_config:ro
-      # plex
-      - plex_config:/backup/plex_config:ro
-      # radarr
-      - radarr_config:/backup/radarr_config:ro
-      # sabnzbd
-      - sabnzbd_config:/backup/sabnzbd_config:ro
-      # sonarr
-      - sonarr_config:/backup/sonarr_config:ro
-      # tautulli
-      - tautulli_config:/backup/tautulli_config:ro
-
-      # Backup target
-      - ${ZFS_POOL_ROOT_HDD}/docker-backups:/archive
-    logging:
-      driver: json-file
-      options:
-        max-size: 1m
-        max-file: 1
-        tag: "{{.Name}}"
-    networks:
-      - backend
 
 # When referring to a network called 'backend', we mean the common stack's backend network
 networks:

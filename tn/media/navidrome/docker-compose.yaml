@@ -12,6 +12,9 @@ services:
       # https://www.navidrome.org/docs/usage/configuration-options/#environment-variables
       - ND_ENABLETRANSCODINGCONFIG=true
     labels:
+      stack-back.volumes: true
+      stack-back.volumes.include: "navidrome_data"
+      
       # logs collection
       logging: promtail
       logging_jobname: containerlogs

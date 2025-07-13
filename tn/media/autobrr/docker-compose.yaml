@@ -11,6 +11,9 @@ services:
       # https://autobrr.com/installation/docker#environment-variables
       - TZ=${TZ}
     labels:
+      stack-back.volumes: true
+      stack-back.volumes.include: "autobrr_config"
+      
       # logs collection
       logging: promtail
       logging_jobname: containerlogs
