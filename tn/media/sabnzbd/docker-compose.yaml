@@ -11,6 +11,9 @@ services:
     environment:
       - TZ=${TZ}
     labels:
+      stack-back.volumes: true
+      stack-back.volumes.include: "sabnzbd_config"
+      
       # logs collection
       logging: promtail
       logging_jobname: containerlogs

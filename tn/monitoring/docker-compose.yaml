@@ -1,48 +1,6 @@
 # MONITORING STACK
 ## With thanks to https://github.com/ruanbekker/docker-monitoring-stack-gpnc
 ## Per-stack instances of services (e.g. for backups) are declared here.
-services:
-  monitoring-backup:
-    restart: unless-stopped
-    # https://github.com/offen/docker-volume-backup    
-    image: offen/docker-volume-backup:v2.43.4
-    container_name: monitoring-backup
-    environment:
-      # https://offen.github.io/docker-volume-backup/reference
-      - BACKUP_FILENAME=monitoring-%Y-%m-%dT%H-%M-%S.tar.gz
-      - BACKUP_CRON_EXPRESSION=10 2 * * *
-      - BACKUP_PRUNING_PREFIX=monitoring-
-      - BACKUP_RETENTION_DAYS=7
-    labels:
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: monitoring
-
-      # network policy
-      whalewall.enabled: true
-      # backup: no traffic in or out
-    logging:
-      driver: json-file
-      options:
-        max-size: 1m
-        max-file: 1
-        tag: "{{.Name}}"
-    volumes: 
-      # Backup source volumes
-      # alertmanager
-      - alertmanager_data:/backup/alertmanager_data:ro
-      # cadvisor
-      # grafana
-      - grafana_data:/backup/grafana_data:ro
-      # loki
-      # node-exporter
-      # prometheus
-      # promtail
-
-      # Backup target
-      - ${ZFS_POOL_ROOT_HDD}/docker-backups:/archive
-    networks:
-      - backend
 
 # When referring to a network called 'backend', we mean the common stack's backend network
 networks:

@@ -9,6 +9,9 @@ services:
       - no-new-privileges=true
     restart: unless-stopped
     labels:
+      stack-back.volumes: true
+      stack-back.volumes.include: "nextpvr_config"
+      
       # Enable log collection via Promtail
       logging: promtail
       logging_jobname: containerlogs

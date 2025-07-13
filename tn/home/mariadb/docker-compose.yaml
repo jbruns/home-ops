@@ -7,9 +7,13 @@ services:
     environment:
       # https://mariadb.com/kb/en/mariadb-server-docker-official-image-environment-variables/
       - MARIADB_ROOT_PASSWORD_FILE=/run/secrets/mariadb_root_password
+    env_file:
+      - ./backup_cred.env
     secrets:
       - mariadb_root_password
     labels:
+      stack-back.mariadb: true
+
       # logs collection
       logging: promtail
       logging_jobname: containerlogs

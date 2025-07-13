@@ -1,6 +1,6 @@
 services:
   portainer:
-    image: portainer/portainer-ee:2.27.7
+    image: portainer/portainer-ee:2.27.9
     container_name: portainer
     user: ${COMMON_UID}:${COMMON_GID}
     group_add:
@@ -12,6 +12,9 @@ services:
       # https://github.com/orgs/portainer/discussions/9755#discussioncomment-8804428
       - COMPOSE_UNPACKER_IMAGE=jbruns/compose-unpacker:2.21.3-sops
     labels:
+      stack-back.volumes: true
+      stack-back.volumes.include: "portainer_data"
+
       # logs collection
       logging: promtail
       logging_jobname: containerlogs

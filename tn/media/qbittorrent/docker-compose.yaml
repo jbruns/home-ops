@@ -11,6 +11,9 @@ services:
       - TZ=${TZ}
       - TORRENTING_PORT=31728
     labels:
+      stack-back.volumes: true
+      stack-back.volumes.include: "qbittorrent_config"
+      
       # logs collection
       logging: promtail
       logging_jobname: containerlogs

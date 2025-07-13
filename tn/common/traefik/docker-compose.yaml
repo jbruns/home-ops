@@ -45,6 +45,9 @@ services:
       # Provide Cloudflare secret for DNS01 validation
       - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
     labels:
+      stack-back.volumes: true
+      stack-back.volumes.include: "traefik_le,traefik_plugins-storage"
+
       # logs collection
       logging: promtail
       logging_jobname: containerlogs

@@ -9,6 +9,9 @@ services:
       - PUID=${HOME_UID}
       - PGID=${HOME_GID}
     labels:
+      stack-back.volumes: true
+      stack-back.volumes.include: "syncthing_data"
+      
       # logs collection
       logging: promtail
       logging_jobname: containerlogs

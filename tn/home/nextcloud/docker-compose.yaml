@@ -5,6 +5,9 @@ services:
     container_name: nextcloud
     restart: unless-stopped
     labels:
+      stack-back.volumes: true
+      stack-back.volumes.include: "nextcloud_data"
+      
       # logs collection
       logging: promtail
       logging_jobname: containerlogs
