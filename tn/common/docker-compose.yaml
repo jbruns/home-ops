@@ -25,6 +25,9 @@ services:
             dst_ports:
               - 443
               - 80
+          # mariadb backup
+          - network: common_backend
+            container: mariadb
     volumes: 
       - /var/run/docker.sock:/tmp/docker.sock:ro
       - backup_cache:/cache
