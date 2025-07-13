@@ -48,6 +48,9 @@ networks:
       config:
         - subnet: ${COMMON_BACKEND_SUBNET_V4}
 
+volumes:
+  backup_cache:
+
 include:
   - ./crowdsec/docker-compose.yaml
   - ./nginx/docker-compose.yaml
