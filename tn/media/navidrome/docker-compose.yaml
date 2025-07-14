@@ -2,7 +2,7 @@ services:
   navidrome:
     # https://hub.docker.com/r/deluan/navidrome
     # https://github.com/navidrome/navidrome/releases
-    image: deluan/navidrome:0.56.1
+    image: deluan/navidrome:0.57.0
     container_name: navidrome
     user: ${NAVIDROME_UID}:${MEDIA_SHARED_GID}
     security_opt:
