@@ -1,6 +1,6 @@
 services:
   promtail:
-    image:  grafana/promtail:3.5.2
+    image:  grafana/promtail:3.5.3
     container_name: promtail
     restart: unless-stopped
     command: -config.file=/etc/promtail/docker-config.yml
