@@ -69,7 +69,7 @@ services:
 
   sonarr-exporter:
     # https://github.com/onedr0p/exportarr
-    image: ghcr.io/onedr0p/exportarr:v2.2.0
+    image: ghcr.io/onedr0p/exportarr:v2.3.0
     container_name: sonarr-exporter
     user: ${MEDIA_UID}:${MEDIA_GID}
     security_opt:
