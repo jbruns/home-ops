@@ -2,7 +2,7 @@ services:
   sabnzbd:
     # https://github.com/home-operations/containers/pkgs/container/sabnzbd
     # https://github.com/sabnzbd/sabnzbd
-    image: ghcr.io/home-operations/sabnzbd:4.5.2
+    image: ghcr.io/home-operations/sabnzbd:4.5.3
     user: ${SABNZBD_UID}:${MEDIA_SHARED_GID}
     security_opt:
       - no-new-privileges=true
