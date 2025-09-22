@@ -31,7 +31,7 @@ services:
   
   redis-exporter:
     # https://github.com/oliver006/redis_exporter
-    image: oliver006/redis_exporter:v1.75.0
+    image: oliver006/redis_exporter:v1.77.0
     container_name: redis-exporter
     restart: unless-stopped
     user: ${HOME_UID}:${HOME_GID}
