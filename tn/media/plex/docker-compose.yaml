@@ -2,7 +2,7 @@ services:
   plex:
     # https://github.com/home-operations/containers/pkgs/container/plex
     # https://github.com/plexinc/pms-docker
-    image: ghcr.io/home-operations/plex:1.42.1
+    image: ghcr.io/home-operations/plex:1.42.2
     container_name: plex
     user: ${PLEX_UID}:${MEDIA_SHARED_GID}
     group_add:
