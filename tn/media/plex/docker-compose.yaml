@@ -53,6 +53,10 @@ services:
           - proto: udp
             dst_ports:
               - 53
+          # DLNA
+          - proto: udp
+            dst_ports:
+              - 1900
           # HTTP/S
           - proto: tcp
             dst_ports:
