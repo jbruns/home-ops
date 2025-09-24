@@ -59,13 +59,6 @@ scrape_configs:
           container: 'radarr-exporter'
   
   # HOME STACK
-  - job_name: nextcloud
-    scrape_interval: 90s
-    static_configs:
-      - targets: ['nextcloud-exporter:9205']
-        labels:
-          container: 'nextcloud-exporter'
-
   - job_name: redis
     scrape_interval: 90s
     static_configs:

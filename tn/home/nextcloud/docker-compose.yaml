@@ -118,47 +118,5 @@ services:
     networks:
       - backend
 
-  nextcloud-exporter:
-    # https://github.com/xperimental/nextcloud-exporter
-    # https://github.com/xperimental/nextcloud-exporter/pkgs/container/nextcloud-exporter
-    image: ghcr.io/xperimental/nextcloud-exporter:0.8.0
-    restart: unless-stopped
-    container_name: nextcloud-exporter
-    user: ${HOME_UID}:${HOME_GID}
-    security_opt:
-      - no-new-privileges=true
-    # https://github.com/xperimental/nextcloud-exporter#configuration-file
-    command:
-      - '-c /etc/nextcloud-exporter/config.yaml'
-    labels:
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: home
-
-      # network policy
-      whalewall.enabled: true
-      whalewall.rules: |
-        output:
-          # metrics collection
-          - network: common_backend
-            container: nextcloud
-          # metrics scrape
-          - network: common_backend
-            container: prometheus
-    logging:
-      driver: json-file
-      options:
-        max-size: 1m
-        max-file: 1
-        tag: "{{.Name}}"
-    volumes:
-      - type: bind
-        source: ./nextcloud_exporter_config.yaml
-        target: /etc/nextcloud-exporter/config.yaml
-        read_only: true
-        x-sops: true
-    networks:
-      - backend
-
 volumes:
   nextcloud_data:
