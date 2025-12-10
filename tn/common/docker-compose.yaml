@@ -3,7 +3,7 @@
 services:
   common-backup:
     # https://github.com/lawndoc/stack-back
-    image: ghcr.io/lawndoc/stack-back:v1.4.5
+    image: ghcr.io/lawndoc/stack-back:v1.5.4
     restart: unless-stopped
     container_name: common-backup
     env_file: ./stack-back.env
