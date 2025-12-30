@@ -2,7 +2,7 @@ services:
   sonarr:
     # https://github.com/home-operations/containers/pkgs/container/sonarr
     # https://github.com/Sonarr/Sonarr
-    image: ghcr.io/home-operations/sonarr:4.0.16.2943
+    image: ghcr.io/home-operations/sonarr:4.0.16.2946
     user: ${SONARR_UID}:${MEDIA_SHARED_GID}
     security_opt:
       - no-new-privileges=true
