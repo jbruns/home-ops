@@ -1,6 +1,6 @@
 services:  
   alertmanager:
-    image: prom/alertmanager:v0.30.0
+    image: prom/alertmanager:v0.30.1
     container_name: alertmanager
     user: ${MONITORING_UID}:${MONITORING_GID}
     security_opt:
