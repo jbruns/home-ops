@@ -2,7 +2,7 @@ services:
   emby:
     # https://hub.docker.com/r/emby/embyserver
     # https://github.com/MediaBrowser/Emby.Releases/releases
-    image: emby/embyserver:4.9.1.90
+    image: emby/embyserver:4.9.3.0
     container_name: emby
     restart: unless-stopped
     environment:
