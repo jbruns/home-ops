@@ -1,7 +1,7 @@
 services:
   cadvisor:
     # https://github.com/google/cadvisor
-    image: gcr.io/cadvisor/cadvisor:v0.55.1
+    image: ghcr.io/google/cadvisor:0.56.2
     container_name: cadvisor
     restart: unless-stopped
     command:
