@@ -1,7 +1,7 @@
 services:
   vaultwarden:
     # https://hub.docker.com/r/vaultwarden/server
-    image: vaultwarden/server:1.35.2
+    image: vaultwarden/server:1.35.3
     restart: unless-stopped
     container_name: vaultwarden
     user: ${HOME_UID}:${HOME_GID}
