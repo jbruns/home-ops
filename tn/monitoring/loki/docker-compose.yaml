@@ -1,6 +1,6 @@
 services:
   loki:
-    image: grafana/loki:3.6.4
+    image: grafana/loki:3.6.5
     container_name: loki
     user: ${MONITORING_UID}:${MONITORING_GID}
     security_opt:
