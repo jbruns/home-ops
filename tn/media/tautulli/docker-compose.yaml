@@ -2,7 +2,7 @@ services:
   tautulli:
     # https://github.com/home-operations/containers/pkgs/container/tautulli
     # https://github.com/Tautulli/Tautulli
-    image: ghcr.io/home-operations/tautulli:2.16.0
+    image: ghcr.io/home-operations/tautulli:2.16.1
     container_name: tautulli
     user: ${MEDIA_UID}:${MEDIA_GID}
     security_opt:
