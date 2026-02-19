@@ -1,6 +1,6 @@
 services:
   nginx:
-    image: nginxinc/nginx-unprivileged:1.29.3
+    image: nginxinc/nginx-unprivileged:1.29.5
     container_name: nginx
     user: ${COMMON_UID}:${COMMON_GID}
     security_opt:
