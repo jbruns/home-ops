@@ -7,6 +7,10 @@ services:
     container_name: ollama
     # https://github.com/ollama/ollama/issues/6543
     # user: ${HOME_UID}:${HOME_GID}
+    environment:
+      - OLLAMA_KV_CACHE_TYPE=q8_0
+      - OLLAMA_FLASH_ATTENTION=1
+      - OLLAMA_CONTEXT_LENGTH=128000
     labels:
       # logs collection
       logging: promtail
