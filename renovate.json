@@ -3,6 +3,9 @@
   "extends": [
     "config:recommended"
   ],
+  "minimumReleaseAge": "5 days",
+  "schedule": ["after 10am and before 11am on Friday"],
+  "timezone": "America/Los_Angeles",
   "packageRules": [
     {
       "description": "Disable Docker-sourced updates for emby/embyserver (handled by custom manager)",
