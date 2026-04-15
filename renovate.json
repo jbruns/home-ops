@@ -2,5 +2,57 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended"
-  ]
+  ],
+  "packageRules": [
+    {
+      "description": "Disable Docker-sourced updates for emby/embyserver (handled by custom manager)",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["emby/embyserver"],
+      "enabled": false
+    },
+    {
+      "description": "Disable Docker-sourced updates for portainer/portainer-ee (handled by custom manager)",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["portainer/portainer-ee"],
+      "enabled": false
+    },
+    {
+      "description": "Automerge patch version updates",
+      "matchUpdateTypes": ["patch"],
+      "automerge": true
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Use GitHub Releases for emby/embyserver to filter out beta versions",
+      "fileMatch": ["(^|/)docker-compose\\.ya?ml$"],
+      "matchStrings": [
+        "image:\\s*emby/embyserver:(?<currentValue>[\\d.]+)"
+      ],
+      "depNameTemplate": "MediaBrowser/Emby.Releases",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^(?<version>[\\d.]+)$",
+      "versioningTemplate": "loose"
+    },
+    {
+      "customType": "regex",
+      "description": "Use custom datasource for portainer-ee to only track LTS releases",
+      "fileMatch": ["(^|/)docker-compose\\.ya?ml$"],
+      "matchStrings": [
+        "image:\\s*portainer/portainer-ee:(?<currentValue>[\\d.]+)"
+      ],
+      "depNameTemplate": "portainer-ee",
+      "datasourceTemplate": "custom.portainer-lts",
+      "versioningTemplate": "semver"
+    }
+  ],
+  "customDatasources": {
+    "portainer-lts": {
+      "defaultRegistryUrlTemplate": "https://api.github.com/repos/portainer/portainer/releases?per_page=100",
+      "transformTemplates": [
+        "{ \"releases\": $map($[$contains(name, \"LTS\")], function($v) { { \"version\": $v.tag_name, \"sourceUrl\": \"https://github.com/portainer/portainer\", \"changelogUrl\": $v.html_url } }) }"
+      ]
+    }
+  }
 }
