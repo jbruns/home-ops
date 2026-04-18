@@ -1,0 +1,85 @@
+services:
+  tracearr:
+    # https://github.com/connorgallopo/Tracearr/pkgs/container/tracearr
+    # https://github.com/connorgallopo/tracearr
+    image: ghcr.io/connorgallopo/tracearr:supervised-1.4.27
+    container_name: tracearr
+    shm_size: 512mb  # Required for PostgreSQL shared memory (increase for large imports)
+    mem_limit: 3g    # Minimum 3GB required (PostgreSQL + Redis + Node.js)
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536  # TimescaleDB chunks require many file descriptors
+    security_opt:
+      - no-new-privileges=true
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ}
+    labels:
+      stack-back.volumes: true
+      stack-back.volumes.include: "tracearr_postgres,tracearr_redis,tracearr_data,tracearr_backups"
+      
+      # logs collection
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: media
+
+      traefik.enable: true
+
+      # Listen on http, but redirect all requests to https
+      traefik.http.routers.tracearr-http.rule: Host(`tracearr.${DOMAIN}`)
+      traefik.http.routers.tracearr-http.entrypoints: http
+      traefik.http.routers.tracearr-http.middlewares: redirect-https
+
+      # Direct all https requests to the service, checking with crowdsec first
+      traefik.http.routers.tracearr-https.rule: Host(`tracearr.${DOMAIN}`)
+      traefik.http.routers.tracearr-https.entrypoints: https
+      traefik.http.routers.tracearr-https.tls: true
+      traefik.http.routers.tracearr-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.tracearr-https.service: tracearr
+      traefik.http.routers.tracearr-https.middlewares: crowdsec-bouncer
+
+      traefik.http.services.tracearr.loadbalancer.server.port: 3000
+
+      # network policy
+      whalewall.enabled: true
+      whalewall.rules: |
+        output:
+          # DNS
+          - proto: udp
+            dst_ports:
+              - 53
+          # HTTP/S
+          - proto: tcp
+            dst_ports:
+              - 80
+              - 443
+          # Plex
+          - proto: tcp
+            dst_ports:
+              - 32400
+          # reverse proxy
+          - network: common_backend
+            container: traefik
+          # media services
+          - network: common_backend
+            containers: emby
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+    volumes:
+      - tracearr_postgres:/data/postgres
+      - tracearr_redis:/data/redis
+      - tracearr_data:/data/tracearr
+      - tracearr_backups:/data/backup    
+    networks:
+      - backend
+
+volumes:
+  tracearr_postgres:
+  tracearr_redis:
+  tracearr_data:
+  tracearr_backups:
