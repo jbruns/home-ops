@@ -43,7 +43,6 @@ sonarr:
               - WEBRip-2160p
    
     delete_old_custom_formats: true
-    replace_existing_custom_formats: true
     
     # https://trash-guides.info/Sonarr/sonarr-collection-of-custom-formats/
     custom_formats:
@@ -102,6 +101,14 @@ sonarr:
             score: -10000
           - name: 2160p
             score: -10000
+      - trash_ids:
+          # Unwanted
+          - 44ccbcbc74506f208973e1463b11705f # WiTH AD
+        assign_scores_to:
+          - name: 1080p
+            score: -10000
+          - name: 2160p
+            score: -10000
 
       ## 1080p
       - trash_ids:
@@ -118,7 +125,6 @@ sonarr:
           - 9b27ab6498ec0f31a3353992e19434ca # DV (w/o HDR fallback)
           # Streaming services (UHD)
           - 43b3cf48cb385cd3eac608ee6bca7f09 # UHD Streaming Boost
-          - d2d299244a92b8a52d4921ce3897a256 # UHD Streaming Cut
           # Optional (UHD)
           - 83304f261cf516bb208c18c54c0adf97 # SDR (no WEBDL)
         assign_scores_to:
@@ -169,7 +175,6 @@ radarr:
               - WEBRip-2160p
 
     delete_old_custom_formats: true
-    replace_existing_custom_formats: true
     
     # https://trash-guides.info/Radarr/Radarr-collection-of-custom-formats/
     custom_formats:
