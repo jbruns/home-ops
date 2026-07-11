@@ -29,7 +29,9 @@
     {
       "customType": "regex",
       "description": "Use GitHub Releases for emby/embyserver to filter out beta versions",
-      "fileMatch": ["(^|/)docker-compose\\.ya?ml$"],
+      "managerFilePatterns": [
+        "/(^|/)docker-compose\\.ya?ml$/"
+      ],
       "matchStrings": [
         "image:\\s*emby/embyserver:(?<currentValue>[\\d.]+)"
       ],
@@ -41,7 +43,9 @@
     {
       "customType": "regex",
       "description": "Use custom datasource for portainer-ee to only track LTS releases",
-      "fileMatch": ["(^|/)docker-compose\\.ya?ml$"],
+      "managerFilePatterns": [
+        "/(^|/)docker-compose\\.ya?ml$/"
+      ],
       "matchStrings": [
         "image:\\s*portainer/portainer-ee:(?<currentValue>[\\d.]+)"
       ],
