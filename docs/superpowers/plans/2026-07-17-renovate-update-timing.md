@@ -58,7 +58,7 @@ Expected: exit code 0.
 Run:
 
 ```bash
-npx --yes --package renovate renovate-config-validator renovate.json
+npx --yes --package renovate@latest renovate-config-validator renovate.json
 ```
 
 Expected: `Config validated successfully`.
