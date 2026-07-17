@@ -4,7 +4,8 @@
     "config:recommended"
   ],
   "minimumReleaseAge": "5 days",
-  "schedule": ["after 10am and before 11am on Friday"],
+  "minimumReleaseAgeBehaviour": "timestamp-optional",
+  "schedule": ["* 10-13 * * 5"],
   "timezone": "America/Los_Angeles",
   "packageRules": [
     {
@@ -58,7 +59,7 @@
     "portainer-lts": {
       "defaultRegistryUrlTemplate": "https://api.github.com/repos/portainer/portainer/releases?per_page=100",
       "transformTemplates": [
-        "{ \"releases\": $map($[$contains(name, \"LTS\")], function($v) { { \"version\": $v.tag_name, \"sourceUrl\": \"https://github.com/portainer/portainer\", \"changelogUrl\": $v.html_url } }) }"
+        "{ \"releases\": $map($[$contains(name, \"LTS\")], function($v) { { \"version\": $v.tag_name, \"releaseTimestamp\": $v.published_at, \"sourceUrl\": \"https://github.com/portainer/portainer\", \"changelogUrl\": $v.html_url } }) }"
       ]
     }
   }
