@@ -53,7 +53,36 @@ node -e 'const c=require("./renovate.json"); if(c.minimumReleaseAgeBehaviour!=="
 
 Expected: exit code 0.
 
-- [ ] **Step 5: Validate the Renovate configuration**
+- [ ] **Step 5: Validate the Portainer transform against live release data**
+
+Run:
+
+```bash
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+npm install --prefix "$tmp" --silent jsonata
+NODE_PATH="$tmp/node_modules" node <<'NODE'
+const assert = require("node:assert/strict");
+const jsonata = require("jsonata");
+const config = require("./renovate.json");
+
+(async () => {
+  const response = await fetch(config.customDatasources["portainer-lts"].defaultRegistryUrlTemplate);
+  assert.equal(response.ok, true);
+  const input = await response.json();
+  const result = await jsonata(
+    config.customDatasources["portainer-lts"].transformTemplates[0],
+  ).evaluate(input);
+  const release = result.releases.find(({ version }) => version === "2.39.5");
+  assert.ok(release);
+  assert.equal(release.releaseTimestamp, "2026-07-13T22:05:35Z");
+})();
+NODE
+```
+
+Expected: exit code 0.
+
+- [ ] **Step 6: Validate the Renovate configuration**
 
 Run:
 
@@ -63,7 +92,7 @@ npx --yes --package renovate@latest renovate-config-validator renovate.json
 
 Expected: `Config validated successfully`.
 
-- [ ] **Step 6: Commit the implementation**
+- [ ] **Step 7: Commit the implementation**
 
 ```bash
 git add renovate.json
