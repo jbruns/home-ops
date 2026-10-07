@@ -2,6 +2,7 @@ services:
   alertmanager:
     image: prom/alertmanager:v0.34.0
     container_name: alertmanager
+    user: ${MONITORING_UID}:${MONITORING_GID}
     security_opt:
       - no-new-privileges=true
     restart: unless-stopped
