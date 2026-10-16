@@ -34,6 +34,10 @@ services:
     secrets:
       - sops_age_key
       - apprise_urls
+    networks:
+      - default
+      # Prometheus scrapes doco_cd_* metrics on :9120.
+      - metrics
     healthcheck: # the image's built-in /healthcheck
       interval: 10s
       timeout: 5s
@@ -63,6 +67,12 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+
+networks:
+  # Owned by the monitoring Stack (ADR-0002).
+  metrics:
+    name: metrics
+    external: true
 
 volumes:
   data:

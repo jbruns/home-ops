@@ -100,6 +100,12 @@ scrape_configs:
       - targets: ['dcgm-exporter:9400']
         labels: {container: dcgm-exporter, stack: monitoring, tier: info}
 
+  # DOCO-CD STACK
+  - job_name: doco-cd
+    static_configs:
+      - targets: ['doco-cd:9120']
+        labels: {container: doco-cd, stack: doco-cd, tier: warning}
+
   # Home Assistant has its own alerting; scraped for resource utilisation only.
   - job_name: homeassistant
     static_configs:
