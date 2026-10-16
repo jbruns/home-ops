@@ -3,6 +3,7 @@ services:
     image: nvidia/dcgm-exporter:4.2.3-4.1.3-ubuntu22.04
     container_name: dcgm-exporter
     restart: unless-stopped
+    dns_search: .
     cap_add:
       - SYS_ADMIN
     labels:
@@ -12,14 +13,6 @@ services:
       logging: promtail
       logging_jobname: containerlogs
       stackname: monitoring
-
-      # network policy
-      whalewall.enabled: true
-      whalewall.rules: |
-        output:
-          # prometheus: data collection
-          - network: common_backend
-            container: prometheus
     logging:
       driver: json-file
       options:
@@ -27,7 +20,7 @@ services:
         max-file: 1
         tag: "{{.Name}}"
     networks:
-      - backend
+      - default
     deploy:
       resources:
         reservations:

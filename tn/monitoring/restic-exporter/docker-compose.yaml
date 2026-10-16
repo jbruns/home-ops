@@ -4,6 +4,7 @@ services:
     image: ngosang/restic-exporter:2.1.2
     container_name: restic-exporter
     restart: unless-stopped
+    dns_search: .
     security_opt:
       - no-new-privileges=true
     environment:
@@ -33,9 +34,9 @@ services:
     secrets:
       - restic_password
     networks:
-      - backend
+      - default
 
 # Stored encrypted in repo as <name>.sops.txt
 secrets:
   restic_password:
-    file: ./restic_password.txt
+    file: ./restic_password.sops.txt

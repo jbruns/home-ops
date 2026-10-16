@@ -1,0 +1,31 @@
+# MONITORING STACK (deployed by doco-cd)
+## With thanks to https://github.com/ruanbekker/docker-monitoring-stack-gpnc
+
+networks:
+  # Internal traffic between monitoring Services stays on the Stack's default network.
+  # Prometheus and the exporters of other Stacks (ADR-0002). This Stack owns it.
+  metrics:
+    name: metrics
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.29.0.0/24
+  # Traefik and the Exposed Services it routes to.
+  proxy:
+    name: proxy
+    external: true
+  # Legacy flat network; Prometheus stays on it until every exporter has moved to metrics.
+  backend:
+    name: common_backend
+    external: true
+
+include:
+  - ./alertmanager/docker-compose.yaml
+  - ./cadvisor/docker-compose.yaml
+  - ./dcgm-exporter/docker-compose.yaml
+  - ./grafana/docker-compose.yaml
+  - ./loki/docker-compose.yaml
+  - ./node-exporter/docker-compose.yaml
+  - ./prometheus/docker-compose.yaml
+  - ./promtail/docker-compose.yaml
+  - ./restic-exporter/docker-compose.yaml

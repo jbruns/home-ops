@@ -6,6 +6,7 @@ services:
     security_opt:
       - no-new-privileges=true
     restart: unless-stopped
+    dns_search: .
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--web.config.file=/etc/prometheus/web.yml'
@@ -24,6 +25,7 @@ services:
       stackname: monitoring
 
       traefik.enable: true
+      traefik.docker.network: proxy
 
       # Listen on http, but redirect all requests to https
       traefik.http.routers.prometheus-http.rule: Host(`prometheus.${DOMAIN}`)
@@ -39,29 +41,6 @@ services:
       traefik.http.routers.prometheus-https.middlewares: crowdsec-bouncer
 
       traefik.http.services.prometheus.loadbalancer.server.port: 9090
-
-      # network policy
-      whalewall.enabled: true
-      # prometheus: Communicate with traefik, monitoring data sources.
-      whalewall.rules: |
-        output:
-          # DNS
-          - proto: udp
-            dst_ports:
-              - 53
-          # allow communication with metrics exporters
-          - network: common_backend
-            proto: tcp
-            dst_ports:
-              - 1024-65535
-          # reverse proxy
-          - network: common_backend
-            container: traefik
-          # grafana, alertmanager: data collection
-          - network: common_backend
-            container: grafana
-          - network: common_backend
-            container: alertmanager
     logging:
       driver: json-file
       options:
@@ -71,7 +50,7 @@ services:
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - type: bind
-        source: ./web.yml
+        source: ./web.sops.yml
         target: /etc/prometheus/web.yml
         read_only: true
         # Stored encrypted in repo
@@ -83,12 +62,17 @@ services:
     secrets:
       - prometheus_password
     networks:
+      - default
+      - proxy
+      - metrics
       - backend
 
 volumes:
   prometheus_data:
+    name: monitoring_prometheus_data
+    external: true
 
 # Stored encrypted in repo as <name>.sops.txt
 secrets:
   prometheus_password:
-    file: ./prometheus_password.txt
+    file: ./prometheus_password.sops.txt

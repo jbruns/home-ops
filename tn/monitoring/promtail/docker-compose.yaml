@@ -3,6 +3,7 @@ services:
     image:  grafana/promtail:3.6.11@sha256:a761cb834cfaeee29745440d4884d6748f0a08d8f68928db1d707018c1dcfbe9
     container_name: promtail
     restart: unless-stopped
+    dns_search: .
     command: -config.file=/etc/promtail/docker-config.yml
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
@@ -11,14 +12,6 @@ services:
       logging: promtail
       logging_jobname: containerlogs
       stackname: monitoring
-
-      # network policy
-      whalewall.enabled: true
-      whalewall.rules: |
-        output:
-          # loki: data collection
-          - network: common_backend
-            container: loki
     logging:
       driver: json-file
       options:
@@ -30,4 +23,4 @@ services:
       - ${DOCKER_DATA_ROOT}/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
-      - backend
+      - default
