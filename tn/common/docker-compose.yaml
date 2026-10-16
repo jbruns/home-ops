@@ -27,9 +27,11 @@ services:
             dst_ports:
               - 443
               - 80
-          # mariadb backup
+          # mariadb backups (nextcloud and vaultwarden Stacks)
           - network: common_backend
             container: mariadb
+          - network: common_backend
+            container: vaultwarden-db
     volumes: 
       - /var/run/docker.sock:/tmp/docker.sock:ro
       - backup_cache:/cache

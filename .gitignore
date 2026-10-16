@@ -1,3 +1,7 @@
 *.env
 .env
 !*.sops.env
+
+# Decrypted Compose secrets (only the *.sops.txt form is committed)
+tn/**/*.txt
+!tn/**/*.sops.txt
