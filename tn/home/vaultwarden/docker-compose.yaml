@@ -11,17 +11,15 @@ services:
       # https://github.com/dani-garcia/vaultwarden/blob/main/.env.template
       - DOMAIN=https://vault.${ALT_DOMAIN_HOME}
       - HELO_NAME=vault.${ALT_DOMAIN_HOME}
-      # https://github.com/dani-garcia/vaultwarden/wiki/Enabling-admin-page#secure-the-admin_token
-      - ADMIN_TOKEN_FILE=/run/secrets/admin_token
-      - DATABASE_URL_FILE=/run/secrets/database_url
       - SMTP_FROM=${VAULTWARDEN_SMTP_FROM}
       - SMTP_HOST=${VAULTWARDEN_SMTP_HOST}
       - SMTP_USERNAME=${VAULTWARDEN_SMTP_USERNAME}
-      - SMTP_PASSWORD_FILE=/run/secrets/smtp_password
-    secrets:
-      - admin_token
-      - database_url
-      - smtp_password
+    # ADMIN_TOKEN (argon2 hash, single-quoted so Compose does not interpolate its $),
+    # DATABASE_URL and SMTP_PASSWORD. An env_file is read by Compose itself, so it works with
+    # the unpacker's root-only 0600 decrypted files; Compose secrets are bind mounts that the
+    # non-root container cannot read.
+    # https://github.com/dani-garcia/vaultwarden/wiki/Enabling-admin-page#secure-the-admin_token
+    env_file: ./vaultwarden.env
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: critical
@@ -93,14 +91,6 @@ services:
       - vaultwarden_data:/data
     networks:
       - backend
-
-secrets:
-  admin_token:
-    file: ./admin_token.txt
-  database_url:
-    file: ./database_url.txt
-  smtp_password:
-    file: ./smtp_password.txt
 
 volumes:
   vaultwarden_data:
