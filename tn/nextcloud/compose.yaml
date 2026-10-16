@@ -10,9 +10,9 @@ networks:
   metrics:
     name: metrics
     external: true
-  # Legacy flat network; MariaDB stays on it so stack-back (ops) can dump it.
-  backend:
-    name: common_backend
+  # stack-back and the Datastores it dumps; owned by the ops Stack.
+  backup:
+    name: backup
     external: true
 
 include:

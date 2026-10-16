@@ -11,10 +11,6 @@ networks:
   proxy:
     name: proxy
     external: true
-  # Legacy flat network, kept until the databases have moved to backup.
-  backend:
-    name: common_backend
-    external: true
 
 include:
   - ./portainer/docker-compose.yaml
