@@ -11,6 +11,29 @@ This repository contains configurations and scripts for managing a home operatio
 *   **`local`**: Configurations for local development and testing.
 *   **`tn`**: Configurations intended for a specific TrueNAS environment.
 
+## Deploying with doco-cd
+
+[doco-cd](https://doco.cd) polls this repo every 2 minutes and deploys every Stack it finds at `tn/<stack>/compose.yaml` (see `.doco-cd.yml` and ADR-0001). The folder name is the Compose project name. Deleting a Stack folder removes that Stack from the Host but keeps its volumes. Areas still at `tn/<area>/docker-compose.yaml` are not discovered; they are being migrated into Stacks (#419).
+
+- Interpolation values come from the Stack's SOPS-encrypted `.sops.env`, which every Stack must have. Compose files reference other `*.sops.*` files directly. doco-cd decrypts them as root with mode 0600, so a non-root Service must read its secrets via `env_file`, not Compose `secrets`.
+- The age private key lives only at `/mnt/luna/homeops/age.key` on the Host (root, 0400) and offline. Its public key is in `.sops.yaml`.
+- Deploy results are posted to Discord through the `apprise` sidecar.
+
+One-time bootstrap on a fresh Host (doco-cd then manages itself, `tn/doco-cd/`):
+
+```sh
+docker volume create doco-cd_data
+docker run --rm \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v doco-cd_data:/data \
+  -v /mnt/luna/homeops/age.key:/run/secrets/sops_age_key:ro \
+  -e SOPS_AGE_KEY_FILE=/run/secrets/sops_age_key \
+  -e SELF_UPDATE_ENABLED=true \
+  -e POLL_CONFIG="- url: https://github.com/jbruns/home-ops.git
+  reference: main" \
+  <image from tn/doco-cd/compose.yaml> apply-self --bootstrap
+```
+
 ## Setup Instructions
 
 To adapt this repository for your own environment, follow these steps:

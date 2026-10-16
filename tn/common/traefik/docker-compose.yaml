@@ -135,6 +135,11 @@ services:
             proto: tcp
             dst_ports:
               - 1024-65535
+          # Exposed Services on the proxy network (ADR-0002), same ports
+          - network: proxy
+            proto: tcp
+            dst_ports:
+              - 1024-65535
     logging:
       driver: json-file
       options:
@@ -157,6 +162,9 @@ services:
       backend:
         # Static IP within the backend network, so that we can constrain trusted proxies for other services
         ipv4_address: ${TRAEFIK_BACKEND_IPV4}
+      proxy:
+        # Static, so Exposed Services can trust exactly this proxy
+        ipv4_address: 172.30.0.10
 
 volumes:
   traefik_log:

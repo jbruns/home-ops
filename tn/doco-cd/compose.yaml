@@ -1,0 +1,77 @@
+# doco-cd deploys every Stack under tn/ from this repo (ADR-0001), including this one.
+# Bootstrapped once by hand (see README); after that it replaces itself when this file changes.
+services:
+  doco-cd:
+    # Pinned by digest: a self-updating deployer must never move on its own (Renovate bumps it).
+    image: ghcr.io/kimdre/doco-cd:0.128.0@sha256:f7e9d2cf21770b157fd37413236965ac93cad9b5bc05ff78efc55c3b9c6f0008
+    restart: unless-stopped
+    dns_search: .
+    security_opt:
+      - no-new-privileges=true
+    cap_drop:
+      - ALL
+    environment:
+      TZ: ${TZ}
+      SELF_UPDATE_ENABLED: "true"
+      SELF_UPDATE_STRATEGY: auto
+      SOPS_AGE_KEY_FILE: /run/secrets/sops_age_key
+      APPRISE_API_URL: http://apprise:8000/notify
+      APPRISE_NOTIFY_LEVEL: success
+      APPRISE_NOTIFY_URLS_FILE: /run/secrets/apprise_urls
+      POLL_CONFIG: |
+        - url: https://github.com/jbruns/home-ops.git
+          reference: main
+          interval: 120
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: warning
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: doco-cd
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - data:/data
+    secrets:
+      - sops_age_key
+      - apprise_urls
+    healthcheck: # the image's built-in /healthcheck
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+  # Relays doco-cd deploy notifications to Discord. doco-cd does not depend on it:
+  # a failed notification never blocks a Deploy.
+  apprise:
+    image: caronc/apprise:2.0.1
+    restart: unless-stopped
+    dns_search: .
+    security_opt:
+      - no-new-privileges=true
+    environment:
+      TZ: ${TZ}
+      APPRISE_WORKER_COUNT: 1
+      APPRISE_STATEFUL_MODE: disabled
+    labels:
+      tier: info
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: doco-cd
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/status >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  data:
+    name: doco-cd_data
+    external: true
+
+secrets:
+  # Root-only on the Host (0400 in a 0700 dir); never in the repo.
+  sops_age_key:
+    file: /mnt/luna/homeops/age.key
+  apprise_urls:
+    file: ./apprise_urls.sops.txt
