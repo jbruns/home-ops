@@ -1,0 +1,3 @@
+# Network segmentation replaces Whalewall
+
+The threat we care about is lateral movement between Services, not egress. Whalewall (label-driven nftables rules) has had no release since February 2023 and needs a read-write Docker socket. We remove it and instead place Services on purpose-scoped networks: a proxy network for Traefik and the Services it exposes, an internal network per Stack (each app with its Datastores), and a metrics network for Prometheus and its exporters. Egress is deliberately left unfiltered.

@@ -1,0 +1,3 @@
+# Startup Order is enforced by Host scripts, not by Compose
+
+Compose `depends_on` only applies within one project and is ignored when dockerd restarts containers at boot. So: within a Stack we still declare healthchecks and `depends_on: service_healthy` with `restart: true`; a TrueNAS shutdown script stops Stacks in reverse order so `unless-stopped` keeps them down; and a TrueNAS post-init script starts containers in ascending `startup-order` label order, waiting for each to report healthy. This works no matter which tool deployed the containers. After an unplanned power loss there is no ordering, and we rely on restart policies and healthchecks to recover.
