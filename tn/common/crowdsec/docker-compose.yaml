@@ -10,7 +10,10 @@ services:
       # https://hub.docker.com/r/crowdsecurity/crowdsec
       - TZ=${TZ}
       # https://app.crowdsec.net/hub/collections
-      - COLLECTIONS=crowdsecurity/traefik crowdsecurity/http-cve
+      # Reinstalled on every start, so a hub refresh cannot leave dangling links behind.
+      # linux is the image's default base collection; whitelists (private IPs) left it.
+      - COLLECTIONS=crowdsecurity/linux crowdsecurity/traefik crowdsecurity/http-cve
+      - PARSERS=crowdsecurity/whitelists
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: critical
