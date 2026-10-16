@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://doco.cd/v0.128/schemas/deploy.schema.json
 # doco-cd deploys every Stack it finds at tn/<stack>/compose.yaml; the folder name is the
-# Compose project name. Legacy Areas (tn/<area>/docker-compose.yaml) are not discovered.
+# Compose project name.
 # Removing a Stack folder removes that Stack from the Host; its volumes are kept.
 working_dir: tn
 compose_files:

@@ -1,25 +1,104 @@
-# Home Operations Repository
+# home-ops
 
-This repository contains configurations and scripts for managing a home operations environment, including services for media, home automation, and monitoring.
+GitOps for the self-hosted Services on a single TrueNAS SCALE Host. Every Stack is a Docker Compose project in this repo. [Renovate](renovate.json) proposes image updates, and [doco-cd](https://doco.cd) deploys whatever is on `main`.
 
-## Components
+Terms used here (Stack, Service, Datastore, Tier, Page, Digest, ...) are defined in [GLOSSARY.md](GLOSSARY.md). Design decisions are recorded in [docs/adr](docs/adr).
 
-*   **`common`**: Common configurations for services like `nginx`, `traefik`, `portainer`, and `whalewall`.
-*   **`home`**: Configurations for home automation services like `nextcloud`, `open-webui`, `redis`, `syncthing`, and `vaultwarden`.
-*   **`media`**: Configurations for media services like `autobrr`, `emby`, `navidrome`, `nextpvr`, `plex`, `qbittorrent`, `radarr`, `sabnzbd`, `sonarr`, and `tautulli`.
-*   **`monitoring`**: Configurations for monitoring services like `alertmanager`, `cadvisor`, `dcgm-exporter`, `grafana`, `loki`, `node-exporter`, `prometheus`, and `promtail`.
-*   **`local`**: Configurations for local development and testing.
-*   **`tn`**: Configurations intended for a specific TrueNAS environment.
+## Layout
 
-## Deploying with doco-cd
+| Path | Contents |
+|---|---|
+| `tn/<stack>/compose.yaml` | One Stack per folder; the folder name is the Compose project name |
+| `tn/<stack>/.sops.env` | SOPS-encrypted interpolation values for the Stack (required) |
+| `tn/<stack>/env.template` | The keys `.sops.env` must contain, with empty values |
+| `.doco-cd.yml` | How doco-cd discovers and deploys Stacks |
+| `host/` | One-off TrueNAS setup scripts (users and groups) |
+| `.github/scripts/validate.py` | The checks CI runs on every PR |
 
-[doco-cd](https://doco.cd) polls this repo every 2 minutes and deploys every Stack it finds at `tn/<stack>/compose.yaml` (see `.doco-cd.yml` and ADR-0001). The folder name is the Compose project name. Deleting a Stack folder removes that Stack from the Host but keeps its volumes. Areas still at `tn/<area>/docker-compose.yaml` are not discovered; they are being migrated into Stacks (#419).
+## Stacks
 
-- Interpolation values come from the Stack's SOPS-encrypted `.sops.env`, which every Stack must have. Compose files reference other `*.sops.*` files directly. doco-cd decrypts them as root with mode 0600, so a non-root Service must read its secrets via `env_file`, not Compose `secrets`.
-- The age private key lives only at `/mnt/luna/homeops/age.key` on the Host (root, 0400) and offline. Its public key is in `.sops.yaml`.
-- Deploy results are posted to Discord through the `apprise` sidecar.
+| Stack | Services |
+|---|---|
+| `edge` | Traefik, CrowdSec, nginx (catch-all) |
+| `ops` | stack-back (backups), Portainer (viewer here; still deploys asotbz/ops Stacks) |
+| `doco-cd` | doco-cd (self-updating), Apprise for deploy notifications |
+| `monitoring` | Prometheus, Alertmanager, Grafana, Loki, Promtail, cAdvisor, node-exporter, dcgm-exporter, restic-exporter |
+| `nextcloud` | Nextcloud (+ cron), MariaDB, Valkey |
+| `vaultwarden` | Vaultwarden, its own MariaDB |
+| `open-webui` | Open WebUI, Ollama |
+| `syncthing` | Syncthing |
+| `arr` | Sonarr, Radarr, SABnzbd, qBittorrent, autobrr |
+| `plex`, `emby`, `nextpvr`, `navidrome`, `tracearr` | One media Service each |
 
-One-time bootstrap on a fresh Host (doco-cd then manages itself, `tn/doco-cd/`):
+### Shared networks
+
+Each Stack keeps its Datastores on its own `default` network. Only these networks span Stacks (ADR-0002):
+
+| Network | Owned by | Joined by |
+|---|---|---|
+| `proxy` (172.30.0.0/24) | `edge` | Traefik and every Exposed Service |
+| `metrics` (172.29.0.0/24) | `monitoring` | Prometheus and the exporters it scrapes |
+| `backup` | `ops` | stack-back and the databases it dumps |
+
+Other Stacks declare these networks `external: true`, so `edge`, `monitoring` and `ops` must come up first on a fresh Host. Before that, other Stacks' deploys fail and doco-cd retries them.
+
+## How changes reach the Host
+
+1. Open a PR. CI runs `validate.py` (secrets, env, compose, monitoring configs, Cloudflare IPs), plus gitleaks, actionlint and the Renovate config validator.
+2. Merge to `main`.
+3. Within 2 minutes doco-cd pulls `main`, decrypts each Stack's `.sops.env` and referenced `*.sops.*` files, and runs `docker compose up` for every Stack that changed. A failed deploy is retried with a forced recreate of that Stack.
+4. Results go to Discord through Apprise. Repeated failures raise the `DeployFailing` alert.
+
+Deleting a Stack folder removes the Stack from the Host but keeps its volumes. Volumes that predate the one-Stack-per-app split keep their old names (e.g. `home_vaultwarden_data`) through an explicit `name:`; don't rename them without a planned data move (ADR-0004).
+
+Renovate runs Friday mornings (America/Los_Angeles), pins digests, and waits 5 days after a release before proposing it.
+
+## Secrets
+
+- Every secret is SOPS-encrypted with age. The public key is in `.sops.yaml`.
+- The private key lives on the Host at `/mnt/luna/homeops/age.key` (root, 0400) and in an offline backup. Nowhere else.
+- Edit a Stack's values with `sops tn/<stack>/.sops.env`. Add a new key to `env.template` too, or CI fails.
+- Files a Compose file mounts or loads (`env_file`, `secrets`) must be named `*.sops.*` and tracked. Plaintext `.env` and `*.txt` files under `tn/` are gitignored.
+- doco-cd writes decrypted files as root with mode 0600. A non-root Service must therefore read secrets through `env_file`, not Compose `secrets`.
+
+Validate locally before pushing (needs Docker and `pip install -r .github/scripts/requirements.txt`):
+
+```sh
+python3 .github/scripts/validate.py secrets env compose monitoring cloudflare
+```
+
+## Monitoring and alerting
+
+Every Service carries a `tier` label (`critical`, `warning` or `info`), and every alert carries `tier` and `stack`.
+
+- **Critical** alerts Page through Pushover.
+- **Warning** alerts go to the Discord Digest.
+- **Info** is dashboards only.
+- A Heartbeat to healthchecks.io catches a dead Alertmanager or Host.
+
+Rules are in `tn/monitoring/prometheus/alerting-rules.yml` and routing in `tn/monitoring/alertmanager/config.yml`. Silence a Stack you are working on (e.g. `alertname=ContainerDown, stack=<stack>`) in Alertmanager.
+
+## Backups
+
+- stack-back runs nightly (10:12 UTC). It dumps every container labeled `stack-back.mariadb: true` over the `backup` network, then backs up all named volumes into a restic repository at `${ZFS_POOL_ROOT_HDD}/docker-backups`.
+- A TrueNAS Cloud Sync task pushes that dataset to Backblaze B2 daily at 04:00 (SYNC mode).
+- restic-exporter feeds the `BackupStale` and `BackupMetricsMissing` alerts.
+
+## Adding a Stack
+
+1. Create `tn/<stack>/compose.yaml`: the Services, plus `include:` for per-Service files if you like.
+2. Give every Service `restart: unless-stopped`, `dns_search: .`, a healthcheck where possible, and a `tier` label.
+3. For an Exposed Service, join `proxy` (external) and set the `traefik.*` labels including `traefik.docker.network: proxy`. For metrics, join `metrics` and add a scrape job in `prometheus.yml`.
+4. For a database, keep it on the Stack's `default` network, label it `stack-back.mariadb: true`, and add it to `backup`.
+5. Write `env.template`. Create and encrypt `.sops.env` (it must exist even if empty).
+6. Open a PR. doco-cd deploys the Stack once it merges.
+
+## Bootstrapping a fresh Host
+
+1. Run `host/create_usersgroups.sh`. Configure the Apps service so Docker data is on SSD.
+2. Give the Host a second IP. The TrueNAS UI owns 80/443 on the primary address, so Traefik binds to `DOCKER_HOST_IPV4`.
+3. Place the age private key at `/mnt/luna/homeops/age.key` (root, 0400).
+4. Bootstrap doco-cd once. After that it manages itself from `tn/doco-cd/`:
 
 ```sh
 docker volume create doco-cd_data
@@ -34,99 +113,4 @@ docker run --rm \
   <image from tn/doco-cd/compose.yaml> apply-self --bootstrap
 ```
 
-## Setup Instructions
-
-To adapt this repository for your own environment, follow these steps:
-
-1.  **Generate `age` and `sops` keys:**
-    *   Create an `age` key for encrypting secrets.
-    *   Store the key securely offline.
-
-2.  **Configure environment variables:**
-    *   Fill out the `env.template` files in the `common`, `home`, `media`, and `monitoring` directories.
-    *   Specify values for:
-        *   `cert_resolver`
-        *   `domain`
-        *   `email`
-        *   `tz` (timezone)
-        *   `zfs pool root`
-        *   `docker host ip`
-        *   `common backend subnet`
-        *   Cloudflare API key
-        *   `traefik_password_hash` (generate with `htpasswd -nbB username password`)
-
-3.  **Encrypt secrets:**
-    *   Use `sops` to encrypt the `env.template` files to `.sops.env` files:
-        ```bash
-        sops --encrypt --in-place .env.template
-        ```
-
-4.  **Configure TrueNAS (if applicable):**
-    *   Configure the Apps service.
-    *   Add an additional IP address.
-    *   Create a `docker_backups` dataset.
-
-5.  **Set `SOPS_AGE_KEY`:**
-    *   Set the `SOPS_AGE_KEY` environment variable or use the key file directly.
-
-6.  **Decrypt `.sops.env`:**
-    *   Decrypt the `.sops.env` files to `.env` files:
-        ```bash
-        sops --decrypt --in-place .sops.env
-        ```
-
-7.  **Bring up `crowdsec`:**
-    *   Follow the `crowdsec` documentation to enroll and configure bouncers:
-        *   [https://docs.crowdsec.net/docs/cscli/cscli_console_enroll/#cscli-console-enroll](https://docs.crowdsec.net/docs/cscli/cscli_console_enroll/#cscli-console-enroll)
-        *   [https://docs.crowdsec.net/docs/local_api/intro/#bouncers](https://docs.crowdsec.net/docs/local_api/intro/#bouncers)
-    *   Fill in the `traefik` API key.
-
-8.  **Bring up the stack:**
-    *   Use `docker-compose` or `portainer` to bring up the services.
-
-9.  **Configure `portainer`:**
-    *   Access `portainer` via `traefik` (or locally on port `9443` if necessary).
-    *   Set initial credentials.
-    *   Create a directory for `portainer` to unpack the repository to (ownership `root:root`, permissions `chmod -R u=rwX`).
-
-10. **Configure monitoring:**
-    *   Fill out the `monitoring/env.template` file.
-    *   Configure `alertmanager` in `alertmanager/config.yml` (see [https://github.com/ruanbekker/docker-monitoring-stack-gpnc/tree/main/configs/alertmanager](https://github.com/ruanbekker/docker-monitoring-stack-gpnc/tree/main/configs/alertmanager) for examples).
-    *   Configure `alertmanager` web authentication in `alertmanager/web.yml` (see [https://prometheus.io/docs/alerting/latest/https/](https://prometheus.io/docs/alerting/latest/https/) for examples).
-    *   Configure `prometheus` web authentication in `prometheus/web.yml` (see [https://github.com/prometheus/prometheus/blob/release-2.55/documentation/examples/web-config.yml](https://github.com/prometheus/prometheus/blob/release-2.55/documentation/examples/web-config.yml) for examples).
-    *   Fill in usernames and passwords for `prometheus` and `alertmanager` in `grafana/provisioning/datasources.yml`.
-
-11. **Configure media and home services:**
-    *   Fill out the `media/env.template` and `home/env.template` files.
-    *   Be aware that services will be in a first-run state and unsecured until configured.
-
-12. **Change file ownership:**
-    *   Change ownership of the following directories to the specified users and groups:
-        *   `home_*/_data/` to `apps:apps`
-        *   `monitoring_*/_data/` to `apps:apps`
-        *   `common_*/_data/` to `apps:apps`
-        *   `media_emby_*/_data/` to `emby:emby`
-        *   `media_navidrome_*/_data/` to `navidrome:navidrome`
-        *   `media_nextpvr_*/_data/` to `nextpvr:nextpvr`
-        *   `media_plex_*/_data/` to `plex:plex`
-        *   `media_radarr_*/_data/` to `radarr:radarr`
-        *   `media_sabnzbd_*/_data/` to `sabnzbd:sabnzbd`
-        *   `media_sonarr_*/_data/` to `sonarr:sonarr`
-        *   `media_tautulli_*/_data/` to `tautulli:tautulli`
-        *   `media_xteve_*/_data/` to `xteve:xteve`
-
-13. **Adding/removing a service:**
-    *   Create a subdirectory under `stack_name/docker-compose.yaml`.
-    *   Edit `stack_name/docker-compose.yaml` to modify includes and backup volumes.
-    *   Edit `monitoring/prometheus/prometheus.yml` to modify `scrape_configs`.
-    *   (Optional) Cleanup `.env` files.
-    *   Modify users and groups as needed.
-    *   Modify containers, images, and volumes as needed.
-
-## Forking Instructions
-
-1.  Fork this repository to your own account.
-2.  Clone the forked repository to your local machine.
-3.  Follow the setup instructions above to configure the repository for your environment.
-4.  Customize the configurations and scripts to your liking.
-5.  Commit and push your changes to your forked repository.
+5. Enroll CrowdSec and create the Traefik bouncer key (`cscli bouncers add traefik`). Store the key as `TRAEFIK_BOUNCER_API_KEY` in `tn/edge/.sops.env`.

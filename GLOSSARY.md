@@ -12,10 +12,6 @@ _Avoid_: Server, NAS, box
 The unit of deployment: one or more Services plus the Datastores they need, deployed, isolated, and backed up together (e.g. nextcloud, vaultwarden, arr, edge).
 _Avoid_: Project, App Group, app
 
-**Area**:
-A topical grouping of Stacks (common, home, media, monitoring) with no runtime meaning.
-_Avoid_: Stack (for the topical folders), domain
-
 **Service**:
 One long-running workload in a Stack, plus any sidecars that exist only to serve it.
 _Avoid_: App, container
