@@ -1,28 +1,97 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
+    "config:recommended",
+    "docker:pinDigests",
+    "helpers:pinGitHubActionDigests",
+    ":dependencyDashboard",
+    ":enablePreCommit"
   ],
   "minimumReleaseAge": "5 days",
   "minimumReleaseAgeBehaviour": "timestamp-optional",
-  "schedule": ["* 10-13 * * 5"],
+  "schedule": [
+    "* 10-13 * * 5"
+  ],
   "timezone": "America/Los_Angeles",
   "packageRules": [
     {
       "description": "Disable Docker-sourced updates for emby/embyserver (handled by custom manager)",
-      "matchDatasources": ["docker"],
-      "matchPackageNames": ["emby/embyserver"],
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "emby/embyserver"
+      ],
       "enabled": false
     },
     {
       "description": "Disable Docker-sourced updates for portainer/portainer-ee (handled by custom manager)",
-      "matchDatasources": ["docker"],
-      "matchPackageNames": ["portainer/portainer-ee"],
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "portainer/portainer-ee"
+      ],
       "enabled": false
     },
     {
-      "description": "Automerge patch version updates",
-      "matchUpdateTypes": ["patch"],
+      "description": "Grafana logging stack",
+      "matchPackageNames": [
+        "grafana/grafana",
+        "grafana/loki",
+        "grafana/alloy",
+        "grafana/promtail"
+      ],
+      "groupName": "grafana stack"
+    },
+    {
+      "description": "Prometheus and Alertmanager",
+      "matchPackageNames": [
+        "prom/prometheus",
+        "prom/alertmanager"
+      ],
+      "groupName": "prometheus"
+    },
+    {
+      "description": "home-operations arr images",
+      "matchPackageNames": [
+        "ghcr.io/home-operations/radarr",
+        "ghcr.io/home-operations/sonarr",
+        "ghcr.io/home-operations/sabnzbd"
+      ],
+      "groupName": "arr"
+    },
+    {
+      "description": "Automerge patch updates",
+      "matchUpdateTypes": [
+        "patch"
+      ],
+      "automerge": true
+    },
+    {
+      "description": "Automerge minor and digest updates for Info-tier Services",
+      "matchPackageNames": [
+        "ghcr.io/onedr0p/exportarr",
+        "ghcr.io/jsclayton/prometheus-plex-exporter",
+        "oliver006/redis_exporter",
+        "nvidia/dcgm-exporter",
+        "prom/node-exporter",
+        "ghcr.io/google/cadvisor",
+        "ghcr.io/connorgallopo/tracearr",
+        "ollama/ollama"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "digest"
+      ],
+      "automerge": true
+    },
+    {
+      "description": "Automerge pinning of digests",
+      "matchUpdateTypes": [
+        "pin",
+        "pinDigest"
+      ],
       "automerge": true
     }
   ],
@@ -53,6 +122,16 @@
       "depNameTemplate": "portainer-ee",
       "datasourceTemplate": "custom.portainer-lts",
       "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "description": "Versions annotated with # renovate: comments in workflows",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/.+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+\\w+:\\s*\"?(?<currentValue>[^\\s\"]+)\"?"
+      ]
     }
   ],
   "customDatasources": {

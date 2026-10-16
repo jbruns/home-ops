@@ -1,0 +1,6 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "SOPS-encrypted files hold ciphertext only"
+paths = ['''(^|/)[^/]*\.sops\.[^/]+$''']
