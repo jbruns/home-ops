@@ -6,6 +6,7 @@ services:
     security_opt:
       - no-new-privileges=true
     restart: unless-stopped
+    dns_search: .
     command: -config.file=/etc/loki/loki.yaml
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
@@ -14,20 +15,6 @@ services:
       logging: promtail
       logging_jobname: containerlogs
       stackname: monitoring
-
-      # network policy
-      whalewall.enabled: true
-      whalewall.rules: |
-        output:
-          # prometheus, grafana, alertmanager, promtail: data collection
-          - network: common_backend
-            container: prometheus
-          - network: common_backend
-            container: grafana
-          - network: common_backend
-            container: alertmanager
-          - network: common_backend
-            container: promtail
     logging:
       driver: json-file
       options:
@@ -37,4 +24,4 @@ services:
     volumes:
       - ./loki.yaml:/etc/loki/loki.yaml:ro
     networks:
-      - backend
+      - default

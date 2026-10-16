@@ -3,6 +3,7 @@ services:
     image: prom/node-exporter:v1.12.1
     container_name: node-exporter
     restart: unless-stopped
+    dns_search: .
     command:
       - '--path.procfs=/host/proc'
       - '--path.sysfs=/host/sys'
@@ -15,14 +16,6 @@ services:
       logging: promtail
       logging_jobname: containerlogs
       stackname: monitoring
-
-      # network policy
-      whalewall.enabled: true
-      whalewall.rules: |
-        output:
-          # prometheus: data collection
-          - network: common_backend
-            container: prometheus
     logging:
       driver: json-file
       options:
@@ -34,4 +27,4 @@ services:
       - /sys:/host/sys:ro
       - /:/rootfs:ro
     networks:
-      - backend
+      - default

@@ -6,6 +6,7 @@ services:
     security_opt:
       - no-new-privileges=true
     restart: unless-stopped
+    dns_search: .
     command:
       - '--config.file=/etc/alertmanager/config.yml'
       - '--web.config.file=/etc/alertmanager/web.yml'
@@ -24,6 +25,7 @@ services:
       stackname: monitoring
 
       traefik.enable: true
+      traefik.docker.network: proxy
 
       # Listen on http, but redirect all requests to https
       traefik.http.routers.alertmanager-http.rule: Host(`alertmanager.${DOMAIN}`)
@@ -39,30 +41,6 @@ services:
       traefik.http.routers.alertmanager-https.middlewares: crowdsec-bouncer
 
       traefik.http.services.alertmanager.loadbalancer.server.port: 9093
-
-      # network policy
-      whalewall.enabled: true
-      whalewall.rules: |
-        output:
-          # DNS
-          - proto: udp
-            dst_ports:
-              - 53
-          # HTTP/S
-          - proto: tcp
-            dst_ports:
-              - 80
-              - 443
-          # reverse proxy
-          - network: common_backend
-            container: traefik
-          # prometheus, loki, grafana: data collection
-          - network: common_backend
-            container: prometheus
-          - network: common_backend
-            container: loki
-          - network: common_backend
-            container: grafana
     logging:
       driver: json-file
       options:
@@ -72,7 +50,7 @@ services:
     volumes:
       - ./config.yml:/etc/alertmanager/config.yml:ro
       - type: bind
-        source: ./web.yml
+        source: ./web.sops.yml
         target: /etc/alertmanager/web.yml
         read_only: true
         # Stored encrypted in repo
@@ -84,18 +62,21 @@ services:
       - discord_webhook
       - watchdog_url
     networks:
-      - backend
+      - default
+      - proxy
 
 volumes:
   alertmanager_data:
+    name: monitoring_alertmanager_data
+    external: true
 
 # Stored encrypted in repo as <name>.sops.txt
 secrets:
   pushover_user_key:
-    file: ./pushover_user_key.txt
+    file: ./pushover_user_key.sops.txt
   pushover_token:
-    file: ./pushover_token.txt
+    file: ./pushover_token.sops.txt
   discord_webhook:
-    file: ./discord_webhook.txt
+    file: ./discord_webhook.sops.txt
   watchdog_url:
-    file: ./watchdog_url.txt
+    file: ./watchdog_url.sops.txt

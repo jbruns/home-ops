@@ -7,6 +7,7 @@ services:
     security_opt:
       - no-new-privileges=true
     restart: unless-stopped
+    dns_search: .
     environment:
       # https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana
       # GF_<SectionName>_<KeyName>
@@ -28,6 +29,7 @@ services:
       stackname: monitoring
 
       traefik.enable: true
+      traefik.docker.network: proxy
 
       # Listen on http, but redirect all requests to https
       traefik.http.routers.grafana-http.rule: Host(`grafana.${DOMAIN}`)
@@ -43,30 +45,6 @@ services:
       traefik.http.routers.grafana-https.middlewares: crowdsec-bouncer
 
       traefik.http.services.grafana.loadbalancer.server.port: 3000
-
-      # network policy
-      whalewall.enabled: true
-      whalewall.rules: |
-        output:
-          # DNS
-          - proto: udp
-            dst_ports:
-              - 53
-          # HTTP/S
-          - proto: tcp
-            dst_ports:
-              - 80
-              - 443
-          # reverse proxy
-          - network: common_backend
-            container: traefik
-          # prometheus, loki, alertmanager: data collection
-          - network: common_backend
-            container: prometheus
-          - network: common_backend
-            container: loki
-          - network: common_backend
-            container: alertmanager
     logging:
       driver: json-file
       options:
@@ -75,7 +53,7 @@ services:
         tag: "{{.Name}}"
     volumes:
       - type: bind
-        source: ./provisioning/datasources.yml
+        source: ./provisioning/datasources.sops.yml
         target: /etc/grafana/provisioning/datasources/provisioning-datasources.yaml
         read_only: true
         # Stored encrypted in repo
@@ -83,7 +61,10 @@ services:
       - ./plugins/app.yaml:/etc/grafana/provisioning/plugins/app.yaml:ro
       - grafana_data:/var/lib/grafana
     networks:
-      - backend
+      - default
+      - proxy
 
 volumes:
   grafana_data:
+    name: monitoring_grafana_data
+    external: true
