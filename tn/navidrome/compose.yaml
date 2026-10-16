@@ -8,6 +8,7 @@ services:
     security_opt:
       - no-new-privileges=true
     restart: unless-stopped
+    dns_search: .
     environment:
       # https://www.navidrome.org/docs/usage/configuration-options/#environment-variables
       - ND_ENABLETRANSCODINGCONFIG=true
@@ -20,9 +21,10 @@ services:
       # logs collection
       logging: promtail
       logging_jobname: containerlogs
-      stackname: media
+      stackname: navidrome
 
       traefik.enable: true
+      traefik.docker.network: proxy
 
       # Listen on http, but redirect all requests to https
       traefik.http.routers.navidrome-http.rule: Host(`navidrome.${DOMAIN}`)
@@ -38,23 +40,6 @@ services:
       traefik.http.routers.navidrome-https.middlewares: crowdsec-bouncer
 
       traefik.http.services.navidrome.loadbalancer.server.port: 4533
-
-      # network policy
-      whalewall.enabled: true
-      whalewall.rules: |
-        output:
-          # DNS
-          - proto: udp
-            dst_ports:
-              - 53
-          # HTTP/S
-          - proto: tcp
-            dst_ports:
-              - 80
-              - 443
-          # reverse proxy
-          - network: common_backend
-            container: traefik
     logging:
       driver: json-file
       options:
@@ -65,7 +50,16 @@ services:
       - navidrome_data:/data
       - ${ZFS_POOL_ROOT_HDD}/media/music/FLAC:/music:ro
     networks:
-      - backend
+      - default
+      - proxy
 
 volumes:
   navidrome_data:
+    name: media_navidrome_data
+    external: true
+
+networks:
+  # Traefik and the Exposed Services it routes to; owned by the edge (common) Stack.
+  proxy:
+    name: proxy
+    external: true

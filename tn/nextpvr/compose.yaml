@@ -8,6 +8,7 @@ services:
     security_opt:
       - no-new-privileges=true
     restart: unless-stopped
+    dns_search: .
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: warning
@@ -17,9 +18,10 @@ services:
       # Enable log collection via Promtail
       logging: promtail
       logging_jobname: containerlogs
-      stackname: media
+      stackname: nextpvr
 
       traefik.enable: true
+      traefik.docker.network: proxy
 
       # Listen on http, but redirect all requests to https
       traefik.http.routers.nextpvr-http.rule: Host(`nextpvr.${DOMAIN}`)
@@ -35,23 +37,6 @@ services:
       traefik.http.routers.nextpvr-https.middlewares: crowdsec-bouncer
 
       traefik.http.services.nextpvr.loadbalancer.server.port: 8866
-
-      # network policy
-      whalewall.enabled: true
-      whalewall.rules: |
-        output:
-          # DNS
-          - proto: udp
-            dst_ports:
-              - 53
-          # HTTP/S
-          - proto: tcp
-            dst_ports:
-              - 80
-              - 443
-          # reverse proxy
-          - network: common_backend
-            container: traefik
     logging:
       driver: json-file
       options:
@@ -63,8 +48,19 @@ services:
       - nextpvr_buffer:/buffer
       - ${ZFS_POOL_ROOT_HDD}/media/nextpvr_recordings:/recordings
     networks:
-      - backend
+      - default
+      - proxy
 
 volumes:
   nextpvr_buffer:
+    name: media_nextpvr_buffer
+    external: true
   nextpvr_config:
+    name: media_nextpvr_config
+    external: true
+
+networks:
+  # Traefik and the Exposed Services it routes to; owned by the edge (common) Stack.
+  proxy:
+    name: proxy
+    external: true

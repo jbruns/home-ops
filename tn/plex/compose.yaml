@@ -11,6 +11,7 @@ services:
     security_opt:
       - no-new-privileges=true
     restart: unless-stopped
+    dns_search: .
     environment:
       - TZ=${TZ}
 
@@ -25,9 +26,10 @@ services:
       # logs collection
       logging: promtail
       logging_jobname: containerlogs
-      stackname: media
+      stackname: plex
 
       traefik.enable: true
+      traefik.docker.network: proxy
 
       # Listen on http, but redirect all requests to https
       traefik.http.routers.plex-http.rule: Host(`plex.${DOMAIN}`)
@@ -43,33 +45,6 @@ services:
       traefik.http.routers.plex-https.middlewares: crowdsec-bouncer
 
       traefik.http.services.plex.loadbalancer.server.port: 32400
-
-      # network policy
-      whalewall.enabled: true
-      whalewall.rules: |
-        mapped_ports:
-          external:
-            allow: true
-        output:
-          # DNS
-          - proto: udp
-            dst_ports:
-              - 53
-          # DLNA
-          - proto: udp
-            dst_ports:
-              - 1900
-          # HTTP/S
-          - proto: tcp
-            dst_ports:
-              - 80
-              - 443
-          # reverse proxy
-          - network: common_backend
-            container: traefik
-          # metrics collection
-          - network: common_backend
-            container: plex-exporter
     logging:
       driver: json-file
       options:
@@ -88,7 +63,8 @@ services:
       - ${ZFS_POOL_ROOT_HDD}/media:/data:ro
       - ${ZFS_POOL_ROOT_HDD}/media/plex_recordings:/recordings
     networks:
-      - backend
+      - default
+      - proxy
     deploy:
       resources:
         reservations:
@@ -105,6 +81,7 @@ services:
     security_opt:
       - no-new-privileges=true
     restart: unless-stopped
+    dns_search: .
     environment:
       # https://github.com/jsclayton/prometheus-plex-exporter?tab=readme-ov-file#configuration
       - PLEX_SERVER=http://plex:32400
@@ -115,18 +92,7 @@ services:
       # logs collection
       logging: promtail
       logging_jobname: containerlogs
-      stackname: media
-      
-      # network policy
-      whalewall.enabled: true
-      whalewall.rules: |
-        output:
-          # metrics collection
-          - network: common_backend
-            container: plex
-          # metrics scrape
-          - network: common_backend
-            container: prometheus
+      stackname: plex
     logging:
       driver: json-file
       options:
@@ -134,8 +100,23 @@ services:
         max-file: 1
         tag: "{{.Name}}"
     networks:
-      - backend
+      - default
+      - metrics
 
 volumes:
   plex_config:
+    name: media_plex_config
+    external: true
   plex_transcode:
+    name: media_plex_transcode
+    external: true
+
+networks:
+  # Traefik and the Exposed Services it routes to; owned by the edge (common) Stack.
+  proxy:
+    name: proxy
+    external: true
+  # Prometheus and exporters; owned by the monitoring Stack (ADR-0002).
+  metrics:
+    name: metrics
+    external: true

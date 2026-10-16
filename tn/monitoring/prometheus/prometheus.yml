@@ -37,22 +37,22 @@ scrape_configs:
   - job_name: plex
     static_configs:
       - targets: ['plex-exporter:9000']
-        labels: {container: plex-exporter, stack: media, tier: info}
+        labels: {container: plex-exporter, stack: plex, tier: info}
 
   - job_name: sabnzbd
     static_configs:
       - targets: ['sabnzbd-exporter:9711']
-        labels: {container: sabnzbd-exporter, stack: media, tier: info}
+        labels: {container: sabnzbd-exporter, stack: arr, tier: info}
 
   - job_name: sonarr
     static_configs:
       - targets: ['sonarr-exporter:9707']
-        labels: {container: sonarr-exporter, stack: media, tier: info}
+        labels: {container: sonarr-exporter, stack: arr, tier: info}
 
   - job_name: radarr
     static_configs:
       - targets: ['radarr-exporter:9708']
-        labels: {container: radarr-exporter, stack: media, tier: info}
+        labels: {container: radarr-exporter, stack: arr, tier: info}
 
   # HOME STACK
   - job_name: redis

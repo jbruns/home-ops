@@ -4,6 +4,7 @@ services:
     image: ghcr.io/linuxserver/qbittorrent:5.2.4@sha256:97333cc1ccf903e0bbcd8eb67e3332e4970e9c1ecabe145e499e9c0847ebcaed
     container_name: qbittorrent
     restart: unless-stopped
+    dns_search: .
     environment:
       # https://docs.linuxserver.io/images/docker-qbittorrent
       - PUID=${QBITTORRENT_UID}
@@ -19,9 +20,10 @@ services:
       # logs collection
       logging: promtail
       logging_jobname: containerlogs
-      stackname: media
+      stackname: arr
 
       traefik.enable: true
+      traefik.docker.network: proxy
 
       # Listen on http, but redirect all requests to https
       traefik.http.routers.qbittorrent-http.rule: Host(`qbittorrent.${DOMAIN}`)
@@ -37,36 +39,6 @@ services:
       traefik.http.routers.qbittorrent-https.middlewares: crowdsec-bouncer
 
       traefik.http.services.qbittorrent.loadbalancer.server.port: 8080
-
-      # network policy
-      whalewall.enabled: true
-      whalewall.rules: |
-        mapped_ports:
-          external:
-            allow: true
-        output:
-          # DNS
-          - proto: udp
-            dst_ports:
-              - 53
-          # HTTP/S
-          - proto: tcp
-            dst_ports:
-              - 80
-              - 443
-          # bt on unpriv ports
-          - proto: tcp
-            dst_ports:
-              - 1024-65535
-          - proto: udp
-            dst_ports:
-              - 1024-65535
-          # reverse proxy
-          - network: common_backend
-            container: traefik
-          # transfers
-          - network: common_backend
-            container: autobrr
     logging:
       driver: json-file
       options:
@@ -83,7 +55,10 @@ services:
       - ${ZFS_POOL_ROOT_HDD}/media/audiobooks:/data/audiobooks
       - ./copy_complete.py:/config/scripts/copy_complete.py:ro
     networks:
-      - backend
+      - default
+      - proxy
 
 volumes:
   qbittorrent_config:
+    name: media_qbittorrent_config
+    external: true

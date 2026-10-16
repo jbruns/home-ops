@@ -5,6 +5,7 @@ services:
     image: emby/embyserver:4.9.5.0
     container_name: emby
     restart: unless-stopped
+    dns_search: .
     environment:
       - UID=${EMBY_UID}
       - GID=${MEDIA_SHARED_GID}
@@ -20,9 +21,10 @@ services:
       # logs collection
       logging: promtail
       logging_jobname: containerlogs
-      stackname: media
+      stackname: emby
 
       traefik.enable: true
+      traefik.docker.network: proxy
 
       # Listen on http, but redirect all requests to https
       traefik.http.routers.emby-http.rule: Host(`emby.${DOMAIN}`)
@@ -38,29 +40,6 @@ services:
       traefik.http.routers.emby-https.middlewares: crowdsec-bouncer
 
       traefik.http.services.emby.loadbalancer.server.port: 32800
-
-      # network policy
-      whalewall.enabled: true
-      whalewall.rules: |
-        mapped_ports:
-          external:
-            allow: true
-        output:
-          # DNS
-          - proto: udp
-            dst_ports:
-              - 53
-          # HTTP/S
-          - proto: tcp
-            dst_ports:
-              - 80
-              - 443
-          # reverse proxy
-          - network: common_backend
-            container: traefik
-          # metrics collection
-          - network: common_backend
-            container: emby-exporter
     logging:
       driver: json-file
       options:
@@ -77,7 +56,8 @@ services:
       - ${ZFS_POOL_ROOT_HDD}/media/movies:/data/movies:ro
       - ${ZFS_POOL_ROOT_HDD}/media/emby_recordings:/recordings
     networks:
-      - backend
+      - default
+      - proxy
     deploy:
       resources:
         reservations:
@@ -88,3 +68,11 @@ services:
 
 volumes:
   emby_config:
+    name: media_emby_config
+    external: true
+
+networks:
+  # Traefik and the Exposed Services it routes to; owned by the edge (common) Stack.
+  proxy:
+    name: proxy
+    external: true

@@ -7,6 +7,7 @@ services:
     security_opt:
       - no-new-privileges=true
     restart: unless-stopped
+    dns_search: .
     environment:
       # https://autobrr.com/installation/docker#environment-variables
       - TZ=${TZ}
@@ -19,9 +20,10 @@ services:
       # logs collection
       logging: promtail
       logging_jobname: containerlogs
-      stackname: media
+      stackname: arr
 
       traefik.enable: true
+      traefik.docker.network: proxy
 
       # Listen on http, but redirect all requests to https
       traefik.http.routers.autobrr-http.rule: Host(`autobrr.${DOMAIN}`)
@@ -37,30 +39,6 @@ services:
       traefik.http.routers.autobrr-https.middlewares: crowdsec-bouncer
 
       traefik.http.services.autobrr.loadbalancer.server.port: 7474
-
-      # network policy
-      whalewall.enabled: true
-      whalewall.rules: |
-        output:
-          # DNS
-          - proto: udp
-            dst_ports:
-              - 53
-          # HTTP/S
-          - proto: tcp
-            dst_ports:
-              - 80
-              - 443
-          # IRC
-          - proto: tcp
-            dst_ports:
-              - 6667-7000
-          # reverse proxy
-          - network: common_backend
-            container: traefik
-          # transfers
-          - network: common_backend
-            container: qbittorrent
     logging:
       driver: json-file
       options:
@@ -70,7 +48,10 @@ services:
     volumes:
       - autobrr_config:/config
     networks:
-      - backend
+      - default
+      - proxy
 
 volumes:
   autobrr_config:
+    name: media_autobrr_config
+    external: true
