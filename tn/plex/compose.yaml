@@ -12,6 +12,14 @@ services:
       - no-new-privileges=true
     restart: unless-stopped
     dns_search: .
+    # /identity answers once the server is accepting requests; the exporter waits for it.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:32400/identity"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 5s
     environment:
       - TZ=${TZ}
 
@@ -78,6 +86,10 @@ services:
     image: ghcr.io/jsclayton/prometheus-plex-exporter
     container_name: plex-exporter
     user: ${MEDIA_UID}:${MEDIA_GID}
+    # Exits if Plex is not answering yet, which fails the Deploy.
+    depends_on:
+      plex:
+        condition: service_healthy
     security_opt:
       - no-new-privileges=true
     restart: unless-stopped
