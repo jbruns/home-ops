@@ -8,6 +8,7 @@ services:
     security_opt:
       - no-new-privileges=true
     restart: unless-stopped
+    dns_search: .
     command:
       # Debug-level logging as necessary
       # - --log.level=DEBUG
@@ -63,7 +64,7 @@ services:
       # logs collection
       logging: promtail
       logging_jobname: containerlogs
-      stackname: common
+      stackname: edge
 
       # Traefik Dashboard
       traefik.enable: true
@@ -107,39 +108,6 @@ services:
 
       ## Redirect to HTTPS
       traefik.http.middlewares.redirect-https.redirectScheme.scheme: https
-
-      # network policy
-      whalewall.enabled: true
-      whalewall.rules: |
-        mapped_ports:
-          external:
-            allow: true
-        output:
-          # DNS
-          - proto: udp
-            dst_ports:
-              - 53
-          # HTTP/S
-          - proto: tcp
-            dst_ports:
-              - 80
-              - 443
-          # crowdsec-bouncer
-          - network: common_backend
-            container: crowdsec
-          # metrics scrape
-          - network: common_backend
-            container: prometheus
-          # allow communication outbound to downstream services on unpriv ports
-          - network: common_backend
-            proto: tcp
-            dst_ports:
-              - 1024-65535
-          # Exposed Services on the proxy network (ADR-0002), same ports
-          - network: proxy
-            proto: tcp
-            dst_ports:
-              - 1024-65535
     logging:
       driver: json-file
       options:
@@ -159,14 +127,20 @@ services:
       # Allow Traefik to get updates from the Docker engine
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
-      backend:
-        # Static IP within the backend network, so that we can constrain trusted proxies for other services
-        ipv4_address: ${TRAEFIK_BACKEND_IPV4}
+      # CrowdSec LAPI and AppSec
+      default: {}
       proxy:
         # Static, so Exposed Services can trust exactly this proxy
         ipv4_address: 172.30.0.10
+      metrics: {}
 
 volumes:
   traefik_log:
+    name: common_traefik_log
+    external: true
   traefik_le:
+    name: common_traefik_le
+    external: true
   traefik_plugins-storage:
+    name: common_traefik_plugins-storage
+    external: true

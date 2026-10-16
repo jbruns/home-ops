@@ -1,0 +1,21 @@
+# EDGE STACK (deployed by doco-cd)
+# Ingress: Traefik (ports 80/443), the CrowdSec engine behind its bouncer, and nginx for
+# error pages and the catch-all route.
+
+networks:
+  # Traefik and the Exposed Services it routes to; owned here (ADR-0002).
+  proxy:
+    name: proxy
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+  # Prometheus and exporters; owned by the monitoring Stack.
+  metrics:
+    name: metrics
+    external: true
+
+include:
+  - ./crowdsec/docker-compose.yaml
+  - ./nginx/docker-compose.yaml
+  - ./traefik/docker-compose.yaml

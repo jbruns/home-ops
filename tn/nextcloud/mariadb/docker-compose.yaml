@@ -40,7 +40,7 @@ services:
       - mariadb_data:/var/lib/mysql
     networks:
       - default
-      # stack-back (common) dumps the databases over common_backend.
+      # stack-back (ops) dumps the databases over common_backend.
       - backend
 
 secrets:

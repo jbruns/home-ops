@@ -6,15 +6,17 @@ services:
     security_opt:
       - no-new-privileges=true
     restart: unless-stopped
+    dns_search: .
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: warning
       # logs collection
       logging: promtail
       logging_jobname: containerlogs
-      stackname: common
+      stackname: edge
 
       traefik.enable: true
+      traefik.docker.network: proxy
 
       # Catch-all for any undefined hostname. Handle error pages.
       traefik.http.routers.nginx-http.rule: HostRegexp(`.+`)
@@ -40,13 +42,6 @@ services:
 
       # Chain the catch-all middlewares together
       traefik.http.middlewares.catch-all.chain.middlewares: crowdsec-bouncer,error-pages
-
-      # network policy
-      whalewall.enabled: true
-      whalewall.rules: |
-        output:
-          - network: common_backend
-            container: traefik
     logging:
       driver: json-file
       options:
@@ -61,4 +56,5 @@ services:
       - ./error-pages/snippets/error_pages.conf:/etc/nginx/snippets/error_pages.conf:ro
       - ./error-pages/snippets/error_pages_content.conf:/etc/nginx/snippets/error_pages_content.conf:ro
     networks:
-      - backend
+      - default
+      - proxy
