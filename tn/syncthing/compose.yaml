@@ -5,6 +5,7 @@ services:
     image: syncthing/syncthing:2.1
     container_name: syncthing
     restart: unless-stopped
+    dns_search: .
     environment:
       - PUID=${HOME_UID}
       - PGID=${HOME_GID}
@@ -17,9 +18,10 @@ services:
       # logs collection
       logging: promtail
       logging_jobname: containerlogs
-      stackname: home
+      stackname: syncthing
 
       traefik.enable: true
+      traefik.docker.network: proxy
 
       # Listen on http, but redirect all requests to https
       traefik.http.routers.syncthing-http.rule: Host(`syncthing.${DOMAIN}`)
@@ -35,26 +37,6 @@ services:
       traefik.http.routers.syncthing-https.middlewares: crowdsec-bouncer
 
       traefik.http.services.syncthing.loadbalancer.server.port: 8384
-
-      # network policy
-      whalewall.enabled: true
-      whalewall.rules: |
-        mapped_ports:
-          external:
-            allow: true
-        output:
-          # DNS
-          - proto: udp
-            dst_ports:
-              - 53
-          # HTTP/S
-          - proto: tcp
-            dst_ports:
-              - 80
-              - 443
-          # reverse proxy
-          - network: common_backend
-            container: traefik
     ports:
       - 22000:22000  # Sync (TCP)
       - 22000:22000/udp  # Sync (QUIC)
@@ -66,7 +48,16 @@ services:
     volumes:
       - syncthing_data:/var/syncthing
     networks:
-      - backend
+      - default
+      - proxy
 
 volumes:
   syncthing_data:
+    name: home_syncthing_data
+    external: true
+
+networks:
+  # Traefik and the Exposed Services it routes to; owned by the edge (common) Stack.
+  proxy:
+    name: proxy
+    external: true

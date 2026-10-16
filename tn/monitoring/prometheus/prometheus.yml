@@ -54,12 +54,12 @@ scrape_configs:
       - targets: ['radarr-exporter:9708']
         labels: {container: radarr-exporter, stack: arr, tier: info}
 
-  # HOME STACK
+  # NEXTCLOUD STACK (Valkey; redis_exporter speaks the same protocol)
   - job_name: redis
     scrape_interval: 90s
     static_configs:
       - targets: ['redis-exporter:9121']
-        labels: {container: redis-exporter, stack: home, tier: info}
+        labels: {container: redis-exporter, stack: nextcloud, tier: info}
 
   # MONITORING STACK
   - job_name: prometheus

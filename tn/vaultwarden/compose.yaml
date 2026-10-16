@@ -3,6 +3,7 @@ services:
     # https://hub.docker.com/r/vaultwarden/server
     image: vaultwarden/server:1.37.2
     restart: unless-stopped
+    dns_search: .
     container_name: vaultwarden
     user: ${HOME_UID}:${HOME_GID}
     security_opt:
@@ -15,11 +16,12 @@ services:
       - SMTP_HOST=${VAULTWARDEN_SMTP_HOST}
       - SMTP_USERNAME=${VAULTWARDEN_SMTP_USERNAME}
     # ADMIN_TOKEN (argon2 hash, single-quoted so Compose does not interpolate its $),
-    # DATABASE_URL and SMTP_PASSWORD. An env_file is read by Compose itself, so it works with
-    # the unpacker's root-only 0600 decrypted files; Compose secrets are bind mounts that the
-    # non-root container cannot read.
+    # DATABASE_URL and SMTP_PASSWORD. doco-cd decrypts the file; Compose reads it as an env_file.
     # https://github.com/dani-garcia/vaultwarden/wiki/Enabling-admin-page#secure-the-admin_token
-    env_file: ./vaultwarden.env
+    env_file: ./vaultwarden.sops.env
+    depends_on:
+      vaultwarden-db:
+        condition: service_healthy
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: critical
@@ -29,9 +31,10 @@ services:
       # logs collection
       logging: promtail
       logging_jobname: containerlogs
-      stackname: home
+      stackname: vaultwarden
 
       traefik.enable: true
+      traefik.docker.network: proxy
 
       # Listen on http, but redirect all requests to https
       traefik.http.routers.vaultwarden-http.rule: Host(`vault.${ALT_DOMAIN_HOME}`)
@@ -57,30 +60,6 @@ services:
       traefik.http.middlewares.vaultwarden-chain.chain.middlewares: crowdsec-bouncer, vaultwarden-headers
       
       traefik.http.services.vaultwarden.loadbalancer.server.port: 80
-
-      # network policy
-      whalewall.enabled: true
-      whalewall.rules: |
-        output:
-          # DNS
-          - proto: udp
-            dst_ports:
-              - 53
-          # HTTP/S
-          - proto: tcp
-            dst_ports:
-              - 80
-              - 443
-          # SMTP
-          - proto: tcp
-            dst_ports:
-              - 587
-          # reverse proxy
-          - network: common_backend
-            container: traefik
-          # database services
-          - network: common_backend
-            container: mariadb
     logging:
       driver: json-file
       options:
@@ -90,7 +69,71 @@ services:
     volumes:
       - vaultwarden_data:/data
     networks:
+      - default
+      - proxy
+
+  vaultwarden-db:
+    # https://hub.docker.com/_/mariadb
+    image: mariadb:11.8.9
+    container_name: vaultwarden-db
+    restart: unless-stopped
+    dns_search: .
+    # Exit 0 whenever the server answers, even "access denied"; no credentials needed.
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "127.0.0.1", "--silent"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 5s
+    environment:
+      - MARIADB_ROOT_PASSWORD_FILE=/run/secrets/vaultwarden_db_root_password
+    # MARIADB_DATABASE/USER/PASSWORD: Vaultwarden's own account (created on first init);
+    # stack-back dumps with it too.
+    env_file:
+      - ./db.sops.env
+    secrets:
+      - vaultwarden_db_root_password
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: critical
+      stack-back.mariadb: true
+
+      # logs collection
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: vaultwarden
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - default
+      # stack-back (common) dumps the database over common_backend.
       - backend
+
+networks:
+  # Traefik and the Exposed Services it routes to; owned by the edge (common) Stack.
+  proxy:
+    name: proxy
+    external: true
+  # Legacy flat network; the database stays on it so stack-back (common) can dump it.
+  backend:
+    name: common_backend
+    external: true
+
+secrets:
+  vaultwarden_db_root_password:
+    file: ./db_root_password.sops.txt
 
 volumes:
   vaultwarden_data:
+    name: home_vaultwarden_data
+    external: true
+  db_data:
+    name: vaultwarden_db_data
+    external: true

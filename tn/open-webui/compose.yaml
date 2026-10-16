@@ -4,6 +4,7 @@ services:
     # https://github.com/ollama/ollama/blob/main/envconfig/config.go#L233
     image: ollama/ollama:0.34.3
     restart: unless-stopped
+    dns_search: .
     container_name: ollama
     # https://github.com/ollama/ollama/issues/6543
     # user: ${HOME_UID}:${HOME_GID}
@@ -18,22 +19,6 @@ services:
       logging: promtail
       logging_jobname: containerlogs
       stackname: home    
-      # network policy
-      whalewall.enabled: true
-      whalewall.rules: |
-        output:
-          # DNS
-          - proto: udp
-            dst_ports:
-              - 53
-          # HTTP/S
-          - proto: tcp
-            dst_ports:
-              - 80
-              - 443
-          # frontend
-          - network: common_backend
-            container: open-webui
     logging:
       driver: json-file
       options:
@@ -43,7 +28,7 @@ services:
     volumes:
       - ollama_data:/root/.ollama
     networks:
-      - backend
+      - default
     deploy:
       resources:
         reservations:
@@ -57,6 +42,7 @@ services:
     # https://github.com/open-webui/open-webui
     image: ghcr.io/open-webui/open-webui:v0.11.3
     restart: unless-stopped
+    dns_search: .
     container_name: open-webui
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
@@ -69,9 +55,10 @@ services:
       # logs collection
       logging: promtail
       logging_jobname: containerlogs
-      stackname: home
+      stackname: open-webui
 
       traefik.enable: true
+      traefik.docker.network: proxy
 
       # Listen on http, but redirect all requests to https
       traefik.http.routers.open-webui-http.rule: Host(`openwebui.${DOMAIN}`)
@@ -87,26 +74,6 @@ services:
       traefik.http.routers.open-webui-https.middlewares: crowdsec-bouncer
 
       traefik.http.services.open-webui.loadbalancer.server.port: 8080
-
-      # network policy
-      whalewall.enabled: true
-      whalewall.rules: |
-        output:
-          # DNS
-          - proto: udp
-            dst_ports:
-              - 53
-          # HTTP/S
-          - proto: tcp
-            dst_ports:
-              - 80
-              - 443
-          # reverse proxy
-          - network: common_backend
-            container: traefik
-          # LLM backend
-          - network: common_backend
-            container: ollama
     logging:
       driver: json-file
       options:
@@ -116,8 +83,19 @@ services:
     volumes:
       - open-webui_data:/app/backend/data
     networks:
-      - backend
+      - default
+      - proxy
 
 volumes:
   ollama_data:
+    name: home_ollama_data
+    external: true
   open-webui_data:
+    name: home_open-webui_data
+    external: true
+
+networks:
+  # Traefik and the Exposed Services it routes to; owned by the edge (common) Stack.
+  proxy:
+    name: proxy
+    external: true

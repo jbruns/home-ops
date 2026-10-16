@@ -1,0 +1,70 @@
+services:
+  # Nextcloud's memcache and file locking. Nothing here needs to survive a restart, so no persistence.
+  valkey:
+    # https://hub.docker.com/r/valkey/valkey
+    image: valkey/valkey:9.1.2-alpine
+    container_name: valkey
+    restart: unless-stopped
+    dns_search: .
+    security_opt:
+      - no-new-privileges=true
+    command: ["valkey-server", "--requirepass", "${REDIS_PASSWORD}", "--save", "", "--appendonly", "no", "--loglevel", "warning"]
+    environment:
+      # valkey-cli reads the password from here (healthcheck).
+      - REDISCLI_AUTH=${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli ping | grep -q PONG"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+      start_interval: 2s
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: critical
+
+      # logs collection
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: nextcloud
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+    networks:
+      - default
+
+  redis-exporter:
+    # https://github.com/oliver006/redis_exporter
+    image: oliver006/redis_exporter:v1.90.0
+    container_name: redis-exporter
+    restart: unless-stopped
+    dns_search: .
+    user: ${HOME_UID}:${HOME_GID}
+    security_opt:
+      - no-new-privileges=true
+    environment:
+      - REDIS_ADDR=redis://valkey:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    depends_on:
+      valkey:
+        condition: service_healthy
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: info
+
+      # logs collection
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: nextcloud
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+    networks:
+      - default
+      - metrics

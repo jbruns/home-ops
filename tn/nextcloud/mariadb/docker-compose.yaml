@@ -4,11 +4,21 @@ services:
     image: mariadb:11.8.9
     container_name: mariadb
     restart: unless-stopped
+    dns_search: .
+    # Exit 0 whenever the server answers, even "access denied"; no credentials needed.
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "127.0.0.1", "--silent"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 5s
     environment:
       # https://mariadb.com/kb/en/mariadb-server-docker-official-image-environment-variables/
       - MARIADB_ROOT_PASSWORD_FILE=/run/secrets/mariadb_root_password
+    # MARIADB_USER/PASSWORD: the read-only account stack-back dumps with.
     env_file:
-      - ./backup_cred.env
+      - ./backup_cred.sops.env
     secrets:
       - mariadb_root_password
     labels:
@@ -19,18 +29,7 @@ services:
       # logs collection
       logging: promtail
       logging_jobname: containerlogs
-      stackname: home
-
-      # network policy
-      whalewall.enabled: true
-      whalewall.rules: |
-        output:
-          # nextcloud database
-          - network: common_backend
-            container: nextcloud
-          # vaultwarden database
-          - network: common_backend
-            container: vaultwarden
+      stackname: nextcloud
     logging:
       driver: json-file
       options:
@@ -40,11 +39,15 @@ services:
     volumes:
       - mariadb_data:/var/lib/mysql
     networks:
+      - default
+      # stack-back (common) dumps the databases over common_backend.
       - backend
 
 secrets:
   mariadb_root_password:
-    file: ./mariadb_root_password.txt
+    file: ./mariadb_root_password.sops.txt
 
 volumes:
   mariadb_data:
+    name: home_mariadb_data
+    external: true
