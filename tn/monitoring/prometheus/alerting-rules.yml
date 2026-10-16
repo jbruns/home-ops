@@ -146,7 +146,7 @@ groups:
           ) > 26 * 3600
         labels:
           tier: critical
-          stack: common
+          stack: ops
         annotations:
           summary: "No {{ $labels.kind }} backup in over 26h"
           description: "The newest restic snapshot of {{ $labels.kind }} is {{ $value | humanizeDuration }} old."
@@ -156,7 +156,7 @@ groups:
         for: 3h
         labels:
           tier: critical
-          stack: common
+          stack: ops
         annotations:
           summary: Backup freshness is unknown
           description: The restic exporter has reported no snapshots for 3 hours, so BackupStale cannot fire.

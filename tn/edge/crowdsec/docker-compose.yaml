@@ -6,6 +6,7 @@ services:
     security_opt:
       - no-new-privileges=true
     restart: unless-stopped
+    dns_search: .
     environment:
       # https://hub.docker.com/r/crowdsecurity/crowdsec
       - TZ=${TZ}
@@ -23,27 +24,7 @@ services:
       # logs collection
       logging: promtail
       logging_jobname: containerlogs
-      stackname: common
-
-      # network policy
-      whalewall.enabled: true
-      whalewall.rules: |
-        output:
-          # DNS
-          - proto: udp
-            dst_ports:
-              - 53
-          # HTTP/S
-          - proto: tcp
-            dst_ports:
-              - 80
-              - 443
-          # reverse proxy
-          - network: common_backend
-            container: traefik
-          # metrics scrape
-          - network: common_backend
-            container: prometheus
+      stackname: edge
     logging:
       driver: json-file
       options:
@@ -57,9 +38,16 @@ services:
       # Allow Crowdsec to read and parse Traefik access logs
       - traefik_log:/var/log/traefik:ro
     networks:
-      - backend
+      - default
+      - metrics
 
 volumes:
   crowdsec_log:
+    name: common_crowdsec_log
+    external: true
   crowdsec_config:
+    name: common_crowdsec_config
+    external: true
   crowdsec_data:
+    name: common_crowdsec_data
+    external: true

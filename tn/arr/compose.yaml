@@ -3,7 +3,7 @@
 # default network; the exporters also join metrics for Prometheus.
 
 networks:
-  # Traefik and the Exposed Services it routes to; owned by the edge (common) Stack.
+  # Traefik and the Exposed Services it routes to; owned by the edge Stack.
   proxy:
     name: proxy
     external: true

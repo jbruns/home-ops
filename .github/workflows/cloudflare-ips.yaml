@@ -1,7 +1,7 @@
 name: cloudflare-ips
 
 # Opens a PR when Cloudflare's published edge ranges no longer match the ones Traefik
-# trusts for X-Forwarded-For (tn/common/traefik/docker-compose.yaml).
+# trusts for X-Forwarded-For (tn/edge/traefik/docker-compose.yaml).
 on:
   schedule:
     - cron: "17 14 * * 1"
@@ -37,10 +37,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$BRANCH"
-          git commit -qam "fix(common): update trusted Cloudflare ranges"
+          git commit -qam "fix(edge): update trusted Cloudflare ranges"
           git push -q --force origin "$BRANCH"
           if [ "$(gh pr view "$BRANCH" --json state -q .state 2>/dev/null)" != OPEN ]; then
-            gh pr create --head "$BRANCH" --title "fix(common): update trusted Cloudflare ranges" \
+            gh pr create --head "$BRANCH" --title "fix(edge): update trusted Cloudflare ranges" \
               --body "Cloudflare's published edge ranges (https://api.cloudflare.com/client/v4/ips) changed. Traefik and the CrowdSec bouncer trust X-Forwarded-For only from these ranges. After merging, redeploy \`common\`."
           fi
           gh workflow run validate.yaml --ref "$BRANCH"

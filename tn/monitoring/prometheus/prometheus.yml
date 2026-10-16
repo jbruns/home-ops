@@ -22,16 +22,16 @@ alerting:
 # An exporter's tier is about the exporter itself. The Service it describes is covered
 # by container alerts from cAdvisor, which use that Service's own `tier` label.
 scrape_configs:
-  # COMMON STACK
+  # EDGE STACK
   - job_name: traefik
     static_configs:
       - targets: ['traefik:8082']
-        labels: {container: traefik, stack: common, tier: critical}
+        labels: {container: traefik, stack: edge, tier: critical}
 
   - job_name: crowdsec
     static_configs:
       - targets: ['crowdsec:6060']
-        labels: {container: crowdsec, stack: common, tier: critical}
+        labels: {container: crowdsec, stack: edge, tier: critical}
 
   # MEDIA STACK
   - job_name: plex

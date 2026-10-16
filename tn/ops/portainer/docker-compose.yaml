@@ -8,6 +8,7 @@ services:
     security_opt:
       - no-new-privileges=true
     restart: unless-stopped
+    dns_search: .
     environment:
       # https://github.com/orgs/portainer/discussions/9755#discussioncomment-8804428
       - COMPOSE_UNPACKER_IMAGE=ghcr.io/jbruns/compose-unpacker:2.45.0-sops.1
@@ -20,9 +21,10 @@ services:
       # logs collection
       logging: promtail
       logging_jobname: containerlogs
-      stackname: common
+      stackname: ops
 
       traefik.enable: true
+      traefik.docker.network: proxy
 
       # Listen on http, but redirect all requests to https
       traefik.http.routers.portainer-http.rule: Host(`pio.${DOMAIN}`)
@@ -38,27 +40,6 @@ services:
       traefik.http.routers.portainer-https.middlewares: crowdsec-bouncer
 
       traefik.http.services.portainer.loadbalancer.server.port: 9000
-
-      # network policy
-      whalewall.enabled: true
-      whalewall.rules: |
-        output:
-          # DNS
-          - proto: udp
-            dst_ports:
-              - 53
-          # HTTP/S
-          - proto: tcp
-            dst_ports:
-              - 80
-              - 443
-          # Portainer Agent
-          - proto: tcp
-            dst_ports:
-              - 9001
-          # reverse proxy
-          - network: common_backend
-            container: traefik
     logging:
       driver: json-file
       options:
@@ -72,7 +53,10 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - portainer_data:/data
     networks:
-      - backend
+      - default
+      - proxy
 
 volumes:
   portainer_data:
+    name: common_portainer_data
+    external: true
