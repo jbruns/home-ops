@@ -1,0 +1,41 @@
+services:
+  restic-exporter:
+    # https://github.com/ngosang/restic-exporter
+    image: ngosang/restic-exporter:2.1.2
+    container_name: restic-exporter
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges=true
+    environment:
+      RESTIC_REPOSITORY: /backups
+      RESTIC_PASSWORD_FILE: /run/secrets/restic_password
+      REFRESH_INTERVAL: "3600"
+      INCLUDE_PATHS: "true"
+      # stack-back already runs `restic check` after every backup; a second check here would contend for the lock.
+      NO_CHECK: "true"
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: warning
+
+      # logs collection
+      logging: promtail
+      logging_jobname: containerlogs
+      stackname: monitoring
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+    volumes:
+      # The local restic repository stack-back writes to; read-only, every restic call uses --no-lock.
+      - ${ZFS_POOL_ROOT_HDD}/docker-backups:/backups:ro
+    secrets:
+      - restic_password
+    networks:
+      - backend
+
+# Stored encrypted in repo as <name>.sops.txt
+secrets:
+  restic_password:
+    file: ./restic_password.txt

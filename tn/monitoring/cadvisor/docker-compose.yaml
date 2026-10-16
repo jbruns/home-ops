@@ -12,6 +12,8 @@ services:
       - --docker_only=true
       - --housekeeping_interval=10s
     labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: warning
       # logs collection
       logging: promtail
       logging_jobname: containerlogs

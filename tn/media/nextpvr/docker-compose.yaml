@@ -9,6 +9,8 @@ services:
       - no-new-privileges=true
     restart: unless-stopped
     labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: warning
       stack-back.volumes: true
       stack-back.volumes.include: "nextpvr_config"
       

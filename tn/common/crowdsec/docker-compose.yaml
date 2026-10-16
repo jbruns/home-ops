@@ -12,6 +12,8 @@ services:
       # https://app.crowdsec.net/hub/collections
       - COLLECTIONS=crowdsecurity/traefik crowdsecurity/http-cve
     labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: critical
       stack-back.volumes: true
       stack-back.volumes.include: "crowdsec_data,crowdsec_config"
 

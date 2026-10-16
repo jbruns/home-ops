@@ -7,96 +7,101 @@ rule_files:
   - /etc/prometheus/recording-rules.yml
   - /etc/prometheus/alerting-rules.yml
 
+# Prometheus and Alertmanager both require basic auth (web.yml). The `prometheus` user is
+# a machine credential shared by both; its password is a Compose secret.
 alerting:
   alertmanagers:
     - scheme: http
+      basic_auth:
+        username: prometheus
+        password_file: /run/secrets/prometheus_password
       static_configs:
         - targets: ['alertmanager:9093']
 
+# Every target carries `stack` and `tier` labels; TargetDown alerts route on them.
+# An exporter's tier is about the exporter itself. The Service it describes is covered
+# by container alerts from cAdvisor, which use that Service's own `tier` label.
 scrape_configs:
   # COMMON STACK
   - job_name: traefik
     static_configs:
-      - targets: [ 'traefik:8082']
-        labels:
-          container: 'traefik'
+      - targets: ['traefik:8082']
+        labels: {container: traefik, stack: common, tier: critical}
 
   - job_name: crowdsec
     static_configs:
-      - targets: [ 'crowdsec:6060']
-        labels:
-          container: 'crowdsec'
+      - targets: ['crowdsec:6060']
+        labels: {container: crowdsec, stack: common, tier: critical}
 
   # MEDIA STACK
-  - job_name: emby
-    static_configs:
-      - targets: [ 'emby-exporter:9210']
-        labels:
-          container: 'emby-exporter'  
-
   - job_name: plex
     static_configs:
-      - targets: [ 'plex-exporter:9000']
-        labels:
-          container: 'plex-exporter'  
+      - targets: ['plex-exporter:9000']
+        labels: {container: plex-exporter, stack: media, tier: info}
 
   - job_name: sabnzbd
     static_configs:
-      - targets: [ 'sabnzbd-exporter:9711']
-        labels:
-          container: 'sabnzbd-exporter'  
+      - targets: ['sabnzbd-exporter:9711']
+        labels: {container: sabnzbd-exporter, stack: media, tier: info}
 
   - job_name: sonarr
     static_configs:
-      - targets: [ 'sonarr-exporter:9707']
-        labels:
-          container: 'sonarr-exporter'  
+      - targets: ['sonarr-exporter:9707']
+        labels: {container: sonarr-exporter, stack: media, tier: info}
 
   - job_name: radarr
     static_configs:
-      - targets: [ 'radarr-exporter:9708']
-        labels:
-          container: 'radarr-exporter'
-  
+      - targets: ['radarr-exporter:9708']
+        labels: {container: radarr-exporter, stack: media, tier: info}
+
   # HOME STACK
   - job_name: redis
     scrape_interval: 90s
     static_configs:
       - targets: ['redis-exporter:9121']
-        labels:
-          container: 'redis-exporter'
-          
-  # core monitoring services. likely do not need to be modified.
+        labels: {container: redis-exporter, stack: home, tier: info}
+
+  # MONITORING STACK
   - job_name: prometheus
+    basic_auth:
+      username: prometheus
+      password_file: /run/secrets/prometheus_password
     static_configs:
-      - targets: [ 'localhost:9090' ]
-        labels:
-          container: 'prometheus'
+      - targets: ['localhost:9090']
+        labels: {container: prometheus, stack: monitoring, tier: critical}
 
   - job_name: alertmanager
+    basic_auth:
+      username: prometheus
+      password_file: /run/secrets/prometheus_password
     static_configs:
-      - targets: [ 'alertmanager:9093' ]
-        labels:
-          container: 'alertmanager'
+      - targets: ['alertmanager:9093']
+        labels: {container: alertmanager, stack: monitoring, tier: critical}
 
+  # node-exporter and cAdvisor feed the Host and container alerts, so losing them is Warning.
   - job_name: node-exporter
     static_configs:
-      - targets: [ 'node-exporter:9100' ]
-        labels:
-          container: 'node-exporter'
+      - targets: ['node-exporter:9100']
+        labels: {container: node-exporter, stack: monitoring, tier: warning}
 
   - job_name: cadvisor
     static_configs:
-      - targets: [ 'cadvisor:8080' ]
-        labels:
-          container: 'cadvisor'
-  
-  - job_name: homeassistant
+      - targets: ['cadvisor:8080']
+        labels: {container: cadvisor, stack: monitoring, tier: warning}
+
+  - job_name: restic
+    scrape_interval: 60s
     static_configs:
-      - targets: [ 'ha.lan.bruns.house:9100' ]
+      - targets: ['restic-exporter:8001']
+        labels: {container: restic-exporter, stack: monitoring, tier: warning}
 
   - job_name: dcgm-exporter
     static_configs:
-      - targets: [ 'dcgm-exporter:9400' ]
-        labels:
-          container: 'dcgm-exporter'
+      - targets: ['dcgm-exporter:9400']
+        labels: {container: dcgm-exporter, stack: monitoring, tier: info}
+
+  # Home Assistant has its own alerting; scraped for resource utilisation only.
+  - job_name: homeassistant
+    static_configs:
+      - targets: ['ha.lan.bruns.house:9100']
+        labels: {stack: external, tier: info}

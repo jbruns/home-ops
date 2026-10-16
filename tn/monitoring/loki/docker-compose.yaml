@@ -8,6 +8,8 @@ services:
     restart: unless-stopped
     command: -config.file=/etc/loki/loki.yaml
     labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: warning
       # logs collection
       logging: promtail
       logging_jobname: containerlogs
@@ -34,6 +36,5 @@ services:
         tag: "{{.Name}}"
     volumes:
       - ./loki.yaml:/etc/loki/loki.yaml:ro
-      - ./rules.yaml:/etc/loki/rules/fake/loki-rules.yml:ro
     networks:
       - backend

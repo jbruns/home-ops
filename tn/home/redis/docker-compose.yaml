@@ -9,6 +9,8 @@ services:
     environment:
       - REDIS_ARGS=--requirepass ${REDIS_PASSWORD} --save 60 1000 --appendonly yes --loglevel warning
     labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: critical
       # logs collection
       logging: promtail
       logging_jobname: containerlogs
@@ -42,6 +44,8 @@ services:
       - REDIS_ADDR=redis://redis:6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
     labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: info
       # logs collection
       logging: promtail
       logging_jobname: containerlogs

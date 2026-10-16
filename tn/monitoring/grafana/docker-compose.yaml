@@ -17,6 +17,8 @@ services:
       - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER}
       - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
     labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: warning
       stack-back.volumes: true
       stack-back.volumes.include: "grafana_data"
       

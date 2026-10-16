@@ -8,6 +8,8 @@ services:
     container_name: common-backup
     env_file: ./stack-back.env
     labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: critical
       logging: promtail
       logging_jobname: containerlogs
       stackname: common

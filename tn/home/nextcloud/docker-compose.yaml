@@ -5,6 +5,8 @@ services:
     container_name: nextcloud
     restart: unless-stopped
     labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: critical
       stack-back.volumes: true
       stack-back.volumes.include: "nextcloud_data"
       
@@ -92,6 +94,8 @@ services:
     # solely for Nextcloud cron job
     entrypoint: /cron.sh
     labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: warning
       logging: promtail
       logging_jobname: containerlogs
       stackname: home

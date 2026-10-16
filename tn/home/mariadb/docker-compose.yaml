@@ -12,6 +12,8 @@ services:
     secrets:
       - mariadb_root_password
     labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: critical
       stack-back.mariadb: true
 
       # logs collection

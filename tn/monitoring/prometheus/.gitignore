@@ -1,1 +1,3 @@
 web.yml
+*.txt
+!*.sops.txt

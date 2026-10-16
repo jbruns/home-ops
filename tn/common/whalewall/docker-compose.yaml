@@ -7,6 +7,8 @@ services:
       - NET_ADMIN
     network_mode: host
     labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: info
       # logs collection
       logging: promtail
       logging_jobname: containerlogs
