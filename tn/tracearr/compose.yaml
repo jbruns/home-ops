@@ -13,6 +13,7 @@ services:
     security_opt:
       - no-new-privileges=true
     restart: unless-stopped
+    dns_search: .
     environment:
       - TZ=${TZ}
     labels:
@@ -24,9 +25,10 @@ services:
       # logs collection
       logging: promtail
       logging_jobname: containerlogs
-      stackname: media
+      stackname: tracearr
 
       traefik.enable: true
+      traefik.docker.network: proxy
 
       # Listen on http, but redirect all requests to https
       traefik.http.routers.tracearr-http.rule: Host(`tracearr.${DOMAIN}`)
@@ -42,30 +44,6 @@ services:
       traefik.http.routers.tracearr-https.middlewares: crowdsec-bouncer
 
       traefik.http.services.tracearr.loadbalancer.server.port: 3000
-
-      # network policy
-      whalewall.enabled: true
-      whalewall.rules: |
-        output:
-          # DNS
-          - proto: udp
-            dst_ports:
-              - 53
-          # HTTP/S
-          - proto: tcp
-            dst_ports:
-              - 80
-              - 443
-          # Plex
-          - proto: tcp
-            dst_ports:
-              - 32400
-          # reverse proxy
-          - network: common_backend
-            container: traefik
-          # media services
-          - network: common_backend
-            containers: emby
     logging:
       driver: json-file
       options:
@@ -78,10 +56,25 @@ services:
       - tracearr_data:/data/tracearr
       - tracearr_backups:/data/backup    
     networks:
-      - backend
+      - default
+      - proxy
 
 volumes:
   tracearr_postgres:
+    name: media_tracearr_postgres
+    external: true
   tracearr_redis:
+    name: media_tracearr_redis
+    external: true
   tracearr_data:
+    name: media_tracearr_data
+    external: true
   tracearr_backups:
+    name: media_tracearr_backups
+    external: true
+
+networks:
+  # Traefik and the Exposed Services it routes to; owned by the edge (common) Stack.
+  proxy:
+    name: proxy
+    external: true

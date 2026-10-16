@@ -8,6 +8,7 @@ services:
       - no-new-privileges=true
     container_name: radarr
     restart: unless-stopped
+    dns_search: .
     environment:
       - TZ=${TZ}
     labels:
@@ -19,9 +20,10 @@ services:
       # logs collection
       logging: promtail
       logging_jobname: containerlogs
-      stackname: media
+      stackname: arr
 
       traefik.enable: true
+      traefik.docker.network: proxy
 
       # Listen on http, but redirect all requests to https
       traefik.http.routers.radarr-http.rule: Host(`radarr.${DOMAIN}`)
@@ -37,26 +39,6 @@ services:
       traefik.http.routers.radarr-https.middlewares: crowdsec-bouncer
 
       traefik.http.services.radarr.loadbalancer.server.port: 7878
-
-      # network policy
-      whalewall.enabled: true
-      whalewall.rules: |
-        output:
-          # DNS
-          - proto: udp
-            dst_ports:
-              - 53
-          # HTTP/S
-          - proto: tcp
-            dst_ports:
-              - 80
-              - 443
-          # reverse proxy
-          - network: common_backend
-            container: traefik
-          # metrics collection
-          - network: common_backend
-            container: radarr-exporter
     logging:
       driver: json-file
       options:
@@ -67,7 +49,8 @@ services:
       - radarr_config:/config
       - ${ZFS_POOL_ROOT_HDD}/media:/data
     networks:
-      - backend
+      - default
+      - proxy
 
   radarr-exporter:
     # https://github.com/onedr0p/exportarr
@@ -77,6 +60,7 @@ services:
     security_opt:
       - no-new-privileges=true
     restart: unless-stopped
+    dns_search: .
     command: ["radarr"]
     environment:
       # https://github.com/onedr0p/exportarr#configuration
@@ -89,18 +73,7 @@ services:
       # logs collection
       logging: promtail
       logging_jobname: containerlogs
-      stackname: media
-      
-      # network policy
-      whalewall.enabled: true
-      whalewall.rules: |
-        output:
-          # metrics collection
-          - network: common_backend
-            container: radarr
-          # metrics scrape
-          - network: common_backend
-            container: prometheus
+      stackname: arr
     logging:
       driver: json-file
       options:
@@ -108,7 +81,10 @@ services:
         max-file: 1
         tag: "{{.Name}}"
     networks:
-      - backend
+      - default
+      - metrics
 
 volumes:
   radarr_config:
+    name: media_radarr_config
+    external: true
