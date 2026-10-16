@@ -14,10 +14,6 @@ networks:
   proxy:
     name: proxy
     external: true
-  # Legacy flat network; Prometheus stays on it until every exporter has moved to metrics.
-  backend:
-    name: common_backend
-    external: true
 
 include:
   - ./alertmanager/docker-compose.yaml

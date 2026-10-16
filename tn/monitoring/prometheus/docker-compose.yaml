@@ -65,7 +65,6 @@ services:
       - default
       - proxy
       - metrics
-      - backend
 
 volumes:
   prometheus_data:

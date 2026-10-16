@@ -27,8 +27,6 @@ services:
       - default
       # Dumps the databases (stack-back.mariadb label) over this network.
       - backup
-      # Transitional: the databases are still on common_backend until they join backup.
-      - backend
 
 volumes:
   backup_cache:
