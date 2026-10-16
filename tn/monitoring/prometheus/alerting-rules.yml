@@ -109,16 +109,20 @@ groups:
   - name: backups
     rules:
       # stack-back writes one snapshot of all volumes plus one per database dump. Snapshot
-      # groups also carry the container hostname, which changes on every recreate, so take the
-      # newest snapshot per path.
+      # groups carry the container hostname (changes on every recreate) and the exact path list
+      # (changes whenever a volume is added or removed). Retention keeps superseded groups for
+      # years, so group by kind (volumes or databases) rather than by path or hostname.
       - alert: BackupStale
-        expr: time() - max by (snapshot_paths) (restic_backup_timestamp) > 26 * 3600
+        expr: |
+          time() - max by (kind) (
+            label_replace(restic_backup_timestamp, "kind", "$1", "snapshot_paths", "^/(volumes|databases).*")
+          ) > 26 * 3600
         labels:
           tier: critical
           stack: common
         annotations:
-          summary: "No backup of {{ $labels.snapshot_paths }} in over 26h"
-          description: "The newest restic snapshot of {{ $labels.snapshot_paths }} is {{ $value | humanizeDuration }} old."
+          summary: "No {{ $labels.kind }} backup in over 26h"
+          description: "The newest restic snapshot of {{ $labels.kind }} is {{ $value | humanizeDuration }} old."
 
       - alert: BackupMetricsMissing
         expr: absent(restic_backup_timestamp)
