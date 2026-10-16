@@ -106,6 +106,29 @@ groups:
         annotations:
           summary: Host clock is not synchronising
 
+  - name: deploys
+    rules:
+      # doco-cd retries a failed Deploy on every poll (2 min). One failure that a retry fixes is
+      # already reported to Discord; two or more in 10 minutes means the Stack is stuck.
+      - alert: DeployFailing
+        expr: sum by (deployment) (increase(doco_cd_deployment_errors_total[10m])) >= 2
+        labels:
+          tier: warning
+          stack: "{{ $labels.deployment }}"
+        annotations:
+          summary: "Deploys of {{ $labels.deployment }} keep failing"
+          description: "doco-cd failed to deploy {{ $labels.deployment }} {{ $value | humanize }} times in 10 minutes."
+
+      # Without polls, merged changes never reach the Host.
+      - alert: DeployPollFailing
+        expr: sum(increase(doco_cd_poll_errors_total[15m])) >= 3
+        labels:
+          tier: warning
+          stack: doco-cd
+        annotations:
+          summary: doco-cd cannot poll the repository
+          description: "{{ $value | humanize }} polls of the repository failed in 15 minutes."
+
   - name: backups
     rules:
       # stack-back writes one snapshot of all volumes plus one per database dump. Snapshot
