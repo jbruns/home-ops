@@ -12,6 +12,8 @@ services:
       # https://www.navidrome.org/docs/usage/configuration-options/#environment-variables
       - ND_ENABLETRANSCODINGCONFIG=true
     labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: warning
       stack-back.volumes: true
       stack-back.volumes.include: "navidrome_data"
       

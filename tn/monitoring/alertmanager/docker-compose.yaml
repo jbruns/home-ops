@@ -13,6 +13,8 @@ services:
       - '--storage.path=/alertmanager'
       - '--web.external-url=https://alertmanager.${DOMAIN}'
     labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: critical
       stack-back.volumes: true
       stack-back.volumes.include: "alertmanager_data"
       
@@ -68,12 +70,7 @@ services:
         max-file: 1
         tag: "{{.Name}}"
     volumes:
-      - type: bind
-        source: ./config.yml
-        target: /etc/alertmanager/config.yml
-        read_only: true
-        # Stored encrypted in repo
-        x-sops: true
+      - ./config.yml:/etc/alertmanager/config.yml:ro
       - type: bind
         source: ./web.yml
         target: /etc/alertmanager/web.yml
@@ -81,8 +78,24 @@ services:
         # Stored encrypted in repo
         x-sops: true
       - alertmanager_data:/alertmanager
+    secrets:
+      - pushover_user_key
+      - pushover_token
+      - discord_webhook
+      - watchdog_url
     networks:
       - backend
 
 volumes:
   alertmanager_data:
+
+# Stored encrypted in repo as <name>.sops.txt
+secrets:
+  pushover_user_key:
+    file: ./pushover_user_key.txt
+  pushover_token:
+    file: ./pushover_token.txt
+  discord_webhook:
+    file: ./discord_webhook.txt
+  watchdog_url:
+    file: ./watchdog_url.txt

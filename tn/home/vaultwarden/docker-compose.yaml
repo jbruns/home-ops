@@ -23,6 +23,8 @@ services:
       - database_url
       - smtp_password
     labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: critical
       stack-back.volumes: true
       stack-back.volumes.include: "vaultwarden_data"
       

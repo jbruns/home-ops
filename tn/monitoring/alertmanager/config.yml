@@ -1,0 +1,53 @@
+# Routing by Tier (see GLOSSARY.md):
+#   critical -> Pushover Page, and also the Discord Digest for the record
+#   warning  -> Discord Digest, grouped per Stack, repeated every 12h
+#   info     -> never notifies
+#   Watchdog -> Heartbeat to healthchecks.io; silence means the alert pipeline is broken
+# An alert without a tier label falls through to Discord so it can't go unseen.
+# Secrets are SOPS-encrypted in the repo and mounted as Compose secrets.
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: discord
+  group_by: [stack]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 12h
+  routes:
+    - matchers: [alertname="Watchdog"]
+      receiver: heartbeat
+      group_by: [alertname]
+      group_wait: 0s
+      group_interval: 1m
+      repeat_interval: 1m
+    - matchers: [tier="info"]
+      receiver: blackhole
+    - matchers: [tier="critical"]
+      receiver: pushover
+      group_by: [stack, alertname]
+      group_wait: 10s
+      repeat_interval: 4h
+      continue: true
+    - matchers: [tier=~"critical|warning"]
+      receiver: discord
+
+receivers:
+  - name: blackhole
+
+  - name: heartbeat
+    webhook_configs:
+      - url_file: /run/secrets/watchdog_url
+        send_resolved: false
+
+  - name: pushover
+    pushover_configs:
+      - user_key_file: /run/secrets/pushover_user_key
+        token_file: /run/secrets/pushover_token
+        priority: '{{ if eq .Status "firing" }}1{{ else }}0{{ end }}'
+        send_resolved: true
+
+  - name: discord
+    discord_configs:
+      - webhook_url_file: /run/secrets/discord_webhook
+        send_resolved: true

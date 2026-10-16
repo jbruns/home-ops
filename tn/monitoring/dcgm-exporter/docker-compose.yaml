@@ -6,6 +6,8 @@ services:
     cap_add:
       - SYS_ADMIN
     labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: info
       # logs collection
       logging: promtail
       logging_jobname: containerlogs

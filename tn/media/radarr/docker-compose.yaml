@@ -11,6 +11,8 @@ services:
     environment:
       - TZ=${TZ}
     labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: warning
       stack-back.volumes: true
       stack-back.volumes.include: "radarr_config"
       
@@ -82,6 +84,8 @@ services:
       - URL=http://radarr:7878
       - APIKEY=${RADARR_API_KEY}
     labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: info
       # logs collection
       logging: promtail
       logging_jobname: containerlogs

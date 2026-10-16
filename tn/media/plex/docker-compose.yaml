@@ -17,6 +17,8 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
     labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: warning
       stack-back.volumes: true
       stack-back.volumes.include: "plex_config"
       
@@ -108,6 +110,8 @@ services:
       - PLEX_SERVER=http://plex:32400
       - PLEX_TOKEN=${PLEX_EXPORTER_TOKEN}
     labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: info
       # logs collection
       logging: promtail
       logging_jobname: containerlogs

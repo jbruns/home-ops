@@ -7,6 +7,8 @@ services:
       - no-new-privileges=true
     restart: unless-stopped
     labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: warning
       # logs collection
       logging: promtail
       logging_jobname: containerlogs

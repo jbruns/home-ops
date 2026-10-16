@@ -11,6 +11,8 @@ services:
       - TZ=${TZ}
       - TORRENTING_PORT=31728
     labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: warning
       stack-back.volumes: true
       stack-back.volumes.include: "qbittorrent_config"
       

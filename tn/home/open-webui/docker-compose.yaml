@@ -12,6 +12,8 @@ services:
       - OLLAMA_FLASH_ATTENTION=1
       - OLLAMA_CONTEXT_LENGTH=128000
     labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: info
       # logs collection
       logging: promtail
       logging_jobname: containerlogs
@@ -59,6 +61,8 @@ services:
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
     labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: warning
       stack-back.volumes: true
       stack-back.volumes.include: "open-webui_data"
       

@@ -14,8 +14,10 @@ services:
       - '--storage.tsdb.retention.time=7d'
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
-      - '--web.external-url=http://prometheus.${DOMAIN}'
+      - '--web.external-url=https://prometheus.${DOMAIN}'
     labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: critical
       # logs collection
       logging: promtail
       logging_jobname: containerlogs
@@ -78,8 +80,15 @@ services:
       - ./alerting-rules.yml:/etc/prometheus/alerting-rules.yml:ro
 
       - prometheus_data:/prometheus
+    secrets:
+      - prometheus_password
     networks:
       - backend
 
 volumes:
   prometheus_data:
+
+# Stored encrypted in repo as <name>.sops.txt
+secrets:
+  prometheus_password:
+    file: ./prometheus_password.txt

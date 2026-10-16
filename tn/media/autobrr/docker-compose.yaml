@@ -11,6 +11,8 @@ services:
       # https://autobrr.com/installation/docker#environment-variables
       - TZ=${TZ}
     labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: warning
       stack-back.volumes: true
       stack-back.volumes.include: "autobrr_config"
       

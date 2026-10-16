@@ -18,3 +18,4 @@ include:
   - ./node-exporter/docker-compose.yaml
   - ./prometheus/docker-compose.yaml
   - ./promtail/docker-compose.yaml
+  - ./restic-exporter/docker-compose.yaml

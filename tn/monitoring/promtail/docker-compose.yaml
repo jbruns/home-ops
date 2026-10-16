@@ -5,6 +5,8 @@ services:
     restart: unless-stopped
     command: -config.file=/etc/promtail/docker-config.yml
     labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: warning
       # logs collection
       logging: promtail
       logging_jobname: containerlogs
