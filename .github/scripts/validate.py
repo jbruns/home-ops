@@ -3,6 +3,7 @@
 
 Subcommands:
   secrets     every sensitive file referenced by Compose is tracked only in SOPS-encrypted form
+              (doco-cd Stacks, entry file compose.yaml, reference the *.sops.* files directly)
   env         every ${VAR} a Stack uses exists in its env.template and its encrypted .sops.env
   compose     `docker compose config` succeeds for every Stack with placeholder values
   monitoring  promtool / amtool / loki checks, using the image versions the Stacks deploy
@@ -52,8 +53,21 @@ def tracked_files() -> set[Path]:
     return {ROOT / p for p in out.split("\0") if p and (ROOT / p).is_file()}
 
 
+# compose.yaml marks a Stack deployed by doco-cd (auto-discovered, see .doco-cd.yml);
+# docker-compose.yaml marks a legacy Area still deployed by Portainer or by hand.
+ENTRY_NAMES = ("compose.yaml", "docker-compose.yaml")
+
+
 def stacks(base: Path = ROOT) -> list[Path]:
-    return sorted(p.parent for p in (base / "tn").glob("*/docker-compose.yaml"))
+    return sorted({p.parent for n in ENTRY_NAMES for p in (base / "tn").glob(f"*/{n}")})
+
+
+def entry(stack: Path) -> Path:
+    return next(stack / n for n in ENTRY_NAMES if (stack / n).exists())
+
+
+def is_doco(stack: Path) -> bool:
+    return (stack / "compose.yaml").exists()
 
 
 def compose_files(entry: Path) -> list[Path]:
@@ -119,7 +133,10 @@ def check_secrets() -> None:
         elif f.name == ".env" or f.suffix == ".env":
             fail("plaintext .env file is tracked; encrypt it as *.sops.env", f)
     for stack in stacks():
-        for compose in compose_files(stack / "docker-compose.yaml"):
+        if is_doco(stack):
+            check_doco_secrets(stack, tracked)
+            continue
+        for compose in compose_files(entry(stack)):
             for ref in sensitive_refs(compose):
                 if ref in tracked:
                     fail(f"sensitive file {_rel(ref)} is tracked in plaintext", compose)
@@ -128,9 +145,23 @@ def check_secrets() -> None:
     print("secrets ok" if not failures else "secrets: problems found")
 
 
+def check_doco_secrets(stack: Path, tracked: set[Path]) -> None:
+    # doco-cd reads interpolation values from .sops.env (env_files in .doco-cd.yml) and fails without it.
+    if stack / ".sops.env" not in tracked:
+        fail(f"{stack.name}: doco-cd Stack has no tracked .sops.env", entry(stack))
+    for compose in compose_files(entry(stack)):
+        for ref in sensitive_refs(compose):
+            if not ref.is_relative_to(ROOT):
+                continue  # Host path outside the repo, e.g. the age key
+            if ref not in tracked:
+                fail(f"referenced file {_rel(ref)} is not tracked", compose)
+            elif ".sops." not in ref.name:
+                fail(f"sensitive file {_rel(ref)} must be SOPS-encrypted and named *.sops.*", compose)
+
+
 def stack_vars(stack: Path) -> set[str]:
     used: set[str] = set()
-    for compose in compose_files(stack / "docker-compose.yaml"):
+    for compose in compose_files(entry(stack)):
         used |= set(VAR_RE.findall(compose.read_text()))
     return used
 
@@ -164,7 +195,7 @@ def placeholder(key: str) -> str:
 
 def check_compose() -> None:
     with tempfile.TemporaryDirectory() as tmp:
-        work = Path(tmp)
+        work = Path(tmp).resolve()
         for f in tracked_files():
             dst = work / f.relative_to(ROOT)
             dst.parent.mkdir(parents=True, exist_ok=True)
@@ -172,14 +203,14 @@ def check_compose() -> None:
         for stack in stacks(work):
             keys = env_keys(stack / "env.template") | stack_vars(stack)
             (stack / ".env").write_text("".join(f"{k}={placeholder(k)}\n" for k in sorted(keys)))
-            for compose in compose_files(stack / "docker-compose.yaml"):
+            for compose in compose_files(entry(stack)):
                 for ref in sensitive_refs(compose):
-                    if not ref.exists():
+                    if ref.is_relative_to(work) and not ref.exists():
                         ref.write_text("")
             r = subprocess.run(["docker", "compose", "config", "-q"], cwd=stack, capture_output=True, text=True)
             noise = [line for line in r.stderr.splitlines() if line.strip()]
             if r.returncode != 0 or any("is not set" in line for line in noise):
-                fail(f"{stack.name}: docker compose config failed:\n" + "\n".join(noise), ROOT / "tn" / stack.name / "docker-compose.yaml")
+                fail(f"{stack.name}: docker compose config failed:\n" + "\n".join(noise), ROOT / "tn" / stack.name / entry(stack).name)
             else:
                 print(f"compose ok: {stack.name}")
 

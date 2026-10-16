@@ -52,6 +52,13 @@ networks:
     ipam:
       config:
         - subnet: ${COMMON_BACKEND_SUBNET_V4}
+  # Traefik and the Exposed Services it routes to (ADR-0002). Owned here until the edge Stack takes it over.
+  proxy:
+    name: proxy
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
 
 volumes:
   backup_cache:

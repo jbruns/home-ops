@@ -1,14 +1,15 @@
 {
-	"data": "ENC[AES256_GCM,data:rN2O4+CVR9Q/yOoK/bod3K5H34rv8fp0aIdNJ9TB,iv:/qnZlk6JMJS0MlLve4NoTOAn43OD2oWMzAF1hoombX8=,tag:JWOei/DyFd7mnVH6v94pRA==,type:str]",
+	"data": "ENC[AES256_GCM,data:Gu1yXLqGZKSi2bnJLb1HyoiaZsmeCIG0jXSDD+RZ,iv:/qnZlk6JMJS0MlLve4NoTOAn43OD2oWMzAF1hoombX8=,tag:aWf8EsHAcaE2iKVhWRtOcA==,type:str]",
 	"sops": {
 		"age": [
 			{
-				"enc": "-----BEGIN AGE ENCRYPTED FILE-----\nYWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBYU2RyMTZWWnh0R0gvN0t4\nUXl3aWROdkIrKzZ4T0dweEszc3JRNFdrUlY0CkJpTlVIblBRQVlZVTJUZVNqYW55\neDkwaEhuT3NLUHNaNWdYMGovc3E3QzAKLS0tIGtyQkQyZWtFRXFXcXVXaGowbmpQ\nbWhxd1N3eDBhWjZZMlRrVW9tbG9RdnMKdgwuebfixY95DfCntKJif7zBfD9UMRoQ\nnx+ktrD5DgXiK3+RK2D5DjWVLVSetBXnMBjXWx+yoz+arK4zBg6TCw==\n-----END AGE ENCRYPTED FILE-----\n",
-				"recipient": "age1hgayx0xta2t248c8xhu2pex68z5tqak5487es2m7ccp5gjducanq0egash"
+				"enc": "-----BEGIN AGE ENCRYPTED FILE-----\nYWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBPNG9PVmRyS1NuQ21SQTZC\nTStFQm16c1hZUS9jbTFlOHJTVWgzR2wxaFZnClVodTdQQWZqUks1KzJVbDhaMTJh\ndVptaEUrME5lU0s5NWVnZmZtdjllTFUKLS0tIGp3YVVkYWpjQTAwOUc0SWRPZUxP\nNWRKWDRZZDNNNmRjTVJuR2tZbEZEQWcKAAPiMzTld5qI67RgUKTYVMK/jNpL2c+w\nbTWq93W+A3WUOf2pvzXYifB2Ss9FLj6QRaMNz4dkiZx+e2YZRQOPdA==\n-----END AGE ENCRYPTED FILE-----\n",
+				"recipient": "age16k57zw4p8z02uwtr9drz2h7dusmazph7wfcug64jd4pqt6quh90qvk3k6c"
 			}
 		],
-		"lastmodified": "2026-10-16T19:35:25Z",
-		"mac": "ENC[AES256_GCM,data:RphsSCTYV9eqS/XYIKMciGNQVYZi/z2ljZPXdd5gjgGq/BKgYY0xj3IWCPRM3x+S6SXL7/jOfNBHipV9/iXFeU4e+c/dODsb2gptvy8xfOm4O1JUV9utBs+I0AdgD8G6q6sTbesCkp7u1fc21xOzyJRFP8CVzU+BNtDStz/O9Lw=,iv:xEyhf7ZtBRC6A6q3yArnpEQWYbmJEUpgwi2JvVI3JS4=,tag:2+uhPkqyby8bodA5pZ1+HA==,type:str]",
+		"lastmodified": "2026-10-16T21:24:46Z",
+		"mac": "ENC[AES256_GCM,data:NI/nat9zdo4zqP1zXZMFafigrA8w+dlAo/Uq+XJ3rZoGPQ1nRC7gIqziNiPDOhTeOkyIhQPKOFMmeCkY5+89dxfIVWfCxDUj4n32XdqImd7i8dkhiDCAeax8BSXf5fHogehqUJssBJuxfKrVRc980q8GBMS5vP9uNTbG0BSH58I=,iv:7rs3ESISIq3zmv5SUAixpxUmT7DI+VuAJmkm1h4R648=,tag:f+LykVuLoQrQWYwy1QaQSQ==,type:str]",
+		"unencrypted_suffix": "_unencrypted",
 		"version": "3.13.3"
 	}
 }
