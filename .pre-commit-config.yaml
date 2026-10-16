@@ -1,0 +1,13 @@
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+  - repo: local
+    hooks:
+      - id: validate-secrets-env
+        name: validate secrets and env templates
+        entry: python3 .github/scripts/validate.py secrets env
+        language: system
+        pass_filenames: false
+        always_run: true
