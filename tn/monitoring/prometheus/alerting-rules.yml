@@ -25,11 +25,15 @@ groups:
   - name: containers
     rules:
       # cAdvisor stops reporting a container once it is gone. Looking back over a day keeps
-      # the alert firing until the container returns, or for up to 24h after a deliberate removal.
+      # the alert firing until the container returns, or for up to 24h after a deliberate removal
+      # (silence the retired Stack). Keyed on Compose project + service, newest container wins, so
+      # a recreate that renames the container (doco-cd self-update) or changes labels is not "down".
       - alert: ContainerDown
         expr: |
-          time() - max by (name, container_label_tier, container_label_com_docker_compose_project) (
-            max_over_time(container_last_seen{container_label_tier=~"critical|warning"}[1d])
+          time() - topk by (container_label_com_docker_compose_project, container_label_com_docker_compose_service) (1,
+            max by (name, container_label_tier, container_label_com_docker_compose_project, container_label_com_docker_compose_service) (
+              max_over_time(container_last_seen{container_label_tier=~"critical|warning"}[1d])
+            )
           ) > 120
         for: 1m
         labels:
