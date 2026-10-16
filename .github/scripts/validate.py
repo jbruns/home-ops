@@ -6,6 +6,7 @@ Subcommands:
   env         every ${VAR} a Stack uses exists in its env.template and its encrypted .sops.env
   compose     `docker compose config` succeeds for every Stack with placeholder values
   monitoring  promtool / amtool / loki checks, using the image versions the Stacks deploy
+  cloudflare  the Cloudflare ranges Traefik trusts are valid and identical everywhere they appear
 """
 import os
 import re
@@ -222,7 +223,23 @@ def check_monitoring() -> None:
     docker_run(loki_image, {loki / "loki.yaml": "/etc/loki/loki.yaml"}, "/usr/bin/loki", "-config.file=/etc/loki/loki.yaml", "-verify-config")
 
 
-CHECKS = {"secrets": check_secrets, "env": check_env, "compose": check_compose, "monitoring": check_monitoring}
+def check_cloudflare() -> None:
+    import cloudflare_ips
+
+    errs = cloudflare_ips.problems(cloudflare_ips.TRAEFIK.read_text())
+    for err in errs:
+        fail(err, cloudflare_ips.TRAEFIK)
+    if not errs:
+        print("cloudflare ok")
+
+
+CHECKS = {
+    "secrets": check_secrets,
+    "env": check_env,
+    "compose": check_compose,
+    "monitoring": check_monitoring,
+    "cloudflare": check_cloudflare,
+}
 
 if __name__ == "__main__":
     selected = sys.argv[1:] or list(CHECKS)

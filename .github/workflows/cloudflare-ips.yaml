@@ -1,0 +1,46 @@
+name: cloudflare-ips
+
+# Opens a PR when Cloudflare's published edge ranges no longer match the ones Traefik
+# trusts for X-Forwarded-For (tn/common/traefik/docker-compose.yaml).
+on:
+  schedule:
+    - cron: "17 14 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-ips
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+      # PRs opened with GITHUB_TOKEN do not trigger workflows, so dispatch the required
+      # `validate` check on the branch explicitly.
+      actions: write
+    env:
+      BRANCH: automation/cloudflare-ips
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: python3 .github/scripts/cloudflare_ips.py --update
+      - name: Open or refresh PR
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$BRANCH"
+          git commit -qam "fix(common): update trusted Cloudflare ranges"
+          git push -q --force origin "$BRANCH"
+          if [ "$(gh pr view "$BRANCH" --json state -q .state 2>/dev/null)" != OPEN ]; then
+            gh pr create --head "$BRANCH" --title "fix(common): update trusted Cloudflare ranges" \
+              --body "Cloudflare's published edge ranges (https://api.cloudflare.com/client/v4/ips) changed. Traefik and the CrowdSec bouncer trust X-Forwarded-For only from these ranges. After merging, redeploy \`common\`."
+          fi
+          gh workflow run validate.yaml --ref "$BRANCH"
