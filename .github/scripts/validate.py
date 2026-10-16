@@ -53,21 +53,16 @@ def tracked_files() -> set[Path]:
     return {ROOT / p for p in out.split("\0") if p and (ROOT / p).is_file()}
 
 
-# compose.yaml marks a Stack deployed by doco-cd (auto-discovered, see .doco-cd.yml);
-# docker-compose.yaml marks a legacy Area still deployed by Portainer or by hand.
-ENTRY_NAMES = ("compose.yaml", "docker-compose.yaml")
+# doco-cd auto-discovers a Stack only by tn/<stack>/compose.yaml (see .doco-cd.yml).
+ENTRY_NAME = "compose.yaml"
 
 
 def stacks(base: Path = ROOT) -> list[Path]:
-    return sorted({p.parent for n in ENTRY_NAMES for p in (base / "tn").glob(f"*/{n}")})
+    return sorted(p.parent for p in (base / "tn").glob(f"*/{ENTRY_NAME}"))
 
 
 def entry(stack: Path) -> Path:
-    return next(stack / n for n in ENTRY_NAMES if (stack / n).exists())
-
-
-def is_doco(stack: Path) -> bool:
-    return (stack / "compose.yaml").exists()
+    return stack / ENTRY_NAME
 
 
 def compose_files(entry: Path) -> list[Path]:
@@ -104,11 +99,6 @@ def sensitive_refs(compose: Path) -> list[Path]:
     return [(compose.parent / r).resolve() for r in refs]
 
 
-def encrypted_name(p: Path) -> Path:
-    # stack-back.env -> stack-back.sops.env ; config.yml -> config.sops.yml
-    return p.with_name(f"{p.stem}.sops{p.suffix}")
-
-
 def env_keys(path: Path) -> set[str]:
     keys = set()
     if not path.exists():
@@ -132,23 +122,18 @@ def check_secrets() -> None:
                 fail("file is named *.sops.* but is not SOPS-encrypted", f)
         elif f.name == ".env" or f.suffix == ".env":
             fail("plaintext .env file is tracked; encrypt it as *.sops.env", f)
+    for f in sorted(tracked):
+        if f.parent.parent == ROOT / "tn" and f.name == "docker-compose.yaml" and not (f.parent / ENTRY_NAME).exists():
+            fail(f"doco-cd never discovers this; a Stack's entry file must be {ENTRY_NAME}", f)
     for stack in stacks():
-        if is_doco(stack):
-            check_doco_secrets(stack, tracked)
-            continue
-        for compose in compose_files(entry(stack)):
-            for ref in sensitive_refs(compose):
-                if ref in tracked:
-                    fail(f"sensitive file {_rel(ref)} is tracked in plaintext", compose)
-                if encrypted_name(ref) not in tracked:
-                    fail(f"no encrypted counterpart {_rel(encrypted_name(ref))} is tracked", compose)
+        check_stack_secrets(stack, tracked)
     print("secrets ok" if not failures else "secrets: problems found")
 
 
-def check_doco_secrets(stack: Path, tracked: set[Path]) -> None:
+def check_stack_secrets(stack: Path, tracked: set[Path]) -> None:
     # doco-cd reads interpolation values from .sops.env (env_files in .doco-cd.yml) and fails without it.
     if stack / ".sops.env" not in tracked:
-        fail(f"{stack.name}: doco-cd Stack has no tracked .sops.env", entry(stack))
+        fail(f"{stack.name}: Stack has no tracked .sops.env", entry(stack))
     for compose in compose_files(entry(stack)):
         for ref in sensitive_refs(compose):
             if not ref.is_relative_to(ROOT):
