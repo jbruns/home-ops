@@ -148,6 +148,41 @@ services:
         ipv4_address: 172.30.0.10
       metrics: {}
 
+  traefik-logrotate:
+    # Rotates Traefik's access log daily at 00:00 UTC, keeping two old files. Copy-then-truncate
+    # (copytruncate) keeps Traefik and CrowdSec on the same open file; CrowdSec reads only
+    # access.log and follows the truncation.
+    image: busybox:1.37@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+    container_name: traefik-logrotate
+    user: ${COMMON_UID}:${COMMON_GID}
+    security_opt:
+      - no-new-privileges=true
+    restart: unless-stopped
+    network_mode: none
+    working_dir: /var/log/traefik
+    command:
+      - sh
+      - -c
+      - |
+        while :; do
+          now=$$(date +%s)
+          sleep $$(( (now / 86400 + 1) * 86400 - now ))
+          [ -f access.log.1 ] && mv -f access.log.1 access.log.2
+          cp -p access.log access.log.1 && : > access.log
+        done
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: info
+      startup-order: "3"
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+    volumes:
+      - traefik_log:/var/log/traefik
+
 volumes:
   traefik_log:
     name: common_traefik_log
