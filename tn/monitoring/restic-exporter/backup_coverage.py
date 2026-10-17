@@ -7,7 +7,8 @@ backup_destination_path), with EXCLUDE_BIND_MOUNTS and INCLUDE_ALL_COMPOSE_PROJE
 
 A path is "due" once it should be in a backup: a volume whose container and volume both
 predate the newest /volumes snapshot, or a database whose container is older than 26h. A
-recreate defers the check to the next backup.
+recreate defers the check to the next backup. A volume's live size (Docker's disk usage) tells
+an empty snapshot dir that is expected (the volume is empty) from one that is not.
 """
 
 import http.client
@@ -31,16 +32,16 @@ metrics = ""
 
 
 class DockerConnection(http.client.HTTPConnection):
-    def __init__(self):
-        super().__init__("localhost", timeout=30)
+    def __init__(self, timeout=30):
+        super().__init__("localhost", timeout=timeout)
 
     def connect(self):
         self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.sock.connect("/var/run/docker.sock")
 
 
-def docker(path):
-    conn = DockerConnection()
+def docker(path, timeout=30):
+    conn = DockerConnection(timeout)
     try:
         conn.request("GET", path)
         resp = conn.getresponse()
@@ -69,8 +70,15 @@ def patterns(value):
     return value.split(",") if value else None
 
 
+def volume_sizes():
+    """{volume name: live bytes}; -1 where Docker has no figure."""
+    # Docker walks every volume to size it: ~20s here, so a longer timeout.
+    vols = docker("/system/df?type=volume", timeout=300).get("Volumes") or []
+    return {v["Name"]: (v.get("UsageData") or {}).get("Size", -1) for v in vols}
+
+
 def expected_paths():
-    """[(kind, project, service, path, since)] for every stack-back labelled container."""
+    """[(kind, project, service, path, since, volume)] for every stack-back labelled container."""
     volume_created = {v["Name"]: ts(v["CreatedAt"]) for v in docker("/volumes")["Volumes"] or []}
     paths = []
     for c in docker("/containers/json?all=1"):
@@ -84,7 +92,7 @@ def expected_paths():
         is_db = any(labels.get(l) in TRUE for l in DB_LABELS)
 
         if is_db:
-            paths.append(("database", project, service, f"/databases{base}/all_databases.sql", created))
+            paths.append(("database", project, service, f"/databases{base}/all_databases.sql", created, None))
 
         if labels.get("stack-back.volumes") not in TRUE:
             continue
@@ -103,13 +111,14 @@ def expected_paths():
             elif is_db and m["Destination"] in DB_MOUNTS:
                 continue
             since = max(created, volume_created.get(m.get("Name"), created))
-            paths.append(("volume", project, service, f"/volumes{base}{m['Destination']}", since))
+            paths.append(("volume", project, service, f"/volumes{base}{m['Destination']}", since, m.get("Name")))
     return paths
 
 
 def collect():
     now = time.time()
     expected = expected_paths()
+    sizes = volume_sizes()
     snapshots = restic("snapshots")[0] or []
 
     volume_snaps = [s for s in snapshots if s["paths"] == ["/volumes"]]
@@ -123,7 +132,7 @@ def collect():
             db_newest[p] = max(db_newest.get(p, 0), ts(s["time"]))
 
     # One non-recursive listing of every expected volume dir: the dir itself plus its children.
-    vol_paths = sorted({p for k, _, _, p, _ in expected if k == "volume"})
+    vol_paths = sorted({p for k, _, _, p, _, _ in expected if k == "volume"})
     present, entries = set(), {}
     if newest and vol_paths:
         for node in restic("ls", newest["id"], *vol_paths):
@@ -145,16 +154,19 @@ def collect():
         "# TYPE backup_coverage_present gauge",
         "# HELP backup_coverage_entries Direct children of a volume path in the newest /volumes snapshot.",
         "# TYPE backup_coverage_entries gauge",
+        "# HELP backup_coverage_volume_bytes Live size of the volume now (-1 unknown); 0 means an empty snapshot dir is expected.",
+        "# TYPE backup_coverage_volume_bytes gauge",
         "# HELP backup_coverage_snapshot_timestamp Newest snapshot holding the path (volumes: newest /volumes snapshot).",
         "# TYPE backup_coverage_snapshot_timestamp gauge",
     ]
-    for kind, project, service, path, since in expected:
+    for kind, project, service, path, since, volume in expected:
         lbl = f'kind="{kind}",project="{project}",service="{service}",path="{path}"'
         if kind == "volume":
             due = since < newest_ts
             is_present = path in present
             snap = newest_ts
             lines.append(f"backup_coverage_entries{{{lbl}}} {entries.get(path, 0)}")
+            lines.append(f"backup_coverage_volume_bytes{{{lbl}}} {sizes.get(volume, -1)}")
         else:
             due = since < now - DB_DUE_AFTER
             snap = db_newest.get(path, 0)

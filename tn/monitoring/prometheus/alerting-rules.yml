@@ -217,13 +217,17 @@ groups:
       # backup-coverage expects every volume and database stack-back is labelled to back up,
       # from Docker (stopped containers too). "Due" waits for the first backup after a recreate.
       - alert: BackupVolumeMissing
-        expr: backup_coverage_entries == 0 and on (path) backup_coverage_due == 1
+        # An empty volume is expected to back up empty (volume_bytes 0).
+        expr: |
+          backup_coverage_entries == 0
+            and on (path) backup_coverage_due == 1
+            and on (path) backup_coverage_volume_bytes != 0
         labels:
           tier: warning
           stack: "{{ $labels.project }}"
         annotations:
           summary: "{{ $labels.service }} volume missing from the newest backup"
-          description: "{{ $labels.path }} is missing or empty in the newest /volumes snapshot."
+          description: "{{ $labels.path }} is missing or empty in the newest /volumes snapshot, but the volume holds data."
 
       - alert: BackupDatabaseStale
         expr: |
