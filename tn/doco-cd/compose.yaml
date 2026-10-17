@@ -13,7 +13,13 @@ services:
     environment:
       TZ: ${TZ}
       SELF_UPDATE_ENABLED: "true"
-      SELF_UPDATE_STRATEGY: auto
+      # applier, not scale_out: scale_out's successor polls and deploys while the
+      # predecessor is still draining its in-flight deploys, so two deployers race
+      # ("removal of container ... is already in progress") and leave <id>_name containers.
+      SELF_UPDATE_STRATEGY: applier
+      # REST API (e.g. POST /v1/api/project/<stack>/recreate?service=<svc>); no Traefik route,
+      # reachable only on this Stack's networks, x-api-key required.
+      API_SECRET_FILE: /run/secrets/api_secret
       SOPS_AGE_KEY_FILE: /run/secrets/sops_age_key
       APPRISE_API_URL: http://apprise:8000/notify
       APPRISE_NOTIFY_LEVEL: success
@@ -32,6 +38,7 @@ services:
     secrets:
       - sops_age_key
       - apprise_urls
+      - api_secret
     networks:
       - default
       # Prometheus scrapes doco_cd_* metrics on :9120.
@@ -93,3 +100,5 @@ secrets:
     file: /mnt/luna/homeops/age.key
   apprise_urls:
     file: ./apprise_urls.sops.txt
+  api_secret:
+    file: ./api_secret.sops.txt
