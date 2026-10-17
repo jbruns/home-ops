@@ -42,7 +42,7 @@ pin updates, selection overrides, and recovery.
 | `vaultwarden` | Vaultwarden, its own MariaDB |
 | `open-webui` | Open WebUI, Ollama |
 | `syncthing` | Syncthing |
-| `arr` | Sonarr, Radarr, SABnzbd, qBittorrent, autobrr |
+| `arr` | Sonarr, Radarr, SABnzbd, qBittorrent, autobrr, dependency-probe (Dependency Probes) |
 | `plex`, `emby`, `nextpvr`, `navidrome`, `tracearr` | One media Service each |
 
 ### Shared networks

@@ -67,6 +67,9 @@ services:
       - ./alerting-rules.yml:/etc/prometheus/alerting-rules.yml:ro
 
       - prometheus_data:/prometheus
+    configs:
+      - source: dependencies
+        target: /etc/prometheus/dependencies.yml
     secrets:
       - prometheus_password
     networks:

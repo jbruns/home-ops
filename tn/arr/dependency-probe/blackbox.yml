@@ -1,0 +1,19 @@
+# Modules for the arr Stack's Dependency Probes (see docker-compose.yaml).
+modules:
+  # SABnzbd `api?mode=version`: unauthenticated, answers {"version": ...}.
+  sabnzbd:
+    prober: http
+    timeout: 8s
+    http:
+      preferred_ip_protocol: ip4
+      fail_if_body_not_matches_regexp: ['"version"']
+
+  # A newznab search as the dependent sends it. nzbhydra2 reports failures as an <error> body
+  # with HTTP 200, and `t=caps` kept answering through the 2026-10-17 H2 outage.
+  newznab:
+    prober: http
+    timeout: 25s
+    http:
+      preferred_ip_protocol: ip4
+      fail_if_body_matches_regexp: ['<error ']
+      fail_if_body_not_matches_regexp: ['<channel>']

@@ -38,6 +38,11 @@ inhibit_rules:
     target_matchers: [alertname="ProbeFailed"]
   - source_matchers: [alertname="ProbeFailed", container="traefik"]
     target_matchers: [alertname="ProbeFailed", job="probe", container!="traefik"]
+  - source_matchers: [alertname="ProbeFailed"]
+    target_matchers: [alertname="DependencyDown", kind="internal"]
+    equal: [container]
+  - source_matchers: [alertname="InternetDown"]
+    target_matchers: [alertname="DependencyDown", kind="external"]
 
 receivers:
   - name: blackhole

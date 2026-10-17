@@ -17,7 +17,7 @@ groups:
       # `tier` and `stack` come from the scrape target's labels (prometheus.yml).
       # For Probe jobs `up` only says blackbox-exporter answered; its own job covers that.
       - alert: TargetDown
-        expr: up{job!~"probe|probe-tcp|internet"} == 0
+        expr: up{job!~"probe|probe-tcp|internet|dependency"} == 0
         for: 5m
         annotations:
           summary: "{{ $labels.job }} scrape target is down"
@@ -54,6 +54,26 @@ groups:
         annotations:
           summary: No Probe results
           description: Prometheus has no Probe targets; check docker-socket-proxy and the probe.url labels.
+
+      # A Dependency (GLOSSARY.md) fails for every dependent: alert once, on the Dependency, at the
+      # Tier its edges carry (dependencies.yaml). Inhibited by the Dependency's own ProbeFailed
+      # (internal) or InternetDown (external).
+      - alert: DependencyDown
+        expr: max by (to, kind, container, tier, stack) (probe_success{job="dependency"}) == 0
+        for: 5m
+        annotations:
+          summary: "{{ $labels.to }} is failing its dependents"
+          description: "Every Dependency Probe of {{ $labels.to }} ({{ $labels.kind }}) has failed for 5 minutes."
+
+      - alert: DependencyProbesMissing
+        expr: absent(probe_success{job="dependency"})
+        for: 10m
+        labels:
+          tier: warning
+          stack: monitoring
+        annotations:
+          summary: No Dependency Probe results
+          description: Prometheus has no Dependency Probe targets; check dependencies.yaml and the probers.
 
   - name: containers
     rules:

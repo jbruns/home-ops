@@ -14,6 +14,7 @@ networks:
 
 include:
   - ./autobrr/docker-compose.yaml
+  - ./dependency-probe/docker-compose.yaml
   - ./qbittorrent/docker-compose.yaml
   - ./radarr/docker-compose.yaml
   - ./sabnzbd/docker-compose.yaml
