@@ -16,10 +16,12 @@ configs:
   dependencies:
     content: |
       # nzbhydra2: a real search in the dependent's own categories (t=caps survived the 2026-10-17
-      # H2 outage). cachetime=15 bounds the fan-out to every indexer at 4/h per edge.
-      - targets: ['${NZBHYDRA_URL}/api?t=tvsearch&cat=5030,5040&limit=1&cachetime=15&apikey=${NZBHYDRA_API_KEY}']
+      # H2 outage). `indexers` keeps it to the ones without an API hit limit, so the Probe spends
+      # none of the capped indexers' daily hits; cachetime=15 bounds it to 4 searches/h per edge.
+      # Per-indexer health is nzbhydra2's own concern (its host's Prometheus).
+      - targets: ['${NZBHYDRA_URL}/api?t=tvsearch&cat=5030,5040&limit=1&indexers=DogNZB,NZBGeek,nzbplanet,omgwtfnzbs&cachetime=15&apikey=${NZBHYDRA_API_KEY}']
         labels: {from: sonarr, to: nzbhydra2, kind: external, tier: warning, stack: arr, prober: 'dependency-probe-arr:9115', module: newznab}
-      - targets: ['${NZBHYDRA_URL}/api?t=movie&cat=2000&limit=1&cachetime=15&apikey=${NZBHYDRA_API_KEY}']
+      - targets: ['${NZBHYDRA_URL}/api?t=movie&cat=2000&limit=1&indexers=DogNZB,NZBGeek,nzbplanet,omgwtfnzbs&cachetime=15&apikey=${NZBHYDRA_API_KEY}']
         labels: {from: radarr, to: nzbhydra2, kind: external, tier: warning, stack: arr, prober: 'dependency-probe-arr:9115', module: newznab}
 
       - targets: ['http://sabnzbd:8080/api?mode=version']
