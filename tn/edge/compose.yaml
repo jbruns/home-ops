@@ -10,6 +10,9 @@ networks:
     ipam:
       config:
         - subnet: 172.30.0.0/24
+          # Dynamic addresses come from the upper half only, so Traefik's static
+          # 172.30.0.10 can never be handed to another container.
+          ip_range: 172.30.0.128/25
   # Prometheus and exporters; owned by the monitoring Stack.
   metrics:
     name: metrics

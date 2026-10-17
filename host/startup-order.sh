@@ -51,9 +51,10 @@ ready() {
 
 cmd_stop() {
     mkdir -p "$BASE"
-    # Record first: dockerd may be stopping in parallel with this task.
-    running > "$STATE.tmp" && [ -s "$STATE.tmp" ] && mv "$STATE.tmp" "$STATE"
-    rm -f "$STATE.tmp"
+    # Record first: dockerd may be stopping in parallel with this task. Merge with any
+    # state left by a boot run that never finished, so a second shutdown loses nothing.
+    { running; cat "$STATE" 2>/dev/null; } | sed '/^$/d' | sort -u > "$STATE.tmp"
+    if [ -s "$STATE.tmp" ]; then mv "$STATE.tmp" "$STATE"; else rm -f "$STATE.tmp"; fi
     {
         log "stop: recorded $(wc -l < "$STATE" 2>/dev/null || echo 0) running containers"
         for lvl in 3 2 1 0; do

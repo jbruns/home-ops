@@ -36,7 +36,7 @@ Each Stack keeps its Datastores on its own `default` network. Only these network
 
 | Network | Owned by | Joined by |
 |---|---|---|
-| `proxy` (172.30.0.0/24) | `edge` | Traefik and every Exposed Service |
+| `proxy` (172.30.0.0/24; dynamic .128/25) | `edge` | Traefik and every Exposed Service |
 | `metrics` (172.29.0.0/24) | `monitoring` | Prometheus and the exporters it scrapes |
 | `backup` | `ops` | stack-back and the databases it dumps |
 
