@@ -13,6 +13,18 @@ modules:
     http:
       valid_status_codes: [401]
 
+  # Behind Authentik (`probe.idp_url`, job probe-idp): the outpost answers an anonymous request
+  # by redirecting to the IdP's authorize endpoint. Not followed, so the IdP is never touched.
+  http_idp_redirect:
+    prober: http
+    timeout: 8s
+    http:
+      follow_redirects: false
+      valid_status_codes: [302]
+      fail_if_header_not_matches:
+        - header: Location
+          regexp: /application/o/authorize/
+
   tcp_connect:
     prober: tcp
     timeout: 8s

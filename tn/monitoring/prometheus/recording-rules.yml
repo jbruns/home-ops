@@ -50,7 +50,7 @@ groups:
   rules:
   - record: service:uptime:ok
     expr: |
-      min by (container, stack, tier) (probe_success{job=~"probe|probe-tcp"})
+      min by (container, stack, tier) (probe_success{job=~"probe|probe-tcp|probe-idp"})
       or on (container)
       max by (container, stack, tier) (container_healthy{job="container-health"})
   - record: service:availability:ratio1d

@@ -145,7 +145,7 @@ scrape_configs:
         labels: {container: blackbox-exporter, stack: monitoring, tier: warning}
 
   # PROBES (GLOSSARY.md): outside-in, through Cloudflare and Traefik as a user would.
-  # Targets are containers labelled `probe.url` (HTTP) or `probe.tcp` (host:port), found through
+  # Targets are containers labelled `probe.url` (HTTP), `probe.tcp` (host:port) or `probe.idp_url`, found through
   # docker-socket-proxy. `container`, `service`, `stack` and `tier` come from the probed Service, so
   # ProbeFailed routes at that Service's Tier. docker_sd emits one target per network/port; they
   # relabel to identical label sets and Prometheus keeps one.
@@ -200,6 +200,38 @@ scrape_configs:
         target_label: instance
       - source_labels: [__param_module]
         target_label: module
+      - source_labels: [__meta_docker_container_name]
+        regex: /?(.*)
+        target_label: container
+      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
+        target_label: service
+      - source_labels: [__meta_docker_container_label_com_docker_compose_project]
+        target_label: stack
+      - source_labels: [__meta_docker_container_label_tier]
+        target_label: tier
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # Authentik-protected Services carry a second Probe, `probe.idp_url`: the outpost must redirect
+  # an anonymous request to the IdP. Each one creates an outpost session file (kept 24h), hence 60s.
+  - job_name: probe-idp
+    scrape_interval: 60s
+    metrics_path: /probe
+    params:
+      module: [http_idp_redirect]
+    docker_sd_configs:
+      - host: tcp://docker-socket-proxy:2375
+        refresh_interval: 60s
+        filters:
+          - name: label
+            values: [probe.idp_url]
+    relabel_configs:
+      - source_labels: [__meta_docker_container_label_probe_idp_url]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: module
+        replacement: http_idp_redirect
       - source_labels: [__meta_docker_container_name]
         regex: /?(.*)
         target_label: container
