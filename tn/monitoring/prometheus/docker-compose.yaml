@@ -55,8 +55,8 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: 1m
-        max-file: 1
+        max-size: 10m
+        max-file: "3"
         tag: "{{.Name}}"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
@@ -123,8 +123,8 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: 1m
-        max-file: 1
+        max-size: 10m
+        max-file: "3"
         tag: "{{.Name}}"
     volumes:
       - ./dependencies.yml:/etc/dependencies.yml:ro

@@ -51,6 +51,12 @@ services:
     networks:
       - default
       - proxy
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+        tag: "{{.Name}}"
 
 volumes:
   syncthing_data:

@@ -41,6 +41,12 @@ services:
       timeout: 5s
       start_period: 15s
       retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+        tag: "{{.Name}}"
 
   # Relays doco-cd deploy notifications to Discord. doco-cd does not depend on it:
   # a failed notification never blocks a Deploy.
@@ -63,6 +69,12 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+        tag: "{{.Name}}"
 
 networks:
   # Owned by the monitoring Stack (ADR-0002).

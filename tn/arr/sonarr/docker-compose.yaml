@@ -48,8 +48,8 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: 1m
-        max-file: 1
+        max-size: 10m
+        max-file: "3"
         tag: "{{.Name}}"
     volumes:
       - sonarr_config:/config
@@ -83,8 +83,8 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: 1m
-        max-file: 1
+        max-size: 10m
+        max-file: "3"
         tag: "{{.Name}}"
     networks:
       - default

@@ -126,8 +126,8 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: 1m
-        max-file: 1
+        max-size: 10m
+        max-file: "3"
         tag: "{{.Name}}"
     # Bind to the second Host IP only: the TrueNAS UI owns 80/443 on the primary address.
     ports:
@@ -179,8 +179,8 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: 1m
-        max-file: 1
+        max-size: 10m
+        max-file: "3"
         tag: "{{.Name}}"
     volumes:
       - traefik_log:/var/log/traefik
