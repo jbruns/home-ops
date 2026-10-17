@@ -4,6 +4,7 @@ services:
     image: mariadb:11.8.9
     container_name: mariadb
     restart: unless-stopped
+    stop_grace_period: 60s
     dns_search: .
     # Exit 0 whenever the server answers, even "access denied"; no credentials needed.
     healthcheck:
@@ -24,6 +25,7 @@ services:
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: critical
+      startup-order: "1"
       stack-back.mariadb: true
 
       # logs collection

@@ -4,6 +4,13 @@ services:
     image: ngosang/restic-exporter:2.1.2
     container_name: restic-exporter
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8001/metrics"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 5s
     dns_search: .
     security_opt:
       - no-new-privileges=true
@@ -17,6 +24,7 @@ services:
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: warning
+      startup-order: "3"
 
       # logs collection
       logging: promtail

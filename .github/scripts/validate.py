@@ -12,6 +12,7 @@ Subcommands:
 import os
 import re
 import shutil
+import json
 import subprocess
 import sys
 import tempfile
@@ -178,6 +179,10 @@ def placeholder(key: str) -> str:
     return "placeholder"
 
 
+STARTUP_LABEL = "startup-order"
+STARTUP_LEVELS = {"0", "1", "2", "3"}
+
+
 def check_compose() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp).resolve()
@@ -192,10 +197,16 @@ def check_compose() -> None:
                 for ref in sensitive_refs(compose):
                     if ref.is_relative_to(work) and not ref.exists():
                         ref.write_text("")
-            r = subprocess.run(["docker", "compose", "config", "-q"], cwd=stack, capture_output=True, text=True)
+            r = subprocess.run(["docker", "compose", "config", "--format", "json"], cwd=stack, capture_output=True, text=True)
             noise = [line for line in r.stderr.splitlines() if line.strip()]
+            src = ROOT / "tn" / stack.name / entry(stack).name
             if r.returncode != 0 or any("is not set" in line for line in noise):
-                fail(f"{stack.name}: docker compose config failed:\n" + "\n".join(noise), ROOT / "tn" / stack.name / entry(stack).name)
+                fail(f"{stack.name}: docker compose config failed:\n" + "\n".join(noise), src)
+                continue
+            bad = [name for name, svc in json.loads(r.stdout).get("services", {}).items()
+                   if (svc.get("labels") or {}).get(STARTUP_LABEL) not in STARTUP_LEVELS]
+            if bad:
+                fail(f"{stack.name}: services without a valid {STARTUP_LABEL} label (0-3, ADR-0003): {', '.join(sorted(bad))}", src)
             else:
                 print(f"compose ok: {stack.name}")
 

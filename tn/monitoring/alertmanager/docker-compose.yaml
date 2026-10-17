@@ -6,6 +6,13 @@ services:
     security_opt:
       - no-new-privileges=true
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "9093"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 5s
     dns_search: .
     command:
       - '--config.file=/etc/alertmanager/config.yml'
@@ -16,6 +23,7 @@ services:
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: critical
+      startup-order: "1"
       stack-back.volumes: true
       stack-back.volumes.include: "alertmanager_data"
       

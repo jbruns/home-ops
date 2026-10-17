@@ -4,15 +4,25 @@ services:
     image: nextcloud:33.0.8
     container_name: nextcloud
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/status.php | grep -q 'installed.:true'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 300s
+      start_interval: 5s
     dns_search: .
     depends_on:
       mariadb:
         condition: service_healthy
+        restart: true
       valkey:
         condition: service_healthy
+        restart: true
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: critical
+      startup-order: "2"
       stack-back.volumes: true
       stack-back.volumes.include: "nextcloud_data"
       
@@ -77,13 +87,18 @@ services:
     depends_on:
       mariadb:
         condition: service_healthy
+        restart: true
       valkey:
+        condition: service_healthy
+        restart: true
+      nextcloud:
         condition: service_healthy
     # solely for Nextcloud cron job
     entrypoint: /cron.sh
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: warning
+      startup-order: "2"
       logging: promtail
       logging_jobname: containerlogs
       stackname: nextcloud

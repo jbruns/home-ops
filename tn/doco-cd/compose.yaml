@@ -25,6 +25,7 @@ services:
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: warning
+      startup-order: "3"
       logging: promtail
       logging_jobname: containerlogs
       stackname: doco-cd
@@ -58,6 +59,7 @@ services:
       APPRISE_STATEFUL_MODE: disabled
     labels:
       tier: info
+      startup-order: "3"
       logging: promtail
       logging_jobname: containerlogs
       stackname: doco-cd

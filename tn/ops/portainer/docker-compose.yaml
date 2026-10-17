@@ -15,6 +15,7 @@ services:
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: info
+      startup-order: "3"
       stack-back.volumes: true
       stack-back.volumes.include: "portainer_data"
 

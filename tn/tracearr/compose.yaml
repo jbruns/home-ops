@@ -19,6 +19,7 @@ services:
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: info
+      startup-order: "2"
       stack-back.volumes: true
       stack-back.volumes.include: "tracearr_postgres,tracearr_redis,tracearr_data,tracearr_backups"
       
