@@ -92,6 +92,47 @@ services:
       - default
       - metrics
 
+  sabnzbd-status-exporter:
+    # Usenet provider (server) health for Prometheus; see sabnzbd_status_exporter.py.
+    # https://hub.docker.com/_/python
+    image: python:3.14.8-alpine3.24
+    container_name: sabnzbd-status-exporter
+    user: ${MEDIA_UID}:${MEDIA_GID}
+    read_only: true
+    security_opt:
+      - no-new-privileges=true
+    restart: unless-stopped
+    depends_on:
+      sabnzbd:
+        condition: service_healthy
+    dns_search: .
+    command: ["python3", "-u", "/app/sabnzbd_status_exporter.py"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:9712/metrics"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 10s
+      start_interval: 2s
+    environment:
+      - SABNZBD_URL=http://sabnzbd:8080
+      - SABNZBD_API_KEY=${SABNZBD_API_KEY}
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: info
+      startup-order: "3"
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+    volumes:
+      - ./sabnzbd_status_exporter.py:/app/sabnzbd_status_exporter.py:ro
+    networks:
+      - default
+      - metrics
+
 volumes:
   sabnzbd_config:
     name: media_sabnzbd_config

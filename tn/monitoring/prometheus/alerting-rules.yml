@@ -136,6 +136,39 @@ groups:
           summary: "{{ $labels.datastore }} is not answering"
           description: "mysqld_exporter ({{ $labels.container }}) cannot query {{ $labels.datastore }} for 2 minutes."
 
+  - name: usenet
+    rules:
+      # Usenet providers are External Dependencies of SABnzbd (GLOSSARY.md), read from its
+      # `mode=status` API by sabnzbd-status-exporter. Disabled servers are ignored.
+      - alert: UsenetServerError
+        expr: sabnzbd_usenet_server_error == 1 and on(server) sabnzbd_usenet_server_active == 1
+        for: 15m
+        labels:
+          tier: warning
+        annotations:
+          summary: "Usenet server {{ $labels.server }} is failing"
+          description: "SABnzbd has reported an error for {{ $labels.server }} for 15 minutes; see sabnzbd_usenet_server_error_info."
+
+      - alert: UsenetServerWarning
+        expr: sabnzbd_usenet_server_warning == 1 and on(server) sabnzbd_usenet_server_active == 1
+        for: 1h
+        labels:
+          tier: warning
+        annotations:
+          summary: "Usenet server {{ $labels.server }} has a warning"
+          description: "SABnzbd has reported a warning for {{ $labels.server }} for an hour; see sabnzbd_usenet_server_warning_info."
+
+      # The exporter answers but SABnzbd's API does not (e.g. a rotated API key). SABnzbd being
+      # down is ProbeFailed/ContainerDown's job.
+      - alert: SabnzbdStatusDown
+        expr: sabnzbd_status_up == 0
+        for: 10m
+        labels:
+          tier: warning
+        annotations:
+          summary: SABnzbd status API is not answering the exporter
+          description: "sabnzbd-status-exporter cannot read api?mode=status for 10 minutes; Usenet server alerts are blind."
+
   - name: host
     rules:
       # TrueNAS native alerts are the first line for pool and disk health; this is the second.
