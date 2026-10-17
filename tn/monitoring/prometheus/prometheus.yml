@@ -101,6 +101,12 @@ scrape_configs:
       - targets: ['restic-exporter:8001']
         labels: {container: restic-exporter, stack: monitoring, tier: warning}
 
+  - job_name: backup-coverage
+    scrape_interval: 60s
+    static_configs:
+      - targets: ['backup-coverage:8002']
+        labels: {container: backup-coverage, stack: monitoring, tier: warning}
+
   - job_name: dcgm-exporter
     static_configs:
       - targets: ['dcgm-exporter:9400']

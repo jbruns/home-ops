@@ -160,3 +160,37 @@ groups:
         annotations:
           summary: Backup freshness is unknown
           description: The restic exporter has reported no snapshots for 3 hours, so BackupStale cannot fire.
+
+      # backup-coverage expects every volume and database stack-back is labelled to back up,
+      # from Docker (stopped containers too). "Due" waits for the first backup after a recreate.
+      - alert: BackupVolumeMissing
+        expr: backup_coverage_entries == 0 and on (path) backup_coverage_due == 1
+        labels:
+          tier: warning
+          stack: "{{ $labels.project }}"
+        annotations:
+          summary: "{{ $labels.service }} volume missing from the newest backup"
+          description: "{{ $labels.path }} is missing or empty in the newest /volumes snapshot."
+
+      - alert: BackupDatabaseStale
+        expr: |
+          time() - backup_coverage_snapshot_timestamp{kind="database"} > 26 * 3600
+            and on (path) backup_coverage_due == 1
+        labels:
+          tier: warning
+          stack: "{{ $labels.project }}"
+        annotations:
+          summary: "No {{ $labels.service }} database backup in over 26h"
+          description: "The newest snapshot of {{ $labels.path }} is {{ $value | humanizeDuration }} old (or there is none)."
+
+      - alert: BackupCoverageUnknown
+        expr: |
+          time() - backup_coverage_last_success_timestamp > 3 * 3600
+            or absent(backup_coverage_last_success_timestamp)
+        for: 3h
+        labels:
+          tier: warning
+          stack: monitoring
+        annotations:
+          summary: Backup coverage is unknown
+          description: backup-coverage has not completed a check for 3 hours, so BackupVolumeMissing and BackupDatabaseStale cannot fire.
