@@ -59,6 +59,11 @@ scrape_configs:
       - targets: ['radarr-exporter:9708']
         labels: {container: radarr-exporter, stack: arr, tier: info}
 
+  - job_name: arr-queue
+    static_configs:
+      - targets: ['arr-queue-exporter:9713']
+        labels: {container: arr-queue-exporter, stack: arr, tier: info}
+
   # NEXTCLOUD STACK (Valkey; redis_exporter speaks the same protocol)
   - job_name: redis
     scrape_interval: 90s

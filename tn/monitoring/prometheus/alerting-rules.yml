@@ -169,6 +169,46 @@ groups:
           summary: SABnzbd status API is not answering the exporter
           description: "sabnzbd-status-exporter cannot read api?mode=status for 10 minutes; Usenet server alerts are blind."
 
+  - name: arr
+    rules:
+      # A Sonarr/Radarr health check (System > Status), e.g. a download client or indexer it
+      # cannot reach. UpdateCheck is excluded: Renovate handles updates. `to` names the
+      # Dependency behind the check so DependencyDown inhibits it (alertmanager).
+      - alert: ArrHealthIssue
+        expr: |
+          label_replace(label_replace(
+            max without (url, wikiurl) (
+              label_replace({__name__=~"(sonarr|radarr)_system_health_issues", source!="UpdateCheck"},
+                "app", "$1", "__name__", "(sonarr|radarr)_system_health_issues")
+            ) == 1,
+          "to", "nzbhydra2", "source", "Indexer.*"), "to", "sabnzbd", "source", "DownloadClient.*")
+        for: 30m
+        labels:
+          tier: warning
+        annotations:
+          summary: "{{ $labels.app }}: {{ $labels.source }}"
+          description: "{{ $labels.app }} has reported a {{ $labels.type }} for 30 minutes: {{ $labels.message }}"
+
+      # A queue item that has not imported (or is flagged) for 2 hours: importBlocked,
+      # importPending, failedPending, or status warning/error. See arr_queue_item_info.
+      - alert: ArrImportStuck
+        expr: arr_queue_item_stuck == 1
+        for: 2h
+        labels:
+          tier: warning
+        annotations:
+          summary: "{{ $labels.app }}: {{ $labels.title }} is stuck in the queue"
+          description: "{{ $labels.title }} has needed attention in {{ $labels.app }}'s queue (Activity > Queue) for 2 hours."
+
+      - alert: ArrQueueDown
+        expr: arr_queue_up == 0
+        for: 10m
+        labels:
+          tier: warning
+        annotations:
+          summary: "arr-queue-exporter cannot read {{ $labels.app }}'s queue"
+          description: "{{ $labels.app }}'s queue API has not answered for 10 minutes; ArrImportStuck is blind."
+
   - name: host
     rules:
       # TrueNAS native alerts are the first line for pool and disk health; this is the second.
