@@ -13,6 +13,7 @@ networks:
     external: true
 
 include:
+  - ./arr-queue-exporter/docker-compose.yaml
   - ./autobrr/docker-compose.yaml
   - ./dependency-probe/docker-compose.yaml
   - ./qbittorrent/docker-compose.yaml
