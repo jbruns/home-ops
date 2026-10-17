@@ -197,6 +197,8 @@ def placeholder(key: str) -> str:
 
 STARTUP_LABEL = "startup-order"
 STARTUP_LEVELS = {"0", "1", "2", "3"}
+# json-file rotation for every service; the engine default keeps logs forever.
+LOGGING = {"driver": "json-file", "max-size": "10m", "max-file": "3"}
 HTTPS_RULE_RE = re.compile(r"^traefik\.http\.routers\..+-https\.rule$")
 
 
@@ -239,11 +241,16 @@ def check_compose() -> None:
             bad = [name for name, svc in services.items()
                    if (svc.get("labels") or {}).get(STARTUP_LABEL) not in STARTUP_LEVELS]
             probes = [p for name, svc in services.items() for p in probe_problems(name, svc.get("labels") or {}, modules)]
+            logs = [name for name, svc in services.items()
+                    if {"driver": (svc.get("logging") or {}).get("driver"),
+                        **{k: (svc.get("logging") or {}).get("options", {}).get(k) for k in ("max-size", "max-file")}} != LOGGING]
             if bad:
                 fail(f"{stack.name}: services without a valid {STARTUP_LABEL} label (0-3, ADR-0003): {', '.join(sorted(bad))}", src)
             if probes:
                 fail(f"{stack.name}: " + "; ".join(probes), src)
-            if not bad and not probes:
+            if logs:
+                fail(f"{stack.name}: services without json-file logging at max-size 10m, max-file 3: {', '.join(sorted(logs))}", src)
+            if not bad and not probes and not logs:
                 print(f"compose ok: {stack.name}")
 
 
