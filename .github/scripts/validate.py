@@ -8,7 +8,8 @@ Subcommands:
   env         every ${VAR} a Stack uses exists in its env.template and its encrypted .sops.env
   compose     `docker compose config` succeeds for every Stack with placeholder values; every Service
               has a startup-order label, and every Exposed Service (https router) a probe.url
-  monitoring  promtool / amtool / loki / alloy checks, using the image versions the Stacks deploy
+  monitoring  promtool / amtool / loki / alloy checks, using the image versions the Stacks deploy;
+              Grafana dashboards JSON matches its generator (grafana/dashboards.py)
   cloudflare  the Cloudflare ranges Traefik trusts are valid and identical everywhere they appear
 """
 import os
@@ -295,6 +296,13 @@ def check_monitoring() -> None:
     alloy = mon / "alloy"
     alloy_image = deployed_image(alloy / "docker-compose.yaml", "alloy")
     docker_run(alloy_image, {alloy / "config.alloy": "/etc/alloy/config.alloy"}, "/bin/alloy", "validate", "/etc/alloy/config.alloy")
+
+    generator = mon / "grafana" / "dashboards.py"
+    result = subprocess.run([sys.executable, str(generator), "--check"], capture_output=True, text=True)
+    if result.returncode:
+        fail(result.stdout.strip() or result.stderr.strip(), generator)
+    else:
+        print("ok: grafana dashboards match dashboards.py")
 
 
 def check_cloudflare() -> None:
