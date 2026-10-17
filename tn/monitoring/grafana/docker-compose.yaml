@@ -26,7 +26,8 @@ services:
       - GF_LOG_MODE=console
       - GF_LOG_LEVEL=critical
       - GF_FEATURE_TOGGLES_ENABLE=lokiLogsDataplane
-      - GF_INSTALL_PLUGINS=grafana-polystat-panel,https://storage.googleapis.com/integration-artifacts/grafana-lokiexplore-app/grafana-lokiexplore-app-latest.zip;grafana-lokiexplore-app
+      # Added to Grafana's default preinstall set, which already includes Logs Drilldown.
+      - GF_PLUGINS_PREINSTALL=grafana-polystat-panel
       - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER}
       - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
     labels:
@@ -66,7 +67,6 @@ services:
         read_only: true
         # Stored encrypted in repo
         x-sops: true
-      - ./plugins/app.yaml:/etc/grafana/provisioning/plugins/app.yaml:ro
       - grafana_data:/var/lib/grafana
     networks:
       - default

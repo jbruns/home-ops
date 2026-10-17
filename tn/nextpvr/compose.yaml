@@ -22,8 +22,6 @@ services:
       startup-order: "2"
       stack-back.volumes: true
       stack-back.volumes.include: "nextpvr_config"
-      
-      # Enable log collection via Promtail
 
       traefik.enable: true
       traefik.docker.network: proxy
