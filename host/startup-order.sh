@@ -56,7 +56,7 @@ cmd_stop() {
     { running; cat "$STATE" 2>/dev/null; } | sed '/^$/d' | sort -u > "$STATE.tmp"
     if [ -s "$STATE.tmp" ]; then mv "$STATE.tmp" "$STATE"; else rm -f "$STATE.tmp"; fi
     {
-        log "stop: recorded $(wc -l < "$STATE" 2>/dev/null || echo 0) running containers"
+        log "stop: recorded $(cat "$STATE" 2>/dev/null | wc -l) containers"
         for lvl in 3 2 1 0; do
             names=$(at_level "$(running)" "$lvl" | tr '\n' ' ')
             [ -n "$names" ] || continue

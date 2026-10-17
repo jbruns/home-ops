@@ -87,7 +87,9 @@ services:
     image: ghcr.io/jsclayton/prometheus-plex-exporter
     container_name: plex-exporter
     user: ${MEDIA_UID}:${MEDIA_GID}
-    # Exits if Plex is not answering yet, which fails the Deploy.
+    # The exporter exits if Plex is not answering yet. At boot dockerd ignores depends_on,
+    # so wait for Plex here rather than crash-looping (doco-cd refuses restarting containers).
+    entrypoint: ["sh", "-c", "until wget -qO /dev/null \"$$PLEX_SERVER/identity\"; do sleep 5; done; exec /prometheus-plex-exporter"]
     depends_on:
       plex:
         condition: service_healthy
