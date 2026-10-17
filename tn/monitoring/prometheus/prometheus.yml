@@ -125,6 +125,15 @@ scrape_configs:
       - targets: ['backup-coverage:8002']
         labels: {container: backup-coverage, stack: monitoring, tier: warning}
 
+  # One series per container with a health check. honor_labels keeps each series' own
+  # `container`, `stack` and `tier`; the target labels apply to container_health_up.
+  - job_name: container-health
+    scrape_interval: 30s
+    honor_labels: true
+    static_configs:
+      - targets: ['container-health-exporter:9714']
+        labels: {container: container-health-exporter, stack: monitoring, tier: info}
+
   - job_name: dcgm-exporter
     static_configs:
       - targets: ['dcgm-exporter:9400']

@@ -37,7 +37,7 @@ pin updates, selection overrides, and recovery.
 | `edge` | Traefik, CrowdSec, nginx (catch-all) |
 | `ops` | stack-back (backups), Portainer (viewer here; still deploys asotbz/ops Stacks) |
 | `doco-cd` | doco-cd (self-updating), Apprise for deploy notifications |
-| `monitoring` | Prometheus, Alertmanager, Grafana, Loki, Alloy, blackbox-exporter (Probes), docker-socket-proxy, cAdvisor, node-exporter, dcgm-exporter, restic-exporter, backup-coverage |
+| `monitoring` | Prometheus, Alertmanager, Grafana, Loki, Alloy, blackbox-exporter (Probes), docker-socket-proxy, cAdvisor, node-exporter, dcgm-exporter, restic-exporter, backup-coverage, container-health-exporter |
 | `nextcloud` | Nextcloud (+ cron), MariaDB (+ mysqld_exporter), Valkey (+ redis_exporter) |
 | `vaultwarden` | Vaultwarden, its own MariaDB (+ mysqld_exporter) |
 | `open-webui` | Open WebUI, Ollama |
@@ -90,6 +90,8 @@ Every Service carries a `tier` label (`critical`, `warning` or `info`), and ever
 - **Warning** alerts go to the Discord Digest.
 - **Info** is dashboards only.
 - A Heartbeat to healthchecks.io catches a dead Alertmanager or Host.
+
+Prometheus keeps 400 days (capped at 60 GB). Daily Availability per Service is `service:availability:ratio1d` (recording-rules.yml).
 
 Rules are in `tn/monitoring/prometheus/alerting-rules.yml` and routing in `tn/monitoring/alertmanager/config.yml`. Silence a Stack you are working on (e.g. `alertname=ContainerDown, stack=<stack>`) in Alertmanager.
 

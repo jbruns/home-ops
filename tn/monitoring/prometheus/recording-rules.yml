@@ -40,3 +40,18 @@ groups:
       or container:traefik_service_requests:rate10m * 0
   - record: container:traefik_service_5xx:ratio10m
     expr: container:traefik_service_5xx:rate10m / container:traefik_service_requests:rate10m
+
+# Uptime and Availability (GLOSSARY.md). An Exposed Service is up while every one of its Probes
+# succeeds; any other Service while its health check reports healthy (container-health-exporter).
+# Containers with neither have no Uptime. Availability is the rolling 1d share of Uptime; read it
+# at midnight for daily figures, or average it for longer periods.
+- name: availability
+  interval: 1m
+  rules:
+  - record: service:uptime:ok
+    expr: |
+      min by (container, stack, tier) (probe_success{job=~"probe|probe-tcp"})
+      or on (container)
+      max by (container, stack, tier) (container_healthy{job="container-health"})
+  - record: service:availability:ratio1d
+    expr: avg_over_time(service:uptime:ok[1d])
