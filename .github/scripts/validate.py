@@ -3,7 +3,8 @@
 
 Subcommands:
   secrets     every sensitive file referenced by Compose is tracked only in SOPS-encrypted form
-              (doco-cd Stacks, entry file compose.yaml, reference the *.sops.* files directly)
+              (doco-cd Stacks, entry file compose.yaml, reference the *.sops.* files directly),
+              and no plaintext twin (x.yml beside x.sops.yml) is tracked
   env         every ${VAR} a Stack uses exists in its env.template and its encrypted .sops.env
   compose     `docker compose config` succeeds for every Stack with placeholder values
   monitoring  promtool / amtool / loki checks, using the image versions the Stacks deploy
@@ -121,6 +122,9 @@ def check_secrets() -> None:
                 continue
             if not any(m in f.read_text(errors="ignore") for m in SOPS_MARKERS):
                 fail("file is named *.sops.* but is not SOPS-encrypted", f)
+            twin = f.with_name(f.name.replace(".sops.", ".", 1))
+            if twin != f and twin in tracked:
+                fail(f"plaintext twin of a SOPS file is tracked: {_rel(twin)}", f)
         elif f.name == ".env" or f.suffix == ".env":
             fail("plaintext .env file is tracked; encrypt it as *.sops.env", f)
     for f in sorted(tracked):

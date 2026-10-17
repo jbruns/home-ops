@@ -1,5 +1,5 @@
 basic_auth_users:
-    aMadmin: ENC[AES256_GCM,data:cbcHMOzjGYt8fn2OWF3pKaKeQoZE1px2l/g+3+MR9naJo64yfokupHJWqg9hqiGqJcDXdvHF7iWx6oqP,iv:rRXOwepNZSWq/VnOsn0bFrcUTYof75QkRBao3fxLy4I=,tag:eAlYM+K8fq0NqkkI4oaePw==,type:str]
+    aMadmin: ENC[AES256_GCM,data:Ej2dVsskIJn4i1+mg1LoA84L02WbOSJ7f5PXPAY6rSkfCbIv9NHvmvbx++U+TIgYKI7GBA9NOy5odpCE,iv:cKSwubom+epQ9gui7glMCTW9EzBQMtAcxLasur3zRkE=,tag:ZCJLN2HGqCX5MzyoCj2zpQ==,type:str]
     prometheus: ENC[AES256_GCM,data:q0ksCJD5Qq/KnlYQbY3UKldhTn0yAflfA3XHnj3wnMEW1cmzo7euFHQ90p9mGRce2H7WJfiz2ocylRzm,iv:YMzDAoNWtrRAScCjSqx7KWu/dqhvrNUVJf5H9NJPvXE=,tag:uTJkO3CLo6YKLGQtbiv24g==,type:str]
 sops:
     age:
@@ -12,7 +12,7 @@ sops:
             LckfhsiYbYPXfjjFcZv4PLR9mPOFehyMrUFRCOA31vCM2IQ+NTiGYA==
             -----END AGE ENCRYPTED FILE-----
           recipient: age16k57zw4p8z02uwtr9drz2h7dusmazph7wfcug64jd4pqt6quh90qvk3k6c
-    lastmodified: "2026-10-16T21:24:46Z"
-    mac: ENC[AES256_GCM,data:f0Zo47hIVmGSx5TJz3zZd9+dEVAQLzkqFfzdchoMK2siTfSz+DirkXkQ6fBsHFAAKHI3BfRfZff6EnyalUuZBvKhSMyb980qA1hYP9UdsC7/k3FWGRVhgvaHRctNrVsw602HcK+5ma7a9VWJZODe820rwB0zeBiNMZ3JJgeZpmw=,iv:CfrH5BUjRElMC3U6/bsj9RVYTr7KI/yC8QCIoqiAy8I=,tag:/12U3/HmOojAlvzJv1SXbw==,type:str]
+    lastmodified: "2026-10-17T03:06:57Z"
+    mac: ENC[AES256_GCM,data:yk4mp7QnF5fb+8+9v+yDtd1NMcZFRmuxFobszDFYveyMK+to81KADzGhcqv7CkTGHHp2xbtPgHR7n8dSBxEgPl8hdr5bzX1lgr8/xH7mvUE+w1Wmjr9594RaJsgD58Zz/wtONGBS+ob1Q0hoHGyEibh8CErb7+9np5YlaI6Fe9I=,iv:qm6ZtPwPgsc5UKsS0M7zN/rzwloXzhs13pPe2Vo8KXM=,tag:2sX3+bEVpT990t1AGMW88w==,type:str]
     unencrypted_suffix: _unencrypted
     version: 3.13.3
