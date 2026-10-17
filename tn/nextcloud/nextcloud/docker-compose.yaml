@@ -42,6 +42,9 @@ services:
       traefik.http.routers.nextcloud-https.service: nextcloud
       traefik.http.routers.nextcloud-https.middlewares: nextcloud-chain
 
+      # Probe (GLOSSARY.md): the public path a user takes; see prometheus.yml
+      probe.url: https://nextcloud.${ALT_DOMAIN_HOME}/status.php
+
       # Middleware for Nextcloud-specific headers
       traefik.http.middlewares.nextcloud-headers.headers.hostsProxyHeaders: X-Forwarded-Host
       traefik.http.middlewares.nextcloud-headers.headers.referrerPolicy: same-origin

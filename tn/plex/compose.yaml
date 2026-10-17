@@ -48,6 +48,11 @@ services:
       traefik.http.routers.plex-https.service: plex
       traefik.http.routers.plex-https.middlewares: crowdsec-bouncer
 
+      # Probe (GLOSSARY.md): the public path a user takes; see prometheus.yml
+      probe.url: https://plex.${DOMAIN}/identity
+      # plex.<domain> is DNS-only (the WAN address); proxied names don't carry raw TCP
+      probe.tcp: plex.${DOMAIN}:32400
+
       traefik.http.services.plex.loadbalancer.server.port: 32400
     logging:
       driver: json-file

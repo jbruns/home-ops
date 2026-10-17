@@ -41,6 +41,9 @@ services:
       traefik.http.routers.radarr-https.service: radarr
       traefik.http.routers.radarr-https.middlewares: crowdsec-bouncer
 
+      # Probe (GLOSSARY.md): the public path a user takes; see prometheus.yml
+      probe.url: https://radarr.${DOMAIN}/ping
+
       traefik.http.services.radarr.loadbalancer.server.port: 7878
     logging:
       driver: json-file

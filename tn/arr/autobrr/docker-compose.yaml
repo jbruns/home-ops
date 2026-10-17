@@ -41,6 +41,9 @@ services:
       traefik.http.routers.autobrr-https.service: autobrr
       traefik.http.routers.autobrr-https.middlewares: crowdsec-bouncer
 
+      # Probe (GLOSSARY.md): the public path a user takes; see prometheus.yml
+      probe.url: https://autobrr.${DOMAIN}/api/healthz/liveness
+
       traefik.http.services.autobrr.loadbalancer.server.port: 7474
     logging:
       driver: json-file

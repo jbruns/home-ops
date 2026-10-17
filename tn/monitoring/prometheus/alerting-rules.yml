@@ -15,12 +15,45 @@ groups:
   - name: targets
     rules:
       # `tier` and `stack` come from the scrape target's labels (prometheus.yml).
+      # For Probe jobs `up` only says blackbox-exporter answered; its own job covers that.
       - alert: TargetDown
-        expr: up == 0
+        expr: up{job!~"probe|probe-tcp|internet"} == 0
         for: 5m
         annotations:
           summary: "{{ $labels.job }} scrape target is down"
           description: "Prometheus cannot scrape {{ $labels.instance }} ({{ $labels.job }}) for 5 minutes."
+
+  - name: probes
+    rules:
+      # Uptime of an Exposed Service (GLOSSARY.md). `tier`, `stack` and `container` come from
+      # the probed Service. Inhibited while InternetDown or Traefik's own Probe fails (alertmanager).
+      - alert: ProbeFailed
+        expr: probe_success{job=~"probe|probe-tcp"} == 0
+        for: 3m
+        annotations:
+          summary: "{{ $labels.container }} is unreachable"
+          description: "The {{ $labels.module }} Probe of {{ $labels.container }} ({{ $labels.instance }}) has failed for 3 minutes."
+
+      - alert: InternetDown
+        expr: max(probe_success{job="internet"}) == 0
+        for: 2m
+        labels:
+          tier: warning
+          stack: monitoring
+        annotations:
+          summary: The Internet is unreachable
+          description: Every Internet Probe has failed for 2 minutes; Probe alerts are inhibited.
+
+      # docker_sd lost its targets (docker-socket-proxy down or labels gone): Probes have gone silent.
+      - alert: ProbesMissing
+        expr: absent(probe_success{job="probe"})
+        for: 10m
+        labels:
+          tier: warning
+          stack: monitoring
+        annotations:
+          summary: No Probe results
+          description: Prometheus has no Probe targets; check docker-socket-proxy and the probe.url labels.
 
   - name: containers
     rules:

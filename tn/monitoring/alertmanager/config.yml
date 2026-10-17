@@ -32,6 +32,13 @@ route:
     - matchers: [tier=~"critical|warning"]
       receiver: discord
 
+# With the Internet or Traefik down every Probe fails; report the cause, not each Service.
+inhibit_rules:
+  - source_matchers: [alertname="InternetDown"]
+    target_matchers: [alertname="ProbeFailed"]
+  - source_matchers: [alertname="ProbeFailed", container="traefik"]
+    target_matchers: [alertname="ProbeFailed", job="probe", container!="traefik"]
+
 receivers:
   - name: blackhole
 

@@ -37,6 +37,9 @@ services:
       traefik.http.routers.nginx-https.service: nginx
       traefik.http.routers.nginx-https.middlewares: catch-all
 
+      # Probe (GLOSSARY.md): the public path a user takes; see prometheus.yml
+      probe.url: https://${DOMAIN}/
+
       traefik.http.services.nginx.loadbalancer.server.port: 80
       
       # Middleware to send HTTP errors to nginx

@@ -1,0 +1,18 @@
+# Modules a Service picks with its `probe.module` label (default http_2xx).
+modules:
+  http_2xx:
+    prober: http
+    timeout: 8s
+    http:
+      valid_status_codes: []  # 2xx
+
+  # Behind basic auth: a 401 from the Service itself means it is up.
+  http_auth:
+    prober: http
+    timeout: 8s
+    http:
+      valid_status_codes: [401]
+
+  tcp_connect:
+    prober: tcp
+    timeout: 8s

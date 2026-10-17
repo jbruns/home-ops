@@ -35,6 +35,9 @@ services:
       traefik.http.routers.portainer-https.service: portainer
       traefik.http.routers.portainer-https.middlewares: crowdsec-bouncer
 
+      # Probe (GLOSSARY.md): the public path a user takes; see prometheus.yml
+      probe.url: https://pio.${DOMAIN}/api/system/status
+
       traefik.http.services.portainer.loadbalancer.server.port: 9000
     logging:
       driver: json-file
