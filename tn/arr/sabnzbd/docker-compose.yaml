@@ -41,6 +41,9 @@ services:
       traefik.http.routers.sabnzbd-https.service: sabnzbd
       traefik.http.routers.sabnzbd-https.middlewares: crowdsec-bouncer
 
+      # Probe (GLOSSARY.md): the public path a user takes; see prometheus.yml
+      probe.url: https://sabnzbd.${DOMAIN}/api?mode=version
+
       traefik.http.services.sabnzbd.loadbalancer.server.port: 8080
     logging:
       driver: json-file

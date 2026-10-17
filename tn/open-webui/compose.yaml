@@ -76,6 +76,9 @@ services:
       traefik.http.routers.open-webui-https.service: open-webui
       traefik.http.routers.open-webui-https.middlewares: crowdsec-bouncer
 
+      # Probe (GLOSSARY.md): the public path a user takes; see prometheus.yml
+      probe.url: https://openwebui.${DOMAIN}/health
+
       traefik.http.services.open-webui.loadbalancer.server.port: 8080
     logging:
       driver: json-file

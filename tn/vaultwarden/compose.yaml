@@ -46,6 +46,9 @@ services:
       traefik.http.routers.vaultwarden-https.service: vaultwarden
       traefik.http.routers.vaultwarden-https.middlewares: vaultwarden-chain
 
+      # Probe (GLOSSARY.md): the public path a user takes; see prometheus.yml
+      probe.url: https://vault.${ALT_DOMAIN_HOME}/alive
+
       # Headers middleware (https://github.com/dani-garcia/vaultwarden/wiki/Proxy-examples)
       traefik.http.middlewares.vaultwarden-headers.headers.stsSeconds: 31536000
       traefik.http.middlewares.vaultwarden-headers.headers.customBrowserXSSValue: 0

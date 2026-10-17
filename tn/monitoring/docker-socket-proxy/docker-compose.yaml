@@ -1,0 +1,37 @@
+services:
+  # Read-only Docker API for Prometheus docker_sd: container and network listing only.
+  docker-socket-proxy:
+    # https://github.com/Tecnativa/docker-socket-proxy
+    image: tecnativa/docker-socket-proxy:v0.5.0
+    container_name: docker-socket-proxy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges=true
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:2375/_ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 5s
+    dns_search: .
+    environment:
+      CONTAINERS: "1"
+      NETWORKS: "1"
+      EVENTS: "0"
+      POST: "0"
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: warning
+      startup-order: "3"
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+        tag: "{{.Name}}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    # Not published; only Prometheus on the Stack's default network reaches it.
+    networks:
+      - default

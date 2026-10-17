@@ -112,6 +112,97 @@ scrape_configs:
       - targets: ['dcgm-exporter:9400']
         labels: {container: dcgm-exporter, stack: monitoring, tier: info}
 
+  - job_name: blackbox-exporter
+    static_configs:
+      - targets: ['blackbox-exporter:9115']
+        labels: {container: blackbox-exporter, stack: monitoring, tier: warning}
+
+  # PROBES (GLOSSARY.md): outside-in, through Cloudflare and Traefik as a user would.
+  # Targets are containers labelled `probe.url` (HTTP) or `probe.tcp` (host:port), found through
+  # docker-socket-proxy. `container`, `service`, `stack` and `tier` come from the probed Service, so
+  # ProbeFailed routes at that Service's Tier. docker_sd emits one target per network/port; they
+  # relabel to identical label sets and Prometheus keeps one.
+  - job_name: probe
+    scrape_interval: 30s
+    metrics_path: /probe
+    docker_sd_configs:
+      - host: tcp://docker-socket-proxy:2375
+        refresh_interval: 60s
+        filters:
+          - name: label
+            values: [probe.url]
+    relabel_configs:
+      - source_labels: [__meta_docker_container_label_probe_url]
+        target_label: __param_target
+      - target_label: __param_module
+        replacement: http_2xx
+      - source_labels: [__meta_docker_container_label_probe_module]
+        regex: (.+)
+        target_label: __param_module
+      - source_labels: [__param_target]
+        target_label: instance
+      - source_labels: [__param_module]
+        target_label: module
+      - source_labels: [__meta_docker_container_name]
+        regex: /?(.*)
+        target_label: container
+      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
+        target_label: service
+      - source_labels: [__meta_docker_container_label_com_docker_compose_project]
+        target_label: stack
+      - source_labels: [__meta_docker_container_label_tier]
+        target_label: tier
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  - job_name: probe-tcp
+    scrape_interval: 30s
+    metrics_path: /probe
+    docker_sd_configs:
+      - host: tcp://docker-socket-proxy:2375
+        refresh_interval: 60s
+        filters:
+          - name: label
+            values: [probe.tcp]
+    relabel_configs:
+      - source_labels: [__meta_docker_container_label_probe_tcp]
+        target_label: __param_target
+      - target_label: __param_module
+        replacement: tcp_connect
+      - source_labels: [__param_target]
+        target_label: instance
+      - source_labels: [__param_module]
+        target_label: module
+      - source_labels: [__meta_docker_container_name]
+        regex: /?(.*)
+        target_label: container
+      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
+        target_label: service
+      - source_labels: [__meta_docker_container_label_com_docker_compose_project]
+        target_label: stack
+      - source_labels: [__meta_docker_container_label_tier]
+        target_label: tier
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # Two well-known sites off Cloudflare. All failing means our Internet is down: InternetDown
+  # fires and inhibits ProbeFailed.
+  - job_name: internet
+    scrape_interval: 30s
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets: ['https://www.gstatic.com/generate_204', 'https://detectportal.firefox.com/success.txt']
+        labels: {stack: monitoring, tier: warning}
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
   # DOCO-CD STACK
   - job_name: doco-cd
     static_configs:

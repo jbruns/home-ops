@@ -44,6 +44,10 @@ services:
       traefik.http.routers.prometheus-https.service: prometheus
       traefik.http.routers.prometheus-https.middlewares: crowdsec-bouncer
 
+      # Probe (GLOSSARY.md): the public path a user takes; see prometheus.yml
+      probe.url: https://prometheus.${DOMAIN}/-/healthy
+      probe.module: http_auth
+
       traefik.http.services.prometheus.loadbalancer.server.port: 9090
     logging:
       driver: json-file

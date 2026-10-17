@@ -37,7 +37,7 @@ pin updates, selection overrides, and recovery.
 | `edge` | Traefik, CrowdSec, nginx (catch-all) |
 | `ops` | stack-back (backups), Portainer (viewer here; still deploys asotbz/ops Stacks) |
 | `doco-cd` | doco-cd (self-updating), Apprise for deploy notifications |
-| `monitoring` | Prometheus, Alertmanager, Grafana, Loki, Alloy, cAdvisor, node-exporter, dcgm-exporter, restic-exporter |
+| `monitoring` | Prometheus, Alertmanager, Grafana, Loki, Alloy, blackbox-exporter (Probes), docker-socket-proxy, cAdvisor, node-exporter, dcgm-exporter, restic-exporter, backup-coverage |
 | `nextcloud` | Nextcloud (+ cron), MariaDB, Valkey |
 | `vaultwarden` | Vaultwarden, its own MariaDB |
 | `open-webui` | Open WebUI, Ollama |

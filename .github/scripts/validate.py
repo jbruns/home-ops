@@ -6,7 +6,8 @@ Subcommands:
               (doco-cd Stacks, entry file compose.yaml, reference the *.sops.* files directly),
               and no plaintext twin (x.yml beside x.sops.yml) is tracked
   env         every ${VAR} a Stack uses exists in its env.template and its encrypted .sops.env
-  compose     `docker compose config` succeeds for every Stack with placeholder values
+  compose     `docker compose config` succeeds for every Stack with placeholder values; every Service
+              has a startup-order label, and every Exposed Service (https router) a probe.url
   monitoring  promtool / amtool / loki / alloy checks, using the image versions the Stacks deploy
   cloudflare  the Cloudflare ranges Traefik trusts are valid and identical everywhere they appear
 """
@@ -185,9 +186,25 @@ def placeholder(key: str) -> str:
 
 STARTUP_LABEL = "startup-order"
 STARTUP_LEVELS = {"0", "1", "2", "3"}
+HTTPS_RULE_RE = re.compile(r"^traefik\.http\.routers\..+-https\.rule$")
+
+
+def probe_modules() -> set[str]:
+    return set(yaml.safe_load((HOST_DIR / "monitoring/blackbox-exporter/blackbox.yml").read_text())["modules"])
+
+
+def probe_problems(name: str, labels: dict, modules: set[str]) -> list[str]:
+    """An Exposed Service (an https router) needs a Probe (GLOSSARY.md, prometheus.yml)."""
+    problems = []
+    if any(HTTPS_RULE_RE.match(k) for k in labels) and not str(labels.get("probe.url", "")).startswith("https://"):
+        problems.append(f"{name}: has an https router but no probe.url label")
+    if "probe.module" in labels and labels["probe.module"] not in modules:
+        problems.append(f"{name}: probe.module {labels['probe.module']!r} is not a blackbox.yml module")
+    return problems
 
 
 def check_compose() -> None:
+    modules = probe_modules()
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp).resolve()
         for f in tracked_files():
@@ -207,11 +224,15 @@ def check_compose() -> None:
             if r.returncode != 0 or any("is not set" in line for line in noise):
                 fail(f"{stack.name}: docker compose config failed:\n" + "\n".join(noise), src)
                 continue
-            bad = [name for name, svc in json.loads(r.stdout).get("services", {}).items()
+            services = json.loads(r.stdout).get("services", {})
+            bad = [name for name, svc in services.items()
                    if (svc.get("labels") or {}).get(STARTUP_LABEL) not in STARTUP_LEVELS]
+            probes = [p for name, svc in services.items() for p in probe_problems(name, svc.get("labels") or {}, modules)]
             if bad:
                 fail(f"{stack.name}: services without a valid {STARTUP_LABEL} label (0-3, ADR-0003): {', '.join(sorted(bad))}", src)
-            else:
+            if probes:
+                fail(f"{stack.name}: " + "; ".join(probes), src)
+            if not bad and not probes:
                 print(f"compose ok: {stack.name}")
 
 

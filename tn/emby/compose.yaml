@@ -42,6 +42,9 @@ services:
       traefik.http.routers.emby-https.service: emby
       traefik.http.routers.emby-https.middlewares: crowdsec-bouncer
 
+      # Probe (GLOSSARY.md): the public path a user takes; see prometheus.yml
+      probe.url: https://emby.${DOMAIN}/emby/System/Ping
+
       traefik.http.services.emby.loadbalancer.server.port: 32800
     logging:
       driver: json-file

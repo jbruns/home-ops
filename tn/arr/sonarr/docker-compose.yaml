@@ -41,6 +41,9 @@ services:
       traefik.http.routers.sonarr-https.service: sonarr
       traefik.http.routers.sonarr-https.middlewares: crowdsec-bouncer
 
+      # Probe (GLOSSARY.md): the public path a user takes; see prometheus.yml
+      probe.url: https://sonarr.${DOMAIN}/ping
+
       traefik.http.services.sonarr.loadbalancer.server.port: 8989
     logging:
       driver: json-file

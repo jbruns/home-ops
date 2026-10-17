@@ -1,0 +1,37 @@
+services:
+  # Probes (GLOSSARY.md): outside-in checks of each Exposed Service, the way a user reaches it.
+  # Targets come from `probe.url` / `probe.tcp` labels via Prometheus docker_sd (prometheus.yml).
+  blackbox-exporter:
+    # https://github.com/prometheus/blackbox_exporter
+    image: prom/blackbox-exporter:v0.29.0
+    container_name: blackbox-exporter
+    user: ${MONITORING_UID}:${MONITORING_GID}
+    security_opt:
+      - no-new-privileges=true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:9115/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 5s
+    dns_search: .
+    command:
+      - '--config.file=/etc/blackbox_exporter/blackbox.yml'
+      - '--log.level=warn'
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: warning
+      startup-order: "3"
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+        tag: "{{.Name}}"
+    volumes:
+      - ./blackbox.yml:/etc/blackbox_exporter/blackbox.yml:ro
+    # Probes take the public path out through the Stack's default network.
+    networks:
+      - default

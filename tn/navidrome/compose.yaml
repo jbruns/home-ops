@@ -42,6 +42,9 @@ services:
       traefik.http.routers.navidrome-https.service: navidrome
       traefik.http.routers.navidrome-https.middlewares: crowdsec-bouncer
 
+      # Probe (GLOSSARY.md): the public path a user takes; see prometheus.yml
+      probe.url: https://navidrome.${DOMAIN}/ping
+
       traefik.http.services.navidrome.loadbalancer.server.port: 4533
     logging:
       driver: json-file
