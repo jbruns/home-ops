@@ -40,6 +40,49 @@ services:
     networks:
       - default
 
+  # Per-volume backup coverage (backup_coverage.py). Same image for python and restic.
+  backup-coverage:
+    image: ngosang/restic-exporter:2.1.2
+    container_name: backup-coverage
+    restart: unless-stopped
+    entrypoint: ["/sbin/tini", "--"]
+    command: ["python3", "-u", "/app/backup_coverage.py"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8002/metrics"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 5s
+    dns_search: .
+    security_opt:
+      - no-new-privileges=true
+    environment:
+      RESTIC_REPOSITORY: /backups
+      RESTIC_PASSWORD_FILE: /run/secrets/restic_password
+      RESTIC_CACHE_DIR: /tmp/restic-cache
+      REFRESH_INTERVAL: "3600"
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: warning
+      startup-order: "3"
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+        tag: "{{.Name}}"
+    # Root, like restic-exporter: the repository files are root-only (0400).
+    volumes:
+      - ./backup_coverage.py:/app/backup_coverage.py:ro
+      - ${ZFS_POOL_ROOT_HDD}/docker-backups:/backups:ro
+      # Reads stack-back labels and mounts of every container, stopped ones too.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    secrets:
+      - restic_password
+    networks:
+      - default
+
 # Stored encrypted in repo as <name>.sops.txt
 secrets:
   restic_password:
