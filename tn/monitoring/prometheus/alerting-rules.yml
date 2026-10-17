@@ -120,6 +120,18 @@ groups:
           summary: "{{ $labels.name }} is not running"
           description: "Container {{ $labels.name }} ({{ $labels.container_label_com_docker_compose_project }}) was last seen {{ $value | humanizeDuration }} ago."
 
+      # An interrupted Compose recreate (two deployers racing) leaves a running container named
+      # <id>_<name>; cAdvisor and Loki series then split. Compose's own recreates hold the name
+      # for seconds. Fix: recreate the service through doco-cd's REST API (README).
+      - alert: ContainerLeftoverName
+        expr: container_leftover_name == 1
+        for: 10m
+        labels:
+          tier: warning
+        annotations:
+          summary: "{{ $labels.container }} kept a temporary Compose name"
+          description: "{{ $labels.container }} ({{ $labels.stack }}/{{ $labels.service }}) has been running under Compose's temporary name for 10 minutes; recreate {{ $labels.service }}."
+
       - alert: ContainerRestarting
         expr: |
           sum by (name, container_label_tier, container_label_com_docker_compose_project) (

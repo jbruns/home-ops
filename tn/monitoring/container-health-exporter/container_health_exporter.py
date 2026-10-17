@@ -4,16 +4,22 @@ Uptime of a Service that is not an Exposed Service is its own health check repor
 (GLOSSARY.md). Neither cAdvisor nor the Docker engine exports that, so this reads it from the
 read-only docker-socket-proxy. Only containers that define a health check are reported; a
 stopped one reports 0. Ad-hoc containers (`startup-order=skip`) are ignored.
+
+It also reports containers left under Compose's temporary `<12-hex id>_<name>` name, which an
+interrupted recreate leaves behind. cAdvisor keeps a container's first name, so it can't.
 """
 
 import http.client
 import json
 import os
+import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 DOCKER = os.environ.get("DOCKER_HOST", "docker-socket-proxy:2375")
 PORT = int(os.environ.get("PORT", "9714"))
 TIMEOUT = float(os.environ.get("TIMEOUT", "10"))
+
+LEFTOVER = re.compile(r"^[0-9a-f]{12}_(.+)$")
 
 # Whether a container defines a health check, by container ID. Running containers show it in
 # their status ("Up 2 hours (healthy)"); stopped ones need an inspect, done once per ID.
@@ -67,12 +73,17 @@ def collect():
         "# HELP container_healthy 1 while the container's health check reports healthy.",
         "# TYPE container_healthy gauge",
     ]
+    leftovers = []
     live = set()
     for c in containers:
         live.add(c["Id"])
         labels = c.get("Labels") or {}
         if labels.get("startup-order") == "skip":
             continue
+        name = (c.get("Names") or ["/"])[0].lstrip("/")
+        if LEFTOVER.match(name):
+            leftovers.append({"container": name, "stack": labels.get("com.docker.compose.project", ""),
+                              "service": labels.get("com.docker.compose.service", "")})
         try:
             state = health(c)
         except Exception as e:
@@ -81,12 +92,18 @@ def collect():
         if state is None:
             continue
         lbl = {
-            "container": (c.get("Names") or ["/"])[0].lstrip("/"),
+            "container": name,
             "stack": labels.get("com.docker.compose.project", ""),
             "tier": labels.get("tier", ""),
         }
         lines.append("container_healthy{%s} %d" % (
             ",".join(f'{k}="{esc(v)}"' for k, v in lbl.items()), state == "healthy"))
+    lines += [
+        "# HELP container_leftover_name 1 for a container still named <id>_<name> by an interrupted Compose recreate.",
+        "# TYPE container_leftover_name gauge",
+    ]
+    for lbl in leftovers:
+        lines.append("container_leftover_name{%s} 1" % ",".join(f'{k}="{esc(v)}"' for k, v in lbl.items()))
     for cid in set(has_check) - live:
         del has_check[cid]
     return "\n".join(lines) + "\n"
