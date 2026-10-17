@@ -61,6 +61,14 @@ scrape_configs:
       - targets: ['redis-exporter:9121']
         labels: {container: redis-exporter, stack: nextcloud, tier: info}
 
+  # mysqld_exporter per MariaDB; `datastore` names the Datastore it watches (DatastoreDown).
+  - job_name: mysqld
+    static_configs:
+      - targets: ['mariadb-exporter:9104']
+        labels: {container: mariadb-exporter, datastore: mariadb, stack: nextcloud, tier: info}
+      - targets: ['vaultwarden-db-exporter:9104']
+        labels: {container: vaultwarden-db-exporter, datastore: vaultwarden-db, stack: vaultwarden, tier: info}
+
   # MONITORING STACK
   - job_name: prometheus
     basic_auth:

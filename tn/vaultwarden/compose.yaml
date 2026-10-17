@@ -114,10 +114,48 @@ services:
       # stack-back (ops) dumps the database over the backup network.
       - backup
 
+  vaultwarden-db-exporter:
+    # https://github.com/prometheus/mysqld_exporter
+    # Its `exporter` account was created by hand, once (a fresh data volume needs it again):
+    #   CREATE USER 'exporter'@'%' IDENTIFIED BY '<DB_EXPORTER_PASSWORD>' WITH MAX_USER_CONNECTIONS 3;
+    #   GRANT PROCESS, SLAVE MONITOR ON *.* TO 'exporter'@'%';
+    image: prom/mysqld-exporter:v0.20.0
+    container_name: vaultwarden-db-exporter
+    restart: unless-stopped
+    dns_search: .
+    security_opt:
+      - no-new-privileges=true
+    command:
+      - --mysqld.address=vaultwarden-db:3306
+      - --mysqld.username=exporter
+    environment:
+      - MYSQLD_EXPORTER_PASSWORD=${DB_EXPORTER_PASSWORD}
+    depends_on:
+      vaultwarden-db:
+        condition: service_healthy
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: info
+      startup-order: "3"
+
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+    networks:
+      - default
+      - metrics
+
 networks:
   # Traefik and the Exposed Services it routes to; owned by the edge Stack.
   proxy:
     name: proxy
+    external: true
+  # Prometheus and exporters; owned by the monitoring Stack (ADR-0002).
+  metrics:
+    name: metrics
     external: true
   # stack-back and the Datastores it dumps; owned by the ops Stack.
   backup:

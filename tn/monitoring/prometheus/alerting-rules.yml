@@ -123,6 +123,19 @@ groups:
           summary: "{{ $labels.name }} is near its memory limit"
           description: "{{ $labels.name }} is using {{ $value | humanizePercentage }} of its memory limit."
 
+  - name: datastores
+    rules:
+      # The Datastore stopped answering its exporter. Fires at the Datastore's Tier, not the
+      # exporter's (info). `name` matches ContainerDown, which inhibits it (alertmanager).
+      - alert: DatastoreDown
+        expr: label_replace(mysql_up == 0, "name", "$1", "datastore", "(.+)")
+        for: 2m
+        labels:
+          tier: critical
+        annotations:
+          summary: "{{ $labels.datastore }} is not answering"
+          description: "mysqld_exporter ({{ $labels.container }}) cannot query {{ $labels.datastore }} for 2 minutes."
+
   - name: host
     rules:
       # TrueNAS native alerts are the first line for pool and disk health; this is the second.
