@@ -2,6 +2,9 @@
 .env
 !*.sops.env
 
+# Repository-managed agent skills (installed by scripts/setup-agent-skills)
+.agents/skills/
+
 # Decrypted Compose secrets (only the *.sops.txt form is committed)
 tn/**/*.txt
 !tn/**/*.sops.txt
