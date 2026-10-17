@@ -1,0 +1,30 @@
+# DEPENDENCIES (GLOSSARY.md): one Dependency Probe per edge, dependent -> Dependency.
+# A template: dependencies-render fills in each placeholder from its environment (prometheus/
+# docker-compose.yaml passes them from .sops.env) and writes the file Prometheus reads as file_sd
+# (job `dependency` in prometheus.yml). probe_success{from,to} draws the Dependency map, and
+# DependencyDown alerts once per `to`. A new placeholder must also be added to that environment
+# (validate.py checks); write a literal dollar sign as two.
+#
+# Each edge probes the exact URL the dependent is configured with, as the dependent would use it:
+#   target   URL, rendered at deploy (never commit a resolved one)
+#   from/to  dependent and Dependency Service names
+#   kind     internal (a Service on the Host) | external
+#   tier     the highest Tier among the Dependency's dependents; the same on every edge to it
+#   stack    where the alert is grouped: the dependents' Stack
+#   prober   blackbox in the dependents' Stack, on its default network + metrics
+#   module   a module in that prober's blackbox.yml
+#   container  internal only: the Dependency's container, so its own ProbeFailed inhibits DependencyDown
+
+# nzbhydra2: a real search in the dependent's own categories (t=caps survived the 2026-10-17
+# H2 outage). `indexers` keeps it to the ones without an API hit limit, so the Probe spends
+# none of the capped indexers' daily hits; cachetime=15 bounds it to 4 searches/h per edge.
+# Per-indexer health is nzbhydra2's own concern (its host's Prometheus).
+- targets: ['${NZBHYDRA_URL}/api?t=tvsearch&cat=5030,5040&limit=1&indexers=DogNZB,NZBGeek,nzbplanet,omgwtfnzbs&cachetime=15&apikey=${NZBHYDRA_API_KEY}']
+  labels: {from: sonarr, to: nzbhydra2, kind: external, tier: warning, stack: arr, prober: 'dependency-probe-arr:9115', module: newznab}
+- targets: ['${NZBHYDRA_URL}/api?t=movie&cat=2000&limit=1&indexers=DogNZB,NZBGeek,nzbplanet,omgwtfnzbs&cachetime=15&apikey=${NZBHYDRA_API_KEY}']
+  labels: {from: radarr, to: nzbhydra2, kind: external, tier: warning, stack: arr, prober: 'dependency-probe-arr:9115', module: newznab}
+
+- targets: ['http://sabnzbd:8080/api?mode=version']
+  labels: {from: sonarr, to: sabnzbd, kind: internal, container: sabnzbd, tier: warning, stack: arr, prober: 'dependency-probe-arr:9115', module: sabnzbd}
+- targets: ['http://sabnzbd:8080/api?mode=version']
+  labels: {from: radarr, to: sabnzbd, kind: internal, container: sabnzbd, tier: warning, stack: arr, prober: 'dependency-probe-arr:9115', module: sabnzbd}
