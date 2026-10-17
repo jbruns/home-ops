@@ -211,15 +211,15 @@ scrape_configs:
       - target_label: __address__
         replacement: blackbox-exporter:9115
 
-  # DEPENDENCY PROBES (GLOSSARY.md): one per edge, from dependencies.yaml (a Compose config, so
-  # URLs and keys come from .sops.env). Each runs on the blackbox in the dependents' Stack (`prober`).
+  # DEPENDENCY PROBES (GLOSSARY.md): one per edge, from dependencies.yml (rendered by
+  # dependencies-render, so URLs and keys come from .sops.env). Each runs on the blackbox in the dependents' Stack (`prober`).
   # `instance` becomes from->to so a URL with a key never lands in a series.
   - job_name: dependency
     scrape_interval: 60s
     scrape_timeout: 30s
     metrics_path: /probe
     file_sd_configs:
-      - files: [/etc/prometheus/dependencies.yml]
+      - files: [/etc/prometheus/sd/dependencies.yml]
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target

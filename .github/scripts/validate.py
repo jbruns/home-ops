@@ -169,6 +169,17 @@ def check_env() -> None:
         if unused := sorted(tpl - used):
             warn(f"{stack.name}: env.template keys no Compose file uses: {', '.join(unused)}")
         print(f"env checked: {stack.name}")
+    check_dependencies_env()
+
+
+def check_dependencies_env() -> None:
+    """dependencies-render fails on any placeholder in dependencies.yml its environment lacks."""
+    prom = HOST_DIR / "monitoring/prometheus"
+    template = prom / "dependencies.yml"
+    svc = yaml.safe_load((prom / "docker-compose.yaml").read_text())["services"]["dependencies-render"]
+    passed = {e.split("=", 1)[0] for e in svc.get("environment") or []}
+    if missing := sorted(set(VAR_RE.findall(template.read_text())) - passed):
+        fail(f"dependencies.yml placeholders not passed to dependencies-render: {', '.join(missing)}", template)
 
 
 def placeholder(key: str) -> str:
