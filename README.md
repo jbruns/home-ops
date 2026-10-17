@@ -38,8 +38,8 @@ pin updates, selection overrides, and recovery.
 | `ops` | stack-back (backups), Portainer (viewer here; still deploys asotbz/ops Stacks) |
 | `doco-cd` | doco-cd (self-updating), Apprise for deploy notifications |
 | `monitoring` | Prometheus, Alertmanager, Grafana, Loki, Alloy, blackbox-exporter (Probes), docker-socket-proxy, cAdvisor, node-exporter, dcgm-exporter, restic-exporter, backup-coverage |
-| `nextcloud` | Nextcloud (+ cron), MariaDB, Valkey |
-| `vaultwarden` | Vaultwarden, its own MariaDB |
+| `nextcloud` | Nextcloud (+ cron), MariaDB (+ mysqld_exporter), Valkey (+ redis_exporter) |
+| `vaultwarden` | Vaultwarden, its own MariaDB (+ mysqld_exporter) |
 | `open-webui` | Open WebUI, Ollama |
 | `syncthing` | Syncthing |
 | `arr` | Sonarr, Radarr, SABnzbd, qBittorrent, autobrr, dependency-probe (Dependency Probes) |

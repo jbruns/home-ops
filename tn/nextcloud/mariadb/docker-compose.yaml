@@ -41,6 +41,40 @@ services:
       # stack-back (ops) dumps the databases over the backup network.
       - backup
 
+  mariadb-exporter:
+    # https://github.com/prometheus/mysqld_exporter
+    # Its `exporter` account was created by hand, once (a fresh data volume needs it again):
+    #   CREATE USER 'exporter'@'%' IDENTIFIED BY '<MARIADB_EXPORTER_PASSWORD>' WITH MAX_USER_CONNECTIONS 3;
+    #   GRANT PROCESS, SLAVE MONITOR ON *.* TO 'exporter'@'%';
+    image: prom/mysqld-exporter:v0.20.0
+    container_name: mariadb-exporter
+    restart: unless-stopped
+    dns_search: .
+    security_opt:
+      - no-new-privileges=true
+    command:
+      - --mysqld.address=mariadb:3306
+      - --mysqld.username=exporter
+    environment:
+      - MYSQLD_EXPORTER_PASSWORD=${MARIADB_EXPORTER_PASSWORD}
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: info
+      startup-order: "3"
+
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+    networks:
+      - default
+      - metrics
+
 secrets:
   mariadb_root_password:
     file: ./mariadb_root_password.sops.txt
