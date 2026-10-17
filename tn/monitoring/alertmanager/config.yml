@@ -49,6 +49,9 @@ inhibit_rules:
   - source_matchers: [alertname="DependencyDown"]
     target_matchers: [alertname="ArrHealthIssue"]
     equal: [to]
+  - source_matchers: [alertname="ProbeFailed"]
+    target_matchers: [alertname="Http5xxRatio"]
+    equal: [container]
 
 receivers:
   - name: blackhole
