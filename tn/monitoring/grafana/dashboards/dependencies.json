@@ -1,0 +1,692 @@
+{
+  "uid": "dependencies",
+  "title": "Dependency map",
+  "description": "Internal and External Dependencies: the map, Dependency Probes, Usenet providers and indexers.",
+  "tags": [
+    "home-ops"
+  ],
+  "editable": false,
+  "graphTooltip": 1,
+  "timezone": "browser",
+  "refresh": "1m",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "home-ops"
+      ],
+      "asDropdown": true,
+      "title": "home-ops",
+      "includeVars": false,
+      "keepTime": true
+    }
+  ],
+  "panels": [
+    {
+      "type": "row",
+      "title": "Map",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "w": 24,
+        "h": 1,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1
+    },
+    {
+      "type": "nodeGraph",
+      "title": "Dependency map",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "nodes",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "label_replace(label_replace((max by (id, title, subtitle) (label_replace(\n  label_replace(label_replace(max by (container) (service:uptime:ok) and on (container) (group by (container) (label_replace(group by (from) (probe_success{job=\"dependency\"}), \"container\", \"$1\", \"from\", \"(.+)\")) or group by (container) (label_replace(group by (to) (probe_success{job=\"dependency\", kind=\"internal\"}), \"container\", \"$1\", \"to\", \"(.+)\"))), \"id\", \"$1\", \"container\", \"(.+)\"), \"subtitle\", \"Service\", \"\", \"\")\n  or label_replace(label_replace(min by (to) (probe_success{job=\"dependency\", kind=\"external\"}), \"id\", \"$1\", \"to\", \"(.+)\"), \"subtitle\", \"External Dependency\", \"\", \"\")\n  or label_replace(label_replace(max by (server) ((sabnzbd_usenet_server_error == bool 0) and on (server) (sabnzbd_usenet_server_active == 1)), \"id\", \"$1\", \"server\", \"(.+)\"), \"subtitle\", \"Usenet provider\", \"\", \"\"),\n  \"title\", \"$1\", \"id\", \"(.+)\"))) == 1, \"mainstat\", \"UP\", \"\", \"\"), \"color\", \"#73BF69\", \"\", \"\") or label_replace(label_replace((max by (id, title, subtitle) (label_replace(\n  label_replace(label_replace(max by (container) (service:uptime:ok) and on (container) (group by (container) (label_replace(group by (from) (probe_success{job=\"dependency\"}), \"container\", \"$1\", \"from\", \"(.+)\")) or group by (container) (label_replace(group by (to) (probe_success{job=\"dependency\", kind=\"internal\"}), \"container\", \"$1\", \"to\", \"(.+)\"))), \"id\", \"$1\", \"container\", \"(.+)\"), \"subtitle\", \"Service\", \"\", \"\")\n  or label_replace(label_replace(min by (to) (probe_success{job=\"dependency\", kind=\"external\"}), \"id\", \"$1\", \"to\", \"(.+)\"), \"subtitle\", \"External Dependency\", \"\", \"\")\n  or label_replace(label_replace(max by (server) ((sabnzbd_usenet_server_error == bool 0) and on (server) (sabnzbd_usenet_server_active == 1)), \"id\", \"$1\", \"server\", \"(.+)\"), \"subtitle\", \"Usenet provider\", \"\", \"\"),\n  \"title\", \"$1\", \"id\", \"(.+)\"))) == 0, \"mainstat\", \"DOWN\", \"\", \"\"), \"color\", \"#F2495C\", \"\", \"\")",
+          "legendFormat": "",
+          "instant": true,
+          "range": false
+        },
+        {
+          "refId": "edges",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "label_replace(label_replace((max by (id, source, target) (\n  label_join(label_replace(label_replace(min by (from, to) (probe_success{job=\"dependency\"}), \"target\", \"$1\", \"to\", \"(.+)\"), \"source\", \"$1\", \"from\", \"(.+)\"), \"id\", \" -> \", \"source\", \"target\")\n  or label_join(label_replace(label_replace(max by (server) ((sabnzbd_usenet_server_error == bool 0) and on (server) (sabnzbd_usenet_server_active == 1)), \"target\", \"$1\", \"server\", \"(.+)\"), \"source\", \"sabnzbd\", \"\", \"\"), \"id\", \" -> \", \"source\", \"target\")\n)) == 1, \"mainstat\", \"UP\", \"\", \"\"), \"color\", \"#73BF69\", \"\", \"\") or label_replace(label_replace((max by (id, source, target) (\n  label_join(label_replace(label_replace(min by (from, to) (probe_success{job=\"dependency\"}), \"target\", \"$1\", \"to\", \"(.+)\"), \"source\", \"$1\", \"from\", \"(.+)\"), \"id\", \" -> \", \"source\", \"target\")\n  or label_join(label_replace(label_replace(max by (server) ((sabnzbd_usenet_server_error == bool 0) and on (server) (sabnzbd_usenet_server_active == 1)), \"target\", \"$1\", \"server\", \"(.+)\"), \"source\", \"sabnzbd\", \"\", \"\"), \"id\", \" -> \", \"source\", \"target\")\n)) == 0, \"mainstat\", \"DOWN\", \"\", \"\"), \"color\", \"#F2495C\", \"\", \"\")",
+          "legendFormat": "",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "gridPos": {
+        "w": 24,
+        "h": 16,
+        "x": 0,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "layoutAlgorithm": "layered",
+        "zoomMode": "cooperative"
+      },
+      "description": "Services with Dependency Probes, their Dependencies, and sabnzbd's Usenet providers. Services show Uptime; External Dependencies show their worst Dependency Probe; edges show the Dependency Probe (providers: active and no error in sabnzbd).",
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "merge",
+          "options": {},
+          "filter": {
+            "id": "byRefId",
+            "options": "nodes"
+          }
+        },
+        {
+          "id": "merge",
+          "options": {},
+          "filter": {
+            "id": "byRefId",
+            "options": "edges"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value": true
+            }
+          }
+        }
+      ],
+      "id": 2
+    },
+    {
+      "type": "row",
+      "title": "Dependency Probes",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "w": 24,
+        "h": 1,
+        "x": 0,
+        "y": 17
+      },
+      "id": 3
+    },
+    {
+      "type": "table",
+      "title": "Dependency Probes",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (instance, from, to, kind) (probe_success{job=\"dependency\"})",
+          "legendFormat": "",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (instance) (probe_duration_seconds{job=\"dependency\"})",
+          "legendFormat": "",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 7,
+        "x": 0,
+        "y": 18
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Up"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "DOWN",
+                        "color": "red",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "UP",
+                        "color": "green",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Duration"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "instance",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Time 1": true,
+              "Time 2": true,
+              "Time 3": true,
+              "Time 4": true,
+              "Time 5": true,
+              "Time 6": true,
+              "Time 7": true,
+              "Time 8": true,
+              "Time 9": true
+            },
+            "renameByName": {
+              "Value #A": "Up",
+              "Value #B": "Duration"
+            },
+            "indexByName": {
+              "instance": 0,
+              "Value #A": 1,
+              "Value #B": 2
+            }
+          }
+        }
+      ],
+      "id": 4
+    },
+    {
+      "type": "state-timeline",
+      "title": "Dependency Probes over time",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "min by (instance) (probe_success{job=\"dependency\"})",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 7,
+        "x": 12,
+        "y": 18
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showValue": "never",
+        "mergeValues": true,
+        "rowHeight": 0.8,
+        "legend": {
+          "showLegend": false
+        }
+      },
+      "id": 5
+    },
+    {
+      "type": "timeseries",
+      "title": "Dependency Probe duration",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (instance) (probe_duration_seconds{job=\"dependency\"})",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "gridPos": {
+        "w": 24,
+        "h": 7,
+        "x": 0,
+        "y": 25
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "lineWidth": 1
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 6
+    },
+    {
+      "type": "row",
+      "title": "Usenet providers (sabnzbd)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "w": 24,
+        "h": 1,
+        "x": 0,
+        "y": 32
+      },
+      "id": 7
+    },
+    {
+      "type": "state-timeline",
+      "title": "Providers",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (server) ((sabnzbd_usenet_server_error == bool 0) and on (server) (sabnzbd_usenet_server_active == 1))",
+          "legendFormat": "{{server}}"
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 6,
+        "x": 0,
+        "y": 33
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showValue": "never",
+        "mergeValues": true,
+        "rowHeight": 0.8,
+        "legend": {
+          "showLegend": false
+        }
+      },
+      "description": "UP = active in sabnzbd with no error.",
+      "id": 8
+    },
+    {
+      "type": "timeseries",
+      "title": "Connections",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (server) (sabnzbd_usenet_server_connections)",
+          "legendFormat": "{{server}}"
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 6,
+        "x": 12,
+        "y": 33
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "lineWidth": 1
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 9
+    },
+    {
+      "type": "row",
+      "title": "nzbhydra2 indexers (nzbhydra2's own Prometheus)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "w": 24,
+        "h": 1,
+        "x": 0,
+        "y": 39
+      },
+      "id": 10
+    },
+    {
+      "type": "state-timeline",
+      "title": "Indexer state",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-remote"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-remote"
+          },
+          "expr": "sum by (indexer) (nzbhydra2_indexer_state{state=\"ENABLED\"} * 1 or nzbhydra2_indexer_state{state=\"DISABLED_SYSTEM\"} * -1 or nzbhydra2_indexer_state{state=\"DISABLED_USER\"} * 2)",
+          "legendFormat": "{{indexer}}"
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 0,
+        "y": 40
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "ENABLED",
+                  "color": "green",
+                  "index": 0
+                },
+                "0": {
+                  "text": "BACKOFF",
+                  "color": "orange",
+                  "index": 1
+                },
+                "-1": {
+                  "text": "DISABLED",
+                  "color": "red",
+                  "index": 2
+                },
+                "2": {
+                  "text": "OFF (user)",
+                  "color": "text",
+                  "index": 3
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showValue": "never",
+        "mergeValues": true,
+        "rowHeight": 0.8,
+        "legend": {
+          "showLegend": false
+        }
+      },
+      "description": "BACKOFF is nzbhydra2's temporary disable after errors. Gaps mean its machine is unreachable.",
+      "id": 11
+    },
+    {
+      "type": "timeseries",
+      "title": "Indexer API hits",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-remote"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-remote"
+          },
+          "expr": "max by (indexer) (nzbhydra2_indexer_api_hits)",
+          "legendFormat": "{{indexer}}"
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 12,
+        "y": 40
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "lineWidth": 1
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Against each indexer's daily limit (see nzbhydra2).",
+      "id": 12
+    }
+  ],
+  "schemaVersion": 41,
+  "version": 1
+}
