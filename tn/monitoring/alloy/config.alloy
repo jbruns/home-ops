@@ -1,7 +1,7 @@
 // Ships every container's logs to Loki, read through the Docker API.
 // Labels: container, stack (Compose project), service (Compose service), tier, logstream.
 // The `stack` label comes from Compose itself, so a new Service needs no opt-in label.
-// Also tails Traefik's access log (logstream=access).
+// Also tails Traefik's access log (logstream=access). Both redact keys and tokens in URLs.
 
 discovery.docker "containers" {
 	host             = "unix:///var/run/docker.sock"
@@ -43,7 +43,18 @@ loki.source.docker "containers" {
 	targets          = discovery.docker.containers.targets
 	relabel_rules    = discovery.relabel.containers.rules
 	refresh_interval = "15s"
-	forward_to       = [loki.write.local.receiver]
+	forward_to       = [loki.process.containers.receiver]
+}
+
+// Container logs can quote a URL with its key too: blackbox logs a failed Probe's target
+// (Dependency Probes carry API keys, prometheus/dependencies.yaml).
+loki.process "containers" {
+	stage.replace {
+		expression = "(?i)(?:api_?key|apikey|nzbkey|token|x-plex-token|access_token)=([^&\"\\s]+)"
+		replace    = "REDACTED"
+	}
+
+	forward_to = [loki.write.local.receiver]
 }
 
 // Traefik's JSON access log. Only access.log: the rotated .1/.2 copies would ship twice.
