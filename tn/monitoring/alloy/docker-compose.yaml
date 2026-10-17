@@ -43,6 +43,7 @@ services:
       # Docker would copy the image's 473:0770 ownership onto the empty volume.
       - alloy_data:/alloy
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_log:/var/log/traefik:ro
     networks:
       - default
       - metrics
@@ -50,4 +51,8 @@ services:
 volumes:
   alloy_data:
     name: monitoring_alloy_data
+    external: true
+  # Owned by the edge Stack
+  traefik_log:
+    name: common_traefik_log
     external: true

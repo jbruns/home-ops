@@ -1,6 +1,7 @@
 // Ships every container's logs to Loki, read through the Docker API.
 // Labels: container, stack (Compose project), service (Compose service), tier, logstream.
 // The `stack` label comes from Compose itself, so a new Service needs no opt-in label.
+// Also tails Traefik's access log (logstream=access).
 
 discovery.docker "containers" {
 	host             = "unix:///var/run/docker.sock"
@@ -43,6 +44,40 @@ loki.source.docker "containers" {
 	relabel_rules    = discovery.relabel.containers.rules
 	refresh_interval = "15s"
 	forward_to       = [loki.write.local.receiver]
+}
+
+// Traefik's JSON access log. Only access.log: the rotated .1/.2 copies would ship twice.
+// The tailer follows the daily copytruncate.
+loki.source.file "traefik_access" {
+	targets = [{
+		__path__  = "/var/log/traefik/access.log",
+		container = "traefik",
+		stack     = "edge",
+		service   = "traefik",
+		tier      = "critical",
+		logstream = "access",
+	}]
+	tail_from_end = true
+	forward_to    = [loki.process.traefik_access.receiver]
+}
+
+loki.process "traefik_access" {
+	// Some clients put API keys and tokens in the query string; keep them out of Loki.
+	stage.replace {
+		expression = "(?i)(?:api_?key|apikey|nzbkey|token|x-plex-token|access_token)=([^&\"\\s]+)"
+		replace    = "REDACTED"
+	}
+
+	stage.json {
+		expressions = {start = "StartUTC"}
+	}
+
+	stage.timestamp {
+		source = "start"
+		format = "RFC3339Nano"
+	}
+
+	forward_to = [loki.write.local.receiver]
 }
 
 loki.write "local" {
