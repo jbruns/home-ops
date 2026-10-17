@@ -59,6 +59,23 @@ _Avoid_: Watchdog, dead man's switch
 An outside-in check that a Service answers as a user would reach it.
 _Avoid_: Health check (that is the Service's own self-report)
 
+**Uptime**:
+Whether a Service is serving: for an Exposed Service, its Probe succeeds; for any other Service, its own health check reports healthy. A running container behind a failing Probe is not up.
+_Avoid_: Availability (reserve for Uptime aggregated over a period), up (the scrape metric)
+
+**Availability**:
+The share of a period during which a Service had Uptime (e.g. 99.9% over 30 days).
+
+**Dependency**:
+Something a Service needs in order to do its job, such as Sonarr needing its indexer search and download client. It is distinct from Startup Order, which only governs readiness at boot.
+_Avoid_: Upstream, backend
+
+**Internal Dependency**:
+A Dependency that is itself a Service on the Host.
+
+**External Dependency**:
+A Dependency outside the Host, whether on another machine at home (e.g. nzbhydra2) or a third party (e.g. a Usenet provider).
+
 **Startup Order**:
 The sequence in which Services must become ready after the Host boots, so that dependents start only after what they depend on.
 _Avoid_: Boot order, dependency chain
