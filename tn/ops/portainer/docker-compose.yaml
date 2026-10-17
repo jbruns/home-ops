@@ -19,11 +19,6 @@ services:
       stack-back.volumes: true
       stack-back.volumes.include: "portainer_data"
 
-      # logs collection
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: ops
-
       traefik.enable: true
       traefik.docker.network: proxy
 

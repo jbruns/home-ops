@@ -27,11 +27,6 @@ services:
       stack-back.volumes: true
       stack-back.volumes.include: "alertmanager_data"
       
-      # logs collection
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: monitoring
-
       traefik.enable: true
       traefik.docker.network: proxy
 

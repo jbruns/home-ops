@@ -7,7 +7,7 @@ Subcommands:
               and no plaintext twin (x.yml beside x.sops.yml) is tracked
   env         every ${VAR} a Stack uses exists in its env.template and its encrypted .sops.env
   compose     `docker compose config` succeeds for every Stack with placeholder values
-  monitoring  promtool / amtool / loki checks, using the image versions the Stacks deploy
+  monitoring  promtool / amtool / loki / alloy checks, using the image versions the Stacks deploy
   cloudflare  the Cloudflare ranges Traefik trusts are valid and identical everywhere they appear
 """
 import os
@@ -252,6 +252,10 @@ def check_monitoring() -> None:
     loki = mon / "loki"
     loki_image = deployed_image(loki / "docker-compose.yaml", "loki")
     docker_run(loki_image, {loki / "loki.yaml": "/etc/loki/loki.yaml"}, "/usr/bin/loki", "-config.file=/etc/loki/loki.yaml", "-verify-config")
+
+    alloy = mon / "alloy"
+    alloy_image = deployed_image(alloy / "docker-compose.yaml", "alloy")
+    docker_run(alloy_image, {alloy / "config.alloy": "/etc/alloy/config.alloy"}, "/bin/alloy", "validate", "/etc/alloy/config.alloy")
 
 
 def check_cloudflare() -> None:

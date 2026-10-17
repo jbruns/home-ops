@@ -39,8 +39,7 @@
       "matchPackageNames": [
         "grafana/grafana",
         "grafana/loki",
-        "grafana/alloy",
-        "grafana/promtail"
+        "grafana/alloy"
       ],
       "groupName": "grafana stack"
     },

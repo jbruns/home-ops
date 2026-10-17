@@ -24,10 +24,6 @@ services:
       tier: critical
       startup-order: "1"
 
-      # logs collection
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: nextcloud
     logging:
       driver: json-file
       options:
@@ -57,10 +53,6 @@ services:
       tier: info
       startup-order: "3"
 
-      # logs collection
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: nextcloud
     logging:
       driver: json-file
       options:

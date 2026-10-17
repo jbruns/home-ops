@@ -27,10 +27,6 @@ services:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: critical
       startup-order: "1"
-      # logs collection
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: monitoring
 
       traefik.enable: true
       traefik.docker.network: proxy

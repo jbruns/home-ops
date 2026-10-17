@@ -20,10 +20,6 @@ services:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: warning
       startup-order: "3"
-      # logs collection
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: monitoring
     logging:
       driver: json-file
       options:

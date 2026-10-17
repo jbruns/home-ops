@@ -23,10 +23,6 @@ services:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: info
       startup-order: "1"
-      # logs collection
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: home    
     logging:
       driver: json-file
       options:
@@ -64,11 +60,6 @@ services:
       stack-back.volumes: true
       stack-back.volumes.include: "open-webui_data"
       
-      # logs collection
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: open-webui
-
       traefik.enable: true
       traefik.docker.network: proxy
 

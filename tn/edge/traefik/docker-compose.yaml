@@ -74,11 +74,6 @@ services:
       stack-back.volumes: true
       stack-back.volumes.include: "traefik_le,traefik_plugins-storage"
 
-      # logs collection
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: edge
-
       # Traefik Dashboard
       traefik.enable: true
       
