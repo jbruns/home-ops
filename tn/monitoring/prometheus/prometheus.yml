@@ -44,6 +44,11 @@ scrape_configs:
       - targets: ['sabnzbd-exporter:9711']
         labels: {container: sabnzbd-exporter, stack: arr, tier: info}
 
+  - job_name: sabnzbd-status
+    static_configs:
+      - targets: ['sabnzbd-status-exporter:9712']
+        labels: {container: sabnzbd-status-exporter, stack: arr, tier: info}
+
   - job_name: sonarr
     static_configs:
       - targets: ['sonarr-exporter:9707']
