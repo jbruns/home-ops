@@ -44,6 +44,30 @@ groups:
           summary: The Internet is unreachable
           description: Every Internet Probe has failed for 2 minutes; Probe alerts are inhibited.
 
+      # More than 5% of a Service's requests through Traefik are server errors (recording-rules.yml),
+      # with at least 5 in 10 minutes so a single failure at Probe-only traffic does not count.
+      # Digest regardless of the Service's Tier; ProbeFailed inhibits it (alertmanager). `stack`
+      # comes from the container; a Traefik service with no matching container reports as edge.
+      - alert: Http5xxRatio
+        expr: |
+          (
+              (container:traefik_service_5xx:ratio10m > 0.05 and container:traefik_service_5xx:rate10m * 600 >= 5)
+            * on (container) group_left (stack)
+              group by (container, stack) (
+                label_replace(label_replace(container_last_seen{name!=""}, "container", "$1", "name", "(.+)"),
+                  "stack", "$1", "container_label_com_docker_compose_project", "(.+)")
+              )
+          )
+          or on (container)
+            label_replace(container:traefik_service_5xx:ratio10m > 0.05 and container:traefik_service_5xx:rate10m * 600 >= 5,
+              "stack", "edge", "", "")
+        for: 10m
+        labels:
+          tier: warning
+        annotations:
+          summary: "{{ $labels.container }} is returning server errors"
+          description: "{{ $value | humanizePercentage }} of {{ $labels.container }}'s requests through Traefik have been 5xx for 10 minutes."
+
       # docker_sd lost its targets (docker-socket-proxy down or labels gone): Probes have gone silent.
       - alert: ProbesMissing
         expr: absent(probe_success{job="probe"})

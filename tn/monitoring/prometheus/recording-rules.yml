@@ -25,3 +25,18 @@ groups:
     record: instance:node_network_receive_drop_excluding_lo:rate1m
   - expr: sum without (device) (rate(node_network_transmit_drop_total{job="node-exporter", device!="lo"}[1m]))
     record: instance:node_network_transmit_drop_excluding_lo:rate1m
+
+# HTTP status mix per Service, from Traefik. `container` is the Traefik service name without
+# its provider (`sonarr@docker` -> `sonarr`), which matches the container name for every
+# Service here. 501 (a client sent a method the Service does not implement) is not counted
+# as a server error.
+- name: traefik_services
+  rules:
+  - record: container:traefik_service_requests:rate10m
+    expr: sum by (container) (label_replace(rate(traefik_service_requests_total[10m]), "container", "$1", "service", "(.+)@.+"))
+  - record: container:traefik_service_5xx:rate10m
+    expr: |
+      sum by (container) (label_replace(rate(traefik_service_requests_total{code=~"5..", code!="501"}[10m]), "container", "$1", "service", "(.+)@.+"))
+      or container:traefik_service_requests:rate10m * 0
+  - record: container:traefik_service_5xx:ratio10m
+    expr: container:traefik_service_5xx:rate10m / container:traefik_service_requests:rate10m
