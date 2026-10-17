@@ -26,9 +26,6 @@ services:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: warning
       startup-order: "3"
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: doco-cd
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - data:/data
@@ -60,9 +57,6 @@ services:
     labels:
       tier: info
       startup-order: "3"
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: doco-cd
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8000/status >/dev/null || exit 1"]
       interval: 30s

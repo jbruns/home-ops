@@ -1,0 +1,52 @@
+services:
+  alloy:
+    # https://github.com/grafana/alloy
+    image: grafana/alloy:v1.20.1@sha256:2aa2099af76c0098d4af7a4d6e48f86cb66dc1a000222ad927a1c67c6542d13f
+    container_name: alloy
+    user: ${MONITORING_UID}:${MONITORING_GID}
+    # Reads container logs through the Docker API
+    group_add:
+      - ${DOCKER_GID}
+    security_opt:
+      - no-new-privileges=true
+    restart: unless-stopped
+    depends_on:
+      loki:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/12345 && printf 'GET /-/ready HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q ' 200 ' <&3"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 5s
+    dns_search: .
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - --disable-reporting
+      - /etc/alloy/config.alloy
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: warning
+      startup-order: "3"
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: 1
+        tag: "{{.Name}}"
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy:ro
+      # Read positions, so a restart neither re-ships nor skips logs
+      - alloy_data:/var/lib/alloy/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - default
+      - metrics
+
+volumes:
+  alloy_data:
+    name: monitoring_alloy_data
+    external: true

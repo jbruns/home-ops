@@ -28,10 +28,6 @@ services:
       startup-order: "1"
       stack-back.mariadb: true
 
-      # logs collection
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: nextcloud
     logging:
       driver: json-file
       options:

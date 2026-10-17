@@ -29,10 +29,6 @@ services:
       stack-back.volumes: true
       stack-back.volumes.include: "crowdsec_data,crowdsec_config"
 
-      # logs collection
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: edge
     logging:
       driver: json-file
       options:

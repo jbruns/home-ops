@@ -25,11 +25,6 @@ services:
       stack-back.volumes: true
       stack-back.volumes.include: "sabnzbd_config"
       
-      # logs collection
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: arr
-
       traefik.enable: true
       traefik.docker.network: proxy
 
@@ -84,10 +79,6 @@ services:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: info
       startup-order: "3"
-      # logs collection
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: arr
     logging:
       driver: json-file
       options:

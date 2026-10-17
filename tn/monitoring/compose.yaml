@@ -17,11 +17,11 @@ networks:
 
 include:
   - ./alertmanager/docker-compose.yaml
+  - ./alloy/docker-compose.yaml
   - ./cadvisor/docker-compose.yaml
   - ./dcgm-exporter/docker-compose.yaml
   - ./grafana/docker-compose.yaml
   - ./loki/docker-compose.yaml
   - ./node-exporter/docker-compose.yaml
   - ./prometheus/docker-compose.yaml
-  - ./promtail/docker-compose.yaml
   - ./restic-exporter/docker-compose.yaml

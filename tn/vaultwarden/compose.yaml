@@ -30,11 +30,6 @@ services:
       stack-back.volumes: true
       stack-back.volumes.include: "vaultwarden_data"
       
-      # logs collection
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: vaultwarden
-
       traefik.enable: true
       traefik.docker.network: proxy
 
@@ -103,10 +98,6 @@ services:
       startup-order: "1"
       stack-back.mariadb: true
 
-      # logs collection
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: vaultwarden
     logging:
       driver: json-file
       options:

@@ -89,6 +89,12 @@ scrape_configs:
       - targets: ['cadvisor:8080']
         labels: {container: cadvisor, stack: monitoring, tier: warning}
 
+  # Ships container logs to Loki; down means logs are being lost.
+  - job_name: alloy
+    static_configs:
+      - targets: ['alloy:12345']
+        labels: {container: alloy, stack: monitoring, tier: warning}
+
   - job_name: restic
     scrape_interval: 60s
     static_configs:

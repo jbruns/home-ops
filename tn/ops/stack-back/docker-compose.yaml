@@ -18,9 +18,6 @@ services:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: critical
       startup-order: "3"
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: ops
     volumes:
       - /var/run/docker.sock:/tmp/docker.sock:ro
       - backup_cache:/cache

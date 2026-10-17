@@ -24,9 +24,6 @@ services:
       stack-back.volumes.include: "nextpvr_config"
       
       # Enable log collection via Promtail
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: nextpvr
 
       traefik.enable: true
       traefik.docker.network: proxy

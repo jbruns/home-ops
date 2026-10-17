@@ -26,11 +26,6 @@ services:
       stack-back.volumes: true
       stack-back.volumes.include: "nextcloud_data"
       
-      # logs collection
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: nextcloud
-
       traefik.enable: true
       traefik.docker.network: proxy
 
@@ -99,9 +94,6 @@ services:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: warning
       startup-order: "2"
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: nextcloud
     logging:
       driver: json-file
       options:

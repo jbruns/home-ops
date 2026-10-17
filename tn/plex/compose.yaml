@@ -32,11 +32,6 @@ services:
       stack-back.volumes: true
       stack-back.volumes.include: "plex_config"
       
-      # logs collection
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: plex
-
       traefik.enable: true
       traefik.docker.network: proxy
 
@@ -112,10 +107,6 @@ services:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: info
       startup-order: "3"
-      # logs collection
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: plex
     logging:
       driver: json-file
       options:

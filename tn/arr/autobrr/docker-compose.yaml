@@ -25,11 +25,6 @@ services:
       stack-back.volumes: true
       stack-back.volumes.include: "autobrr_config"
       
-      # logs collection
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: arr
-
       traefik.enable: true
       traefik.docker.network: proxy
 

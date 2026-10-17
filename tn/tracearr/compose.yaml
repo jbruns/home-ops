@@ -23,11 +23,6 @@ services:
       stack-back.volumes: true
       stack-back.volumes.include: "tracearr_postgres,tracearr_redis,tracearr_data,tracearr_backups"
       
-      # logs collection
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: tracearr
-
       traefik.enable: true
       traefik.docker.network: proxy
 

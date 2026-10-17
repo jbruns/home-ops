@@ -18,10 +18,6 @@ services:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: warning
       startup-order: "0"
-      # logs collection
-      logging: promtail
-      logging_jobname: containerlogs
-      stackname: edge
 
       traefik.enable: true
       traefik.docker.network: proxy
