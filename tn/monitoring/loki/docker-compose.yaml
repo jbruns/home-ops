@@ -20,5 +20,17 @@ services:
         tag: "{{.Name}}"
     volumes:
       - ./loki.yaml:/etc/loki/loki.yaml:ro
+      # nocopy: otherwise Docker copies the image's /loki (owned 10001) onto the empty volume
+      - type: volume
+        source: loki_data
+        target: /loki
+        volume:
+          nocopy: true
     networks:
       - default
+
+volumes:
+  # Logs are not backed up (no stack-back label); 14d retention.
+  loki_data:
+    name: monitoring_loki_data
+    external: true
