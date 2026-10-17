@@ -5,6 +5,13 @@ services:
     image: emby/embyserver:4.9.5.0
     container_name: emby
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:32800/emby/System/Ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+      start_interval: 5s
     dns_search: .
     environment:
       - UID=${EMBY_UID}
@@ -15,6 +22,7 @@ services:
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: warning
+      startup-order: "2"
       stack-back.volumes: true
       stack-back.volumes.include: "emby_config"
       

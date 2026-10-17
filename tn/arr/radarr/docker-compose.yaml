@@ -8,12 +8,20 @@ services:
       - no-new-privileges=true
     container_name: radarr
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:7878/ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 5s
     dns_search: .
     environment:
       - TZ=${TZ}
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: warning
+      startup-order: "2"
       stack-back.volumes: true
       stack-back.volumes.include: "radarr_config"
       
@@ -60,6 +68,9 @@ services:
     security_opt:
       - no-new-privileges=true
     restart: unless-stopped
+    depends_on:
+      radarr:
+        condition: service_healthy
     dns_search: .
     command: ["radarr"]
     environment:
@@ -70,6 +81,7 @@ services:
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: info
+      startup-order: "3"
       # logs collection
       logging: promtail
       logging_jobname: containerlogs

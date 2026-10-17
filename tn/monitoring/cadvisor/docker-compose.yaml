@@ -15,6 +15,7 @@ services:
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: warning
+      startup-order: "3"
       # logs collection
       logging: promtail
       logging_jobname: containerlogs

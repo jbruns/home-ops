@@ -28,6 +28,7 @@ services:
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: warning
+      startup-order: "2"
       stack-back.volumes: true
       stack-back.volumes.include: "plex_config"
       
@@ -93,6 +94,13 @@ services:
     security_opt:
       - no-new-privileges=true
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:9000/metrics"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 5s
     dns_search: .
     environment:
       # https://github.com/jsclayton/prometheus-plex-exporter?tab=readme-ov-file#configuration
@@ -101,6 +109,7 @@ services:
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: info
+      startup-order: "3"
       # logs collection
       logging: promtail
       logging_jobname: containerlogs

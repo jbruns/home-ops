@@ -3,12 +3,20 @@ services:
     image: nvidia/dcgm-exporter:4.2.3-4.1.3-ubuntu22.04
     container_name: dcgm-exporter
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9400"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 5s
     dns_search: .
     cap_add:
       - SYS_ADMIN
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: info
+      startup-order: "3"
       # logs collection
       logging: promtail
       logging_jobname: containerlogs

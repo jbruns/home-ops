@@ -7,6 +7,18 @@ services:
     security_opt:
       - no-new-privileges=true
     restart: unless-stopped
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 5s
     dns_search: .
     environment:
       # https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana
@@ -20,6 +32,7 @@ services:
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: warning
+      startup-order: "2"
       stack-back.volumes: true
       stack-back.volumes.include: "grafana_data"
       

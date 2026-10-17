@@ -84,10 +84,16 @@ Rules are in `tn/monitoring/prometheus/alerting-rules.yml` and routing in `tn/mo
 - A TrueNAS Cloud Sync task pushes that dataset to Backblaze B2 daily at 04:00 (SYNC mode).
 - restic-exporter feeds the `BackupStale` and `BackupMetricsMissing` alerts.
 
+## Startup order
+
+Every Service has a `startup-order` label (0 edge, 1 Datastores and monitoring core, 2 Exposed Services, 3 sidecars). `validate.py` rejects a Service without one. `host/startup-order.sh` runs as TrueNAS Init/Shutdown Scripts (System → Advanced): `stop` at SHUTDOWN, `start` at POSTINIT. It logs to `/mnt/luna/homeops/startup/`. Run `plan` for a dry run. See [ADR-0003](docs/adr/0003-startup-order-via-host-scripts.md).
+
+The script is not deployed by doco-cd. After changing it, copy it to `/mnt/luna/homeops/bin/startup-order.sh`.
+
 ## Adding a Stack
 
 1. Create `tn/<stack>/compose.yaml`: the Services, plus `include:` for per-Service files if you like.
-2. Give every Service `restart: unless-stopped`, `dns_search: .`, a healthcheck where possible, and a `tier` label.
+2. Give every Service `restart: unless-stopped`, `dns_search: .`, a healthcheck where possible, a `tier` label, and a `startup-order` label.
 3. For an Exposed Service, join `proxy` (external) and set the `traefik.*` labels including `traefik.docker.network: proxy`. For metrics, join `metrics` and add a scrape job in `prometheus.yml`.
 4. For a database, keep it on the Stack's `default` network, label it `stack-back.mariadb: true`, and add it to `backup`.
 5. Write `env.template`. Create and encrypt `.sops.env` (it must exist even if empty).
@@ -114,3 +120,4 @@ docker run --rm \
 ```
 
 5. Enroll CrowdSec and create the Traefik bouncer key (`cscli bouncers add traefik`). Store the key as `TRAEFIK_BOUNCER_API_KEY` in `tn/edge/.sops.env`.
+6. Copy `host/startup-order.sh` to `/mnt/luna/homeops/bin/` (root, 0755). Register `sh /mnt/luna/homeops/bin/startup-order.sh stop` as a SHUTDOWN task and `… start` as a POSTINIT task under System → Advanced → Init/Shutdown Scripts.

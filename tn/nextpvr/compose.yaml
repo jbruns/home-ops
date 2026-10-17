@@ -8,10 +8,18 @@ services:
     security_opt:
       - no-new-privileges=true
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8866/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 5s
     dns_search: .
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: warning
+      startup-order: "2"
       stack-back.volumes: true
       stack-back.volumes.include: "nextpvr_config"
       
