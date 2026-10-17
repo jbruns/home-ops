@@ -64,6 +64,15 @@ Other Stacks declare these networks `external: true`, so `edge`, `monitoring` an
 3. Within 2 minutes doco-cd pulls `main`, decrypts each Stack's `.sops.env` and referenced `*.sops.*` files, and runs `docker compose up` for every Stack that changed. A failed deploy is retried with a forced recreate of that Stack.
 4. Results go to Discord through Apprise. Repeated failures raise the `DeployFailing` alert.
 
+Changes to `tn/doco-cd/` ship in their own PR (CI enforces this). doco-cd replaces itself with the `applier` strategy, which waits for in-flight Deploys to finish first. With `scale_out`, two deployers overlapped and left containers named `<id>_<name>`.
+
+To force-recreate one Service (for example after `ContainerLeftoverName`), call doco-cd's REST API from a container on the `metrics` network. The key is `tn/doco-cd/api_secret.sops.txt`:
+
+```sh
+docker exec prometheus wget -qO- --post-data '' --header "x-api-key: $KEY" \
+  "http://doco-cd/v1/api/project/<stack>/recreate?service=<service>"
+```
+
 Deleting a Stack folder removes the Stack from the Host but keeps its volumes. Volumes that predate the one-Stack-per-app split keep their old names (e.g. `home_vaultwarden_data`) through an explicit `name:`; don't rename them without a planned data move (ADR-0004).
 
 Renovate runs Friday mornings (America/Los_Angeles), pins digests, and waits 5 days after a release before proposing it.

@@ -307,12 +307,30 @@ def check_cloudflare() -> None:
         print("cloudflare ok")
 
 
+def check_isolation() -> None:
+    """A change to the doco-cd Stack ships alone: doco-cd self-updates mid-Deploy, so other
+    Stacks in the same commit deploy across the handover. Compares against VALIDATE_BASE
+    (CI sets the PR base) or origin/main."""
+    base = os.environ.get("VALIDATE_BASE") or "origin/main"
+    r = subprocess.run(["git", "diff", "--name-only", f"{base}...HEAD"], cwd=ROOT, capture_output=True, text=True)
+    if r.returncode != 0:
+        fail(f"isolation: cannot diff against {base}: {r.stderr.strip()}")
+        return
+    stacks_changed = {Path(f).parts[1] for f in r.stdout.split() if Path(f).parts[:1] == ("tn",) and len(Path(f).parts) > 2}
+    if "doco-cd" in stacks_changed and len(stacks_changed) > 1:
+        others = ", ".join(sorted(stacks_changed - {"doco-cd"}))
+        fail(f"isolation: tn/doco-cd changes must ship in their own PR (also changed: {others})")
+    else:
+        print("isolation ok")
+
+
 CHECKS = {
     "secrets": check_secrets,
     "env": check_env,
     "compose": check_compose,
     "monitoring": check_monitoring,
     "cloudflare": check_cloudflare,
+    "isolation": check_isolation,
 }
 
 if __name__ == "__main__":
