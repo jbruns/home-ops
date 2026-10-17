@@ -20,6 +20,7 @@ include:
   - ./alloy/docker-compose.yaml
   - ./blackbox-exporter/docker-compose.yaml
   - ./cadvisor/docker-compose.yaml
+  - ./container-health-exporter/docker-compose.yaml
   - ./dcgm-exporter/docker-compose.yaml
   - ./docker-socket-proxy/docker-compose.yaml
   - ./grafana/docker-compose.yaml

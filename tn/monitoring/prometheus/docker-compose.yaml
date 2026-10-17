@@ -19,7 +19,10 @@ services:
       - '--web.config.file=/etc/prometheus/web.yml'
       - '--log.level=error'
       - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=30d'
+      # 400d so daily Availability (recording-rules.yml) covers a year; about 45 MB/day. The size
+      # cap removes the oldest blocks first if growth outpaces that.
+      - '--storage.tsdb.retention.time=400d'
+      - '--storage.tsdb.retention.size=60GB'
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
       - '--web.external-url=https://prometheus.${DOMAIN}'
