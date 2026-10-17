@@ -26,4 +26,5 @@ include:
   - ./loki/docker-compose.yaml
   - ./node-exporter/docker-compose.yaml
   - ./prometheus/docker-compose.yaml
+  - ./prometheus/dependencies.yaml
   - ./restic-exporter/docker-compose.yaml
