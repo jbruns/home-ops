@@ -17,7 +17,7 @@ groups:
       # `tier` and `stack` come from the scrape target's labels (prometheus.yml).
       # For Probe jobs `up` only says blackbox-exporter answered; its own job covers that.
       - alert: TargetDown
-        expr: up{job!~"probe|probe-tcp|internet|dependency"} == 0
+        expr: up{job!~"probe|probe-tcp|probe-idp|internet|dependency"} == 0
         for: 5m
         annotations:
           summary: "{{ $labels.job }} scrape target is down"
@@ -28,7 +28,7 @@ groups:
       # Uptime of an Exposed Service (GLOSSARY.md). `tier`, `stack` and `container` come from
       # the probed Service. Inhibited while InternetDown or Traefik's own Probe fails (alertmanager).
       - alert: ProbeFailed
-        expr: probe_success{job=~"probe|probe-tcp"} == 0
+        expr: probe_success{job=~"probe|probe-tcp|probe-idp"} == 0
         for: 3m
         annotations:
           summary: "{{ $labels.container }} is unreachable"

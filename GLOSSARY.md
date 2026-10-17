@@ -60,7 +60,7 @@ An outside-in check that a Service answers as a user would reach it.
 _Avoid_: Health check (that is the Service's own self-report)
 
 **Uptime**:
-Whether a Service is serving: for an Exposed Service, its Probe succeeds; for any other Service, its own health check reports healthy. A running container behind a failing Probe is not up.
+Whether a Service is serving: for an Exposed Service, its Probes succeed (behind Authentik, both the redirect to the IdP and an unauthenticated health path); for any other Service, its own health check reports healthy. A running container behind a failing Probe is not up.
 _Avoid_: Availability (reserve for Uptime aggregated over a period), up (the scrape metric)
 
 **Availability**:
