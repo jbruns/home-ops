@@ -1,0 +1,12 @@
+# Repository agent-skill source. Change source/ref/revision to adopt another
+# provider or release; keep revision pinned to the commit resolved by ref.
+# Use `scripts/setup-agent-skills pin <ref>` to move the pin.
+source https://github.com/mattpocock/skills.git
+ref v1.3.1
+revision 24fe0ef7737efae15c87225755e9f6f5965e4888
+
+# The installed set is every skill the source publishes in its
+# .claude-plugin/plugin.json, adjusted by optional entries:
+#   exclude <name|path>  skip a published skill (a bare name matches any category)
+#   include <path>       add an unpublished skill, as a path under skills/
+#                        (e.g. include misc/setup-pre-commit)

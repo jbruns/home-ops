@@ -1,0 +1,237 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/agent-skills-test.XXXXXX")"
+trap 'rm -rf "$TEMP_DIR"' EXIT
+
+SOURCE_DIR="$TEMP_DIR/source"
+PROJECT_DIR="$TEMP_DIR/project"
+HELPER="$PROJECT_DIR/scripts/setup-agent-skills"
+SKILLS="$PROJECT_DIR/.agents/skills"
+
+fail() {
+    echo "$*" >&2
+    exit 1
+}
+
+add_skill() {
+    mkdir -p "$SOURCE_DIR/skills/$1"
+    printf -- '---\nname: %s\ndescription: Test skill\n---\n' "${1##*/}" >"$SOURCE_DIR/skills/$1/SKILL.md"
+}
+
+# Writes the source manifest listing the given skill paths and commits.
+publish() {
+    mkdir -p "$SOURCE_DIR/.claude-plugin"
+    {
+        printf '{\n  "name": "test",\n  "skills": [\n'
+        local first=1 skill
+        for skill in "$@"; do
+            [ "$first" -eq 1 ] || printf ',\n'
+            printf '    "./skills/%s"' "$skill"
+            first=0
+        done
+        printf '\n  ]\n}\n'
+    } >"$SOURCE_DIR/.claude-plugin/plugin.json"
+    git -C "$SOURCE_DIR" add -A
+    git -C "$SOURCE_DIR" commit --quiet -m "publish $*"
+    git -C "$SOURCE_DIR" rev-parse HEAD
+}
+
+write_lock() {
+    {
+        printf 'source %s\nref %s\nrevision %s\n' "$SOURCE_DIR" "$REVISION" "$REVISION"
+        local entry
+        for entry in "$@"; do
+            printf '%s\n' "$entry"
+        done
+    } >"$PROJECT_DIR/.agent-skills.lock"
+}
+
+installed() {
+    (cd "$SKILLS" && ls) | tr '\n' ' ' | sed 's/ $//'
+}
+
+git init --quiet "$SOURCE_DIR"
+git -C "$SOURCE_DIR" config user.name "Agent Skills Test"
+git -C "$SOURCE_DIR" config user.email "agent-skills-test@example.invalid"
+add_skill example
+echo "supporting instructions" >"$SOURCE_DIR/skills/example/reference.md"
+add_skill engineering/nested
+add_skill engineering/other
+add_skill misc/nested
+add_skill misc/extra
+REVISION="$(publish example engineering/nested engineering/other)"
+
+mkdir -p "$PROJECT_DIR/scripts"
+git init --quiet "$PROJECT_DIR"
+cp "$REPO_ROOT/scripts/setup-agent-skills" "$PROJECT_DIR/scripts/"
+
+# The published manifest is the default set; unpublished skills are skipped.
+write_lock
+"$HELPER" >/dev/null
+"$HELPER" check >/dev/null
+"$HELPER" >/dev/null
+"$HELPER" check >/dev/null
+[ "$(installed)" = "example nested other" ] || fail "manifest set not installed: $(installed)"
+
+echo "locally modified" >"$SKILLS/example/reference.md"
+if "$HELPER" check >/dev/null 2>&1; then
+    fail "check accepted modified installed skill content"
+fi
+"$HELPER" >/dev/null
+
+# Missing supporting files are detected, not just missing SKILL.md files.
+rm "$SKILLS/example/reference.md"
+if "$HELPER" check >/dev/null 2>&1; then
+    fail "check accepted a missing supporting file"
+fi
+"$HELPER" >/dev/null
+
+# An alternate lock is supported without a repository-specific environment name.
+cp "$PROJECT_DIR/.agent-skills.lock" "$TEMP_DIR/alternate.lock"
+mv "$PROJECT_DIR/.agent-skills.lock" "$TEMP_DIR/default.lock"
+AGENT_SKILLS_LOCK="$TEMP_DIR/alternate.lock" "$HELPER" check >/dev/null
+mv "$TEMP_DIR/default.lock" "$PROJECT_DIR/.agent-skills.lock"
+
+# Excludes (by name or path) and includes adjust the set; changes are stale.
+write_lock "exclude example" "exclude engineering/other" "include misc/extra"
+if "$HELPER" check >/dev/null 2>&1; then
+    fail "check accepted a lock whose include/exclude entries changed"
+fi
+"$HELPER" >/dev/null
+"$HELPER" check >/dev/null
+[ "$(installed)" = "extra nested" ] || fail "include/exclude not applied: $(installed)"
+
+# Reordering entries is not a change.
+write_lock "include misc/extra" "exclude engineering/other" "exclude example"
+"$HELPER" check >/dev/null || fail "check rejected reordered lock entries"
+
+# An exclude that matches nothing (e.g. removed upstream) only warns.
+write_lock "exclude gone"
+"$HELPER" 2>"$TEMP_DIR/stderr" >/dev/null || fail "setup failed on an exclude matching nothing"
+grep -q "exclude 'gone' matches no skill" "$TEMP_DIR/stderr" || fail "no warning for unmatched exclude"
+
+# An include that does not exist fails.
+write_lock "include misc/missing"
+if "$HELPER" >/dev/null 2>&1; then
+    fail "setup accepted an include that does not exist"
+fi
+
+# Two paths that would install to the same name are rejected.
+write_lock "include misc/nested"
+if "$HELPER" >/dev/null 2>&1; then
+    fail "setup accepted two skills with the same installed name"
+fi
+
+# Excluding the published one lets the other category's skill take the name.
+write_lock "exclude engineering/nested" "include misc/nested"
+"$HELPER" >/dev/null
+"$HELPER" check >/dev/null
+grep -q '^skill misc/nested ' "$SKILLS/.agent-skills-managed" || fail "misc/nested not installed"
+
+# A skill removed upstream disappears on re-pin, with no lock edit.
+write_lock
+"$HELPER" >/dev/null
+NEW_REVISION="$(publish example engineering/nested)"
+"$HELPER" pin "$NEW_REVISION" >/dev/null
+"$HELPER" check >/dev/null
+[ "$(installed)" = "example nested" ] || fail "removed upstream skill was kept: $(installed)"
+REVISION="$NEW_REVISION"
+
+# A moved ref must not silently change the pinned revision.
+git -C "$SOURCE_DIR" tag release "$REVISION"
+write_lock
+sed 's/^ref .*/ref release/' "$PROJECT_DIR/.agent-skills.lock" >"$TEMP_DIR/release.lock"
+cp "$TEMP_DIR/release.lock" "$PROJECT_DIR/.agent-skills.lock"
+"$HELPER" >/dev/null
+git -C "$SOURCE_DIR" tag --force release "$REVISION^" >/dev/null
+if "$HELPER" >"$TEMP_DIR/stdout" 2>"$TEMP_DIR/stderr"; then
+    fail "setup accepted a moved release ref"
+fi
+grep -q 'expected' "$TEMP_DIR/stderr" || fail "moved ref did not report a revision mismatch"
+"$HELPER" check >/dev/null || fail "failed setup changed the installed skills"
+
+# A failed pin preserves the lock and installed set.
+cp "$PROJECT_DIR/.agent-skills.lock" "$TEMP_DIR/before-pin.lock"
+if "$HELPER" pin does-not-exist >/dev/null 2>&1; then
+    fail "pin accepted a missing source ref"
+fi
+cmp -s "$TEMP_DIR/before-pin.lock" "$PROJECT_DIR/.agent-skills.lock" ||
+    fail "failed pin changed the lock"
+"$HELPER" check >/dev/null
+
+# Invalid locks are rejected.
+write_lock "include ../escape"
+if "$HELPER" check >/dev/null 2>&1; then
+    fail "lock accepted a traversal skill path"
+fi
+write_lock "include misc/extra" "exclude extra"
+if "$HELPER" check >/dev/null 2>&1; then
+    fail "lock accepted a skill both included and excluded"
+fi
+write_lock "skill example"
+if "$HELPER" check >/dev/null 2>&1; then
+    fail "lock accepted a legacy skill entry"
+fi
+
+# A source with no manifest needs includes.
+git -C "$SOURCE_DIR" rm --quiet -r .claude-plugin
+git -C "$SOURCE_DIR" commit --quiet -m "drop manifest"
+REVISION="$(git -C "$SOURCE_DIR" rev-parse HEAD)"
+write_lock
+if "$HELPER" >/dev/null 2>&1; then
+    fail "setup accepted an empty skill set"
+fi
+write_lock "include misc/extra"
+"$HELPER" >/dev/null
+"$HELPER" check >/dev/null
+[ "$(installed)" = "extra" ] || fail "includes without a manifest not installed: $(installed)"
+
+"$HELPER" clean >/dev/null
+[ ! -e "$SKILLS/extra" ] || fail "clean did not remove managed skill"
+
+# Unmanaged skills survive setup and clean; collisions fail before changing them.
+mkdir -p "$SKILLS/custom" "$SKILLS/extra"
+echo "custom skill" >"$SKILLS/custom/SKILL.md"
+echo "unmanaged extra" >"$SKILLS/extra/SKILL.md"
+if "$HELPER" >/dev/null 2>&1; then
+    fail "setup overwrote an unmanaged skill"
+fi
+grep -q 'unmanaged extra' "$SKILLS/extra/SKILL.md" || fail "collision changed unmanaged content"
+rm -r "$SKILLS/extra"
+ln -s "$TEMP_DIR/missing" "$SKILLS/extra"
+if "$HELPER" >/dev/null 2>&1; then
+    fail "setup overwrote an unmanaged dangling symlink"
+fi
+[ -L "$SKILLS/extra" ] || fail "collision removed an unmanaged symlink"
+rm "$SKILLS/extra"
+"$HELPER" >/dev/null
+"$HELPER" clean >/dev/null
+[ -f "$SKILLS/custom/SKILL.md" ] || fail "clean removed an unmanaged skill"
+
+# Malformed manifests must fail even with explicit includes available.
+mkdir -p "$SOURCE_DIR/.claude-plugin"
+for manifest in \
+    '{invalid json' \
+    '[]' \
+    '{"skills": "skills/example"}' \
+    '{"skills": [42]}' \
+    '{"skills": ["../example"]}' \
+    '{"skills": ["skills/"]}' \
+    '{"skills": ["skills/../example"]}'; do
+    printf '%s\n' "$manifest" >"$SOURCE_DIR/.claude-plugin/plugin.json"
+    git -C "$SOURCE_DIR" add .claude-plugin/plugin.json
+    git -C "$SOURCE_DIR" commit --quiet -m "invalid manifest"
+    REVISION="$(git -C "$SOURCE_DIR" rev-parse HEAD)"
+    write_lock "include misc/extra"
+    if "$HELPER" >"$TEMP_DIR/stdout" 2>"$TEMP_DIR/stderr"; then
+        fail "setup accepted malformed manifest: $manifest"
+    fi
+    grep -q 'source manifest' "$TEMP_DIR/stderr" ||
+        fail "malformed manifest did not report an explicit error"
+    [ ! -e "$SKILLS/extra" ] || fail "invalid manifest partially installed skills"
+done
+
+echo "setup-agent-skills tests passed"

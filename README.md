@@ -15,6 +15,21 @@ Terms used here (Stack, Service, Datastore, Tier, Page, Digest, ...) are defined
 | `host/` | One-off TrueNAS setup scripts (users and groups) |
 | `.github/scripts/validate.py` | The checks CI runs on every PR |
 
+## Agent setup
+
+Agent workflows are pinned to an upstream commit in
+[`.agent-skills.lock`](.agent-skills.lock), rather than vendored in this repo.
+With Bash, Git, and Python 3 installed, run once per clone:
+
+```sh
+scripts/setup-agent-skills
+scripts/setup-agent-skills check
+```
+
+Start a fresh agent session afterward. Installed skills stay in the gitignored
+`.agents/skills/`. See [agent skill setup](docs/agents/skills.md) for prerequisites,
+pin updates, selection overrides, and recovery.
+
 ## Stacks
 
 | Stack | Services |
