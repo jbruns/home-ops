@@ -43,7 +43,8 @@ groups:
 
 # Uptime and Availability (GLOSSARY.md). An Exposed Service is up while every one of its Probes
 # succeeds; any other Service while its health check reports healthy (container-health-exporter).
-# Containers with neither have no Uptime. Availability is the rolling 1d share of Uptime; read it
+# Containers with neither have no Uptime. Docker briefly renames a container it is recreating
+# to `<12 hex>_<name>`; those are not Services. Availability is the rolling 1d share of Uptime; read it
 # at midnight for daily figures, or average it for longer periods.
 - name: availability
   interval: 1m
@@ -52,6 +53,6 @@ groups:
     expr: |
       min by (container, stack, tier) (probe_success{job=~"probe|probe-tcp|probe-idp"})
       or on (container)
-      max by (container, stack, tier) (container_healthy{job="container-health"})
+      max by (container, stack, tier) (container_healthy{job="container-health", container!~"[0-9a-f]{12}_.+"})
   - record: service:availability:ratio1d
     expr: avg_over_time(service:uptime:ok[1d])
