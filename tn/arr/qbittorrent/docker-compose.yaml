@@ -1,9 +1,21 @@
 services:
   qbittorrent:
     # https://github.com/linuxserver/docker-qbittorrent
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
     image: ghcr.io/linuxserver/qbittorrent:5.2.4@sha256:97333cc1ccf903e0bbcd8eb67e3332e4970e9c1ecabe145e499e9c0847ebcaed
     container_name: qbittorrent
-    restart: unless-stopped
+    # LSIO s6 image: run as the target user instead of PUID/PGID (chown + drop), so no caps.
+    # s6 in non-root mode needs a /run it owns.
+    user: ${QBITTORRENT_UID}:${MEDIA_SHARED_GID}
+    tmpfs:
+      - /run:uid=${QBITTORRENT_UID},gid=${MEDIA_SHARED_GID},mode=0755,exec
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 5.6G working set, mostly page cache; RSS ~256M
+          memory: 8G
     healthcheck:
       test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8080/"]
       interval: 30s
@@ -11,11 +23,8 @@ services:
       retries: 3
       start_period: 60s
       start_interval: 5s
-    dns_search: .
     environment:
       # https://docs.linuxserver.io/images/docker-qbittorrent
-      - PUID=${QBITTORRENT_UID}
-      - PGID=${MEDIA_SHARED_GID}
       - TZ=${TZ}
       - TORRENTING_PORT=31728
     labels:
@@ -45,12 +54,6 @@ services:
       probe.url: https://qbittorrent.${DOMAIN}/
 
       traefik.http.services.qbittorrent.loadbalancer.server.port: 8080
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
     ports:
       # Bittorrent inbound
       - 31728:31728

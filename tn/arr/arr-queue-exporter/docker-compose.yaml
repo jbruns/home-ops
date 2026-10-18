@@ -2,19 +2,23 @@ services:
   arr-queue-exporter:
     # Stuck Sonarr/Radarr queue items (failed imports) for Prometheus; see arr_queue_exporter.py.
     # https://hub.docker.com/_/python
-    image: python:3.14.8-alpine3.24
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: python:3.14.8-alpine3.24@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
     container_name: arr-queue-exporter
     user: ${MEDIA_UID}:${MEDIA_GID}
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 17M working set
+          memory: 64M
     read_only: true
-    security_opt:
-      - no-new-privileges=true
-    restart: unless-stopped
     depends_on:
       sonarr:
         condition: service_healthy
       radarr:
         condition: service_healthy
-    dns_search: .
     command: ["python3", "-u", "/app/arr_queue_exporter.py"]
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:9713/metrics"]
@@ -32,12 +36,6 @@ services:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: info
       startup-order: "3"
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
     volumes:
       - ./arr_queue_exporter.py:/app/arr_queue_exporter.py:ro
     networks:

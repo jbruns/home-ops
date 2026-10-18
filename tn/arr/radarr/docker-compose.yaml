@@ -2,12 +2,17 @@ services:
   radarr:
     # https://github.com/home-operations/containers/pkgs/container/radarr
     # https://github.com/Radarr/Radarr
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
     image: ghcr.io/home-operations/radarr:6.4.4@sha256:be53998a2d39cfa3c3315b70c7509a6a1f2a10c3aee9337653efc9f4c970430e
     user: ${RADARR_UID}:${MEDIA_SHARED_GID}
-    security_opt:
-      - no-new-privileges=true
     container_name: radarr
-    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 734M working set
+          memory: 1280M
     healthcheck:
       test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:7878/ping"]
       interval: 30s
@@ -15,7 +20,6 @@ services:
       retries: 3
       start_period: 60s
       start_interval: 5s
-    dns_search: .
     environment:
       - TZ=${TZ}
     labels:
@@ -45,12 +49,6 @@ services:
       probe.url: https://radarr.${DOMAIN}/ping
 
       traefik.http.services.radarr.loadbalancer.server.port: 7878
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
     volumes:
       - radarr_config:/config
       - ${ZFS_POOL_ROOT_HDD}/media:/data
@@ -60,16 +58,20 @@ services:
 
   radarr-exporter:
     # https://github.com/onedr0p/exportarr
-    image: ghcr.io/onedr0p/exportarr:v2.3.0
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: ghcr.io/onedr0p/exportarr:v2.3.0@sha256:af535d94061cf97a52e1661945ffba78c03f9443eae7c0da1a80a5a4be56b520
     container_name: radarr-exporter
     user: ${MEDIA_UID}:${MEDIA_GID}
-    security_opt:
-      - no-new-privileges=true
-    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 95M working set
+          memory: 192M
     depends_on:
       radarr:
         condition: service_healthy
-    dns_search: .
     command: ["radarr"]
     environment:
       # https://github.com/onedr0p/exportarr#configuration
@@ -80,12 +82,8 @@ services:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: info
       startup-order: "3"
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
+      # exportarr is distroless: no shell, wget or health subcommand to run a healthcheck with.
+      baseline.exempt.healthcheck: "distroless image: no shell or health subcommand"
     networks:
       - default
       - metrics
