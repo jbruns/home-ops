@@ -1,3 +1,14 @@
+configs:
+  valkey_conf:
+    content: |
+      requirepass ${REDIS_PASSWORD}
+      save ""
+      appendonly no
+      loglevel warning
+  redis_exporter_password:
+    content: |
+      {"redis://valkey:6379": "${REDIS_PASSWORD}"}
+
 services:
   # Nextcloud's memcache and file locking. Nothing here needs to survive a restart, so no persistence.
   valkey:
@@ -8,12 +19,13 @@ services:
     dns_search: .
     security_opt:
       - no-new-privileges=true
-    command: ["valkey-server", "--requirepass", "${REDIS_PASSWORD}", "--save", "", "--appendonly", "no", "--loglevel", "warning"]
-    environment:
-      # valkey-cli reads the password from here (healthcheck).
-      - REDISCLI_AUTH=${REDIS_PASSWORD}
+    # The password lives in a config file, never in process arguments or the environment (#496).
+    command: ["valkey-server", "/etc/valkey/valkey.conf"]
+    configs:
+      - source: valkey_conf
+        target: /etc/valkey/valkey.conf
     healthcheck:
-      test: ["CMD-SHELL", "valkey-cli ping | grep -q PONG"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$(sed -n 's/^requirepass //p' /etc/valkey/valkey.conf)\" valkey-cli ping | grep -q PONG"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -44,7 +56,10 @@ services:
       - no-new-privileges=true
     environment:
       - REDIS_ADDR=redis://valkey:6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_PASSWORD_FILE=/run/redis-password.json
+    configs:
+      - source: redis_exporter_password
+        target: /run/redis-password.json
     depends_on:
       valkey:
         condition: service_healthy
