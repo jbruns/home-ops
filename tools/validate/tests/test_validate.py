@@ -247,11 +247,7 @@ def test_isolation_bad_base(validate, monkeypatch):
 
 # --- cloudflare -------------------------------------------------------------------------------
 
-def test_cloudflare(validate, repo, monkeypatch, capsys):
-    sys.path.insert(0, str(REPO_ROOT / "tools/cloudflare-ips"))
-    import cloudflare_ips
-
-    monkeypatch.setattr(cloudflare_ips, "TRAEFIK", repo / "tn/edge/traefik/service.yaml")
+def test_cloudflare(validate, repo, capsys):
     validate.check_cloudflare()
     assert validate.failures == [] and "cloudflare ok" in capsys.readouterr().out
 
@@ -353,3 +349,44 @@ def test_github_annotations(validate, monkeypatch, capsys):
     validate.fail("a\nb", validate.ROOT / "tn/x.yml")
     validate.warn("w")
     assert capsys.readouterr().out == "::error file=tn/x.yml::a%0Ab\n::warning::w\n"
+
+
+# --- configuration ----------------------------------------------------------------------------
+
+def run_cli(*args: str) -> subprocess.CompletedProcess:
+    env = {k: v for k, v in os.environ.items() if k != "GITHUB_ACTIONS"}
+    return subprocess.run([sys.executable, str(TOOL_DIR / "validate.py"), *args], capture_output=True, text=True, env=env)
+
+
+def test_cli_root_and_path_override(repo):
+    write(repo, {"elsewhere/traefik.yaml": "forwardedHeadersTrustedIPs: 1.1.1.0/24\n"})
+    assert run_cli("--root", str(repo), "cloudflare").returncode == 0
+    r = run_cli("--root", str(repo), "--path", "traefik=elsewhere/traefik.yaml", "cloudflare")
+    assert r.returncode == 1
+    assert "ERROR: expected 3 Cloudflare range lists, found 1" in r.stdout
+
+
+@pytest.mark.parametrize("arg", ["nope=x", "traefik"])
+def test_cli_rejects_bad_path_override(arg):
+    r = run_cli("--path", arg, "cloudflare")
+    assert r.returncode == 2 and "--path takes NAME=PATH" in r.stderr
+
+
+def test_monitoring_paths_are_configurable(validate, repo, monkeypatch):
+    write(repo, {
+        "mon/prom/service.yaml": "services:\n  prometheus:\n    image: prom/prometheus:v9\n",
+        "mon/prom/prometheus.yml": "",
+        "mon/prom/x-rules.yml": "",
+    })
+    commit(repo)
+    calls = []
+    monkeypatch.setattr(validate, "docker_run", lambda image, mounts, *args: calls.append((image, sorted(mounts))))
+    validate.configure(repo, {"prometheus": "mon/prom"})
+    validate.check_monitoring()
+    prom = repo / "mon/prom"
+    assert calls[0] == ("prom/prometheus:v9", [prom / "prometheus.yml", prom / "x-rules.yml"])
+
+
+def test_configure_rejects_unknown_path(validate, repo):
+    with pytest.raises(KeyError):
+        validate.configure(repo, {"nope": "x"})

@@ -22,10 +22,9 @@ def traefik(*lists: str) -> str:
 
 
 @pytest.fixture
-def traefik_file(tmp_path, monkeypatch):
+def traefik_file(tmp_path):
     f = tmp_path / "service.yaml"
     f.write_text("# keep me\n" + traefik(OLD, OLD, OLD))
-    monkeypatch.setattr(cloudflare_ips, "TRAEFIK", f)
     return f
 
 
@@ -54,7 +53,7 @@ def test_problems_ignores_order():
 def test_update_unchanged(traefik_file, monkeypatch, capsys):
     before = traefik_file.read_text()
     monkeypatch.setattr(cloudflare_ips, "fetch", lambda: list(reversed(OLD.split(","))))
-    assert cloudflare_ips.update() is False
+    assert cloudflare_ips.update(traefik_file) is False
     assert traefik_file.read_text() == before
     assert capsys.readouterr().out == "Cloudflare ranges unchanged\n"
 
@@ -62,7 +61,7 @@ def test_update_unchanged(traefik_file, monkeypatch, capsys):
 def test_update_rewrites_every_list(traefik_file, monkeypatch, capsys):
     new = ["104.16.0.0/13", "2606:4700::/32"]
     monkeypatch.setattr(cloudflare_ips, "fetch", lambda: new)
-    assert cloudflare_ips.update() is True
+    assert cloudflare_ips.update(traefik_file) is True
     assert traefik_file.read_text() == "# keep me\n" + traefik(*[",".join(new)] * 3)
     assert capsys.readouterr().out == "Cloudflare ranges updated: 2 CIDRs\n"
 
@@ -71,7 +70,7 @@ def test_update_refuses_inconsistent_file(traefik_file, monkeypatch):
     traefik_file.write_text(traefik(OLD))
     monkeypatch.setattr(cloudflare_ips, "fetch", lambda: pytest.fail("must not fetch"))
     with pytest.raises(SystemExit, match="expected 3 Cloudflare range lists, found 1"):
-        cloudflare_ips.update()
+        cloudflare_ips.update(traefik_file)
 
 
 def fake_api(monkeypatch, body: dict) -> None:
@@ -108,3 +107,9 @@ def test_default_file_is_traefik_and_consistent():
 def test_cli_requires_update_flag():
     r = subprocess.run([sys.executable, str(TOOL_DIR / "cloudflare_ips.py")], capture_output=True, text=True)
     assert r.returncode == 1 and "usage: cloudflare_ips.py" in r.stderr
+
+
+def test_cli_update_honours_file(traefik_file, monkeypatch, capsys):
+    monkeypatch.setattr(cloudflare_ips, "fetch", lambda: ["104.16.0.0/13"])
+    cloudflare_ips.main(["--update", "--file", str(traefik_file)])
+    assert cloudflare_ips.extract(traefik_file.read_text()) == [["104.16.0.0/13"]] * 3

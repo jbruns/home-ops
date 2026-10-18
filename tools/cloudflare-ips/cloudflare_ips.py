@@ -5,7 +5,10 @@ The ranges appear three times in the Traefik Compose file (both entrypoints and 
 CrowdSec bouncer). `validate.py cloudflare` checks they agree; `--update` rewrites all
 three from Cloudflare's API when the published set changes (run weekly by
 .github/workflows/cloudflare-ips.yaml).
+
+Usage: cloudflare_ips.py --update [--file PATH]   (default: tn/edge/traefik/service.yaml)
 """
+import argparse
 import ipaddress
 import json
 import re
@@ -50,20 +53,28 @@ def fetch() -> list[str]:
     return cidrs
 
 
-def update() -> bool:
-    text = TRAEFIK.read_text()
+def update(path: Path = TRAEFIK) -> bool:
+    text = path.read_text()
     if errs := problems(text):
         sys.exit("; ".join(errs))
     latest = fetch()
     if set(latest) == set(extract(text)[0]):
         print("Cloudflare ranges unchanged")
         return False
-    TRAEFIK.write_text(LIST_RE.sub(lambda m: m.group(1) + ",".join(latest), text))
+    path.write_text(LIST_RE.sub(lambda m: m.group(1) + ",".join(latest), text))
     print(f"Cloudflare ranges updated: {len(latest)} CIDRs")
     return True
 
 
+def main(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(description="Sync Traefik's trusted Cloudflare ranges with Cloudflare's API.")
+    parser.add_argument("--update", action="store_true", help="rewrite the ranges if Cloudflare's set changed")
+    parser.add_argument("--file", type=Path, default=TRAEFIK, help=f"Compose file holding the ranges (default: {TRAEFIK})")
+    args = parser.parse_args(argv)
+    if not args.update:
+        sys.exit("usage: cloudflare_ips.py --update [--file PATH]")
+    update(args.file)
+
+
 if __name__ == "__main__":
-    if sys.argv[1:] != ["--update"]:
-        sys.exit("usage: cloudflare_ips.py --update")
-    update()
+    main(sys.argv[1:])

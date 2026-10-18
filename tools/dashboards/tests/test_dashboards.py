@@ -38,29 +38,23 @@ def test_committed_json_is_current():
 
 
 @pytest.fixture
-def out(tmp_path, monkeypatch):
-    monkeypatch.setattr(dashboards, "OUT", tmp_path / "dashboards")
-    monkeypatch.setattr(sys, "argv", ["dashboards.py"])
+def out(tmp_path):
     return tmp_path / "dashboards"
 
 
-def test_write_then_check(out, monkeypatch):
-    dashboards.main()
+def test_write_then_check(out):
+    assert run("--out", str(out)).returncode == 0
     assert sorted(p.name for p in out.iterdir()) == sorted(NAMES)
-    monkeypatch.setattr(sys, "argv", ["dashboards.py", "--check"])
-    with pytest.raises(SystemExit) as e:
-        dashboards.main()
-    assert e.value.code == 0
+    assert run("--out", str(out), "--check").returncode == 0
 
 
-def test_check_reports_stale_missing_and_extra(out, monkeypatch, capsys):
-    dashboards.main()
+def test_check_reports_stale_missing_and_extra(out, capsys):
+    dashboards.main(["--out", str(out)])
     (out / "plex.json").write_text("{}\n")
     (out / "arr.json").unlink()
     (out / "hand-made.json").write_text("{}\n")
-    monkeypatch.setattr(sys, "argv", ["dashboards.py", "--check"])
     with pytest.raises(SystemExit) as e:
-        dashboards.main()
+        dashboards.main(["--out", str(out), "--check"])
     assert e.value.code == 1
     assert capsys.readouterr().out.splitlines() == [
         f"{out / 'plex.json'}: stale; run python3 tools/dashboards/dashboards.py",

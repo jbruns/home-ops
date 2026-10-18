@@ -17,7 +17,12 @@ Subcommands:
   monitoring  promtool / amtool / loki / alloy checks, using the image versions the Stacks deploy;
               Grafana dashboards JSON matches its generator (tools/dashboards/dashboards.py)
   cloudflare  the Cloudflare ranges Traefik trusts are valid and identical everywhere they appear
+
+Usage: validate.py [--root DIR] [--path NAME=PATH ...] [check ...]   (no check: run them all)
+  --root  the repository to check (default: the one this file is in)
+  --path  override one of PATHS below, relative to --root or absolute
 """
+import argparse
 import os
 import re
 import shutil
@@ -29,8 +34,19 @@ from pathlib import Path
 
 import yaml
 
-ROOT = Path(__file__).resolve().parents[2]
+TOOLS_DIR = Path(__file__).resolve().parents[1]
+ROOT = TOOLS_DIR.parent
 HOST_DIR = ROOT / "tn"
+# Files and folders individual checks read, relative to ROOT.
+PATHS = {
+    "prometheus": "tn/monitoring/prometheus",
+    "alertmanager": "tn/monitoring/alertmanager",
+    "loki": "tn/monitoring/loki",
+    "alloy": "tn/monitoring/alloy",
+    "blackbox": "tn/monitoring/blackbox-exporter/blackbox.yml",
+    "dashboards": "tools/dashboards/dashboards.py",
+    "traefik": "tn/edge/traefik/service.yaml",
+}
 # ${VAR} but not $${VAR} (Compose's escape for a literal "$")
 VAR_RE = re.compile(r"(?<!\$)\$\{([A-Za-z_][A-Za-z0-9_]*)")
 SOPS_MARKERS = ("sops_version=", '"sops":', "sops:")
@@ -70,8 +86,24 @@ INCLUDED_NAME = "service.yaml"
 DOCO_CD_CONFIG = ROOT / ".doco-cd.yml"
 
 
-def stacks(base: Path = ROOT) -> list[Path]:
-    return sorted(p.parent for p in (base / "tn").glob(f"*/{ENTRY_NAME}"))
+def configure(root: Path, paths: dict[str, str] | None = None) -> None:
+    """Point every check at another repository root and/or override entries of PATHS."""
+    global ROOT, HOST_DIR, DOCO_CD_CONFIG
+    ROOT = root.resolve()
+    HOST_DIR = ROOT / "tn"
+    DOCO_CD_CONFIG = ROOT / ".doco-cd.yml"
+    for name, value in (paths or {}).items():
+        if name not in PATHS:
+            raise KeyError(f"unknown path {name!r}; choose from {', '.join(PATHS)}")
+        PATHS[name] = value
+
+
+def path(name: str) -> Path:
+    return ROOT / PATHS[name]
+
+
+def stacks(base: Path | None = None) -> list[Path]:
+    return sorted(p.parent for p in ((base or ROOT) / "tn").glob(f"*/{ENTRY_NAME}"))
 
 
 def entry(stack: Path) -> Path:
@@ -208,7 +240,7 @@ def check_env() -> None:
 
 def check_dependencies_env() -> None:
     """dependencies-render fails on any placeholder in dependencies.yml its environment lacks."""
-    prom = HOST_DIR / "monitoring/prometheus"
+    prom = path("prometheus")
     template = prom / "dependencies.yml"
     svc = yaml.safe_load((prom / INCLUDED_NAME).read_text())["services"]["dependencies-render"]
     passed = {e.split("=", 1)[0] for e in svc.get("environment") or []}
@@ -320,7 +352,7 @@ def router_problems(name: str, labels: dict) -> list[str]:
 
 
 def probe_modules() -> set[str]:
-    return set(yaml.safe_load((HOST_DIR / "monitoring/blackbox-exporter/blackbox.yml").read_text())["modules"])
+    return set(yaml.safe_load(path("blackbox").read_text())["modules"])
 
 
 def probe_problems(name: str, labels: dict, modules: set[str]) -> list[str]:
@@ -418,44 +450,44 @@ def docker_run(image: str, mounts: dict[Path, str], entrypoint: str, *args: str)
 
 
 def check_monitoring() -> None:
-    mon = HOST_DIR / "monitoring"
-    prom = mon / "prometheus"
+    prom = path("prometheus")
     prom_image = deployed_image(prom / INCLUDED_NAME, "prometheus")
     rule_files = sorted(prom.glob("*rules*.yml"))
     prom_mounts = {f: f"/etc/prometheus/{f.name}" for f in [prom / "prometheus.yml", *rule_files]}
     docker_run(prom_image, prom_mounts, "promtool", "check", "config", "--syntax-only", "/etc/prometheus/prometheus.yml")
     docker_run(prom_image, prom_mounts, "promtool", "check", "rules", *[f"/etc/prometheus/{f.name}" for f in rule_files])
 
-    am = mon / "alertmanager"
+    am = path("alertmanager")
     if (am / "config.yml") in tracked_files():
         am_image = deployed_image(am / INCLUDED_NAME, "alertmanager")
         docker_run(am_image, {am / "config.yml": "/etc/alertmanager/config.yml"}, "amtool", "check-config", "/etc/alertmanager/config.yml")
     else:
         warn("alertmanager config is encrypted-only; amtool check skipped until it is split from its secrets")
 
-    loki = mon / "loki"
+    loki = path("loki")
     loki_image = deployed_image(loki / INCLUDED_NAME, "loki")
     docker_run(loki_image, {loki / "loki.yaml": "/etc/loki/loki.yaml"}, "/usr/bin/loki", "-config.file=/etc/loki/loki.yaml", "-verify-config")
 
-    alloy = mon / "alloy"
+    alloy = path("alloy")
     alloy_image = deployed_image(alloy / INCLUDED_NAME, "alloy")
     docker_run(alloy_image, {alloy / "config.alloy": "/etc/alloy/config.alloy"}, "/bin/alloy", "validate", "/etc/alloy/config.alloy")
 
-    generator = ROOT / "tools/dashboards/dashboards.py"
+    generator = path("dashboards")
     result = subprocess.run([sys.executable, str(generator), "--check"], capture_output=True, text=True)
     if result.returncode:
         fail(result.stdout.strip() or result.stderr.strip(), generator)
     else:
-        print("ok: grafana dashboards match dashboards.py")
+        print(f"ok: grafana dashboards match {generator.name}")
 
 
 def check_cloudflare() -> None:
-    sys.path.insert(0, str(ROOT / "tools/cloudflare-ips"))
+    sys.path.insert(0, str(TOOLS_DIR / "cloudflare-ips"))
     import cloudflare_ips
 
-    errs = cloudflare_ips.problems(cloudflare_ips.TRAEFIK.read_text())
+    traefik = path("traefik")
+    errs = cloudflare_ips.problems(traefik.read_text())
     for err in errs:
-        fail(err, cloudflare_ips.TRAEFIK)
+        fail(err, traefik)
     if not errs:
         print("cloudflare ok")
 
@@ -489,10 +521,23 @@ CHECKS = {
     "isolation": check_isolation,
 }
 
-if __name__ == "__main__":
-    selected = sys.argv[1:] or list(CHECKS)
-    for name in selected:
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(description="Repository validation for home-ops.")
+    parser.add_argument("--root", type=Path, default=ROOT, help="repository to check")
+    parser.add_argument("--path", action="append", default=[], metavar="NAME=PATH",
+                        help=f"override a path ({', '.join(PATHS)})")
+    parser.add_argument("checks", nargs="*", metavar="check", help=f"{', '.join(CHECKS)} (default: all)")
+    args = parser.parse_args(argv)
+    overrides = dict(p.split("=", 1) for p in args.path if "=" in p)
+    if len(overrides) != len(args.path) or set(overrides) - set(PATHS):
+        parser.error(f"--path takes NAME=PATH with NAME one of {', '.join(PATHS)}")
+    configure(args.root, overrides)
+    for name in args.checks or list(CHECKS):
         if name not in CHECKS:
             sys.exit(f"unknown check {name!r}; choose from {', '.join(CHECKS)}")
         CHECKS[name]()
-    sys.exit(1 if failures else 0)
+    return 1 if failures else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
