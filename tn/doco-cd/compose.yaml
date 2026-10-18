@@ -48,7 +48,9 @@ services:
       - default
       # Prometheus scrapes doco_cd_* metrics on :9120.
       - metrics
-    healthcheck: # the image's built-in /healthcheck
+    healthcheck:
+      # The image's own check, declared so CI can see it (Baseline item: healthcheck).
+      test: ["CMD", "/healthcheck"]
       interval: 10s
       timeout: 5s
       start_period: 15s
