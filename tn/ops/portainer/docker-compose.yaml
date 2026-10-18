@@ -1,14 +1,18 @@
 services:
   portainer:
-    image: portainer/portainer-ee:2.45.2
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: portainer/portainer-ee:2.45.2@sha256:64593d0645eec314e84b93c03aba51db67c72ec12c760927335b52b1652765d7
     container_name: portainer
     user: ${COMMON_UID}:${COMMON_GID}
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 169M working set
+          memory: 256M
     group_add:
       - ${DOCKER_GID}
-    security_opt:
-      - no-new-privileges=true
-    restart: unless-stopped
-    dns_search: .
     environment:
       # https://github.com/orgs/portainer/discussions/9755#discussioncomment-8804428
       - COMPOSE_UNPACKER_IMAGE=ghcr.io/jbruns/compose-unpacker:2.45.0-sops.1
@@ -16,6 +20,7 @@ services:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: info
       startup-order: "3"
+      baseline.exempt.healthcheck: "scratch-based image: no shell, wget or health subcommand"
       stack-back.volumes: true
       stack-back.volumes.include: "portainer_data"
 
@@ -39,12 +44,6 @@ services:
       probe.url: https://pio.${DOMAIN}/api/system/status
 
       traefik.http.services.portainer.loadbalancer.server.port: 9000
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
     ports:
       # fallback internal
       - 9443:9443
