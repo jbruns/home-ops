@@ -2,9 +2,14 @@ services:
   emby:
     # https://hub.docker.com/r/emby/embyserver
     # https://github.com/MediaBrowser/Emby.Releases/releases
-    image: emby/embyserver:4.9.5.0
+    extends:
+      file: ../_baseline.yaml
+      service: baseline
+    image: emby/embyserver:4.9.5.0@sha256:734a6f03c7c783a9e566b08d09a2b6376f41229ff29f032a7e00302e0be98f8a
     container_name: emby
-    restart: unless-stopped
+    # s6-overlay init: it cannot start as a non-root user (/run, s6-applyuidgid), so it chowns
+    # /config and drops to UID/GID itself. Verified with --cap-drop ALL on the Host.
+    cap_add: [CHOWN, SETUID, SETGID]
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:32800/emby/System/Ping"]
       interval: 30s
@@ -12,7 +17,6 @@ services:
       retries: 3
       start_period: 120s
       start_interval: 5s
-    dns_search: .
     environment:
       - UID=${EMBY_UID}
       - GID=${MEDIA_SHARED_GID}
@@ -46,12 +50,6 @@ services:
       probe.url: https://emby.${DOMAIN}/emby/System/Ping
 
       traefik.http.services.emby.loadbalancer.server.port: 32800
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
     ports:
       - 32800:32800 # http
       - 32900:32900 # https
@@ -66,6 +64,9 @@ services:
       - proxy
     deploy:
       resources:
+        limits:
+          # 30-day peak 7.8G
+          memory: 12G
         reservations:
           devices:
             - driver: nvidia
