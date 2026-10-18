@@ -93,6 +93,12 @@ Validate locally before pushing (needs Docker and `pip install -r tools/validate
 python3 tools/validate/validate.py secrets env compose monitoring cloudflare
 ```
 
+Each tool under `tools/` has a README. CI also runs their tests and the `host/` runbook's (`pip install -r tools/requirements-test.txt`):
+
+```sh
+python3 -m pytest tools host
+```
+
 ## Monitoring and alerting
 
 Every Service carries a `tier` label (`critical`, `warning` or `info`), and every alert carries `tier` and `stack`.
@@ -133,7 +139,7 @@ The script is not deployed by doco-cd. After changing it, copy it to `/mnt/luna/
 
 ## Bootstrapping a fresh Host
 
-1. Run `host/create_usersgroups.sh`. Configure the Apps service so Docker data is on SSD.
+1. Create the users and groups with `host/create_usersgroups.sh` (runbook: [host/README.md](host/README.md)). Configure the Apps service so Docker data is on SSD.
 2. Give the Host a second IP. The TrueNAS UI owns 80/443 on the primary address, so Traefik binds to `DOCKER_HOST_IPV4`.
 3. Place the age private key at `/mnt/luna/homeops/age.key` (root, 0400).
 4. Bootstrap doco-cd once. After that it manages itself from `tn/doco-cd/`:

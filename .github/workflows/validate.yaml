@@ -27,6 +27,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: tools/agent-skills/test-setup-agent-skills
 
+  tool-tests:
+    name: tool tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: python3 -m pip install --quiet --requirement tools/requirements-test.txt
+      - run: python3 -m pytest tools host
+
   repo:
     name: secrets, env, compose, cloudflare
     runs-on: ubuntu-24.04
@@ -78,7 +86,7 @@ jobs:
   validate:
     name: validate
     if: always()
-    needs: [repo, monitoring, gitleaks, tooling, agent-skills]
+    needs: [repo, monitoring, gitleaks, tooling, agent-skills, tool-tests]
     runs-on: ubuntu-24.04
     steps:
       - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
