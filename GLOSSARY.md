@@ -54,11 +54,11 @@ A Service that fetches media and is responsible for each file until an Organizer
 _Avoid_: Download client (when meaning the role), grabber
 
 **Organizer**:
-A Service that takes over a Downloader's finished file, moving it (or copying it while seeding must continue) into its own Library, and is responsible for it from then on (Sonarr for TV, Radarr for Movies, Shelfmark for Audiobooks, Calibre-Web-Automated for Books). It cannot change any other Library.
+A Service that takes over a Downloader's finished file, directly or through an Ingest Folder, moving it (or copying it while seeding must continue) into its own Library, and is responsible for it from then on (Sonarr for TV, Radarr for Movies, Shelfmark for Audiobooks, Calibre-Web-Automated for Books). It cannot change any other Library.
 _Avoid_: arr, *arr, manager
 
 **Ingest Folder**:
-A folder an Organizer takes files from that another Service, not a Downloader, fills (Calibre-Web-Automated's, which Shelfmark hands Books to). It is outside the Library.
+A folder outside a Library through which its Organizer takes over finished files that the Requester, not the Downloader, passes on (Calibre-Web-Automated's, which Shelfmark fills with Books).
 _Avoid_: Drop folder, watch folder, import folder
 
 **Media Server**:
