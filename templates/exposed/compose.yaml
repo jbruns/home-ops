@@ -13,9 +13,11 @@ services:
     # Advisory, for isolation: run as a non-root user and with a read-only root filesystem where the
     # image allows it (user: ${APP_UID}:${MEDIA_SHARED_GID}, read_only: true plus tmpfs).
     # cap_drop: [ALL] comes from the Baseline. An image that starts as root to chown and drop to
-    # PUID needs no caps if it runs as that user directly (user:, volumes already owned by it); only
-    # where its init cannot (s6-overlay), add back what it needs with a comment, e.g.
-    # cap_add: [CHOWN, SETUID, SETGID]  # s6 init chowns /config and drops to UID
+    # PUID needs no caps if it runs as that user directly (user:, volumes already owned by it). An s6
+    # image may need a /run tmpfs owned by that user (LSIO), or an entrypoint that execs the app
+    # directly when its run script only chowns and drops. Only where neither works, add back what it
+    # needs with a comment, e.g.
+    # cap_add: [CHOWN, SETUID, SETGID]  # init chowns /config and drops to UID
     healthcheck:
       # Declared here even when the image has one, so the Baseline can see it.
       test: ["CMD", "/whoami", "--help"]
