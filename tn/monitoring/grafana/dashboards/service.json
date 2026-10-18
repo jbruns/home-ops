@@ -197,6 +197,7 @@
         "defaults": {
           "custom": {},
           "unit": "percentunit",
+          "decimals": 3,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -213,8 +214,7 @@
                 "value": 0.999
               }
             ]
-          },
-          "decimals": 3
+          }
         },
         "overrides": []
       },
@@ -260,6 +260,7 @@
         "defaults": {
           "custom": {},
           "unit": "percentunit",
+          "decimals": 3,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -276,8 +277,7 @@
                 "value": 0.999
               }
             ]
-          },
-          "decimals": 3
+          }
         },
         "overrides": []
       },

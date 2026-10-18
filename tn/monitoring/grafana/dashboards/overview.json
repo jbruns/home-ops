@@ -120,6 +120,7 @@
         "defaults": {
           "custom": {},
           "unit": "percentunit",
+          "decimals": 2,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -136,8 +137,7 @@
                 "value": 0.999
               }
             ]
-          },
-          "decimals": 2
+          }
         },
         "overrides": []
       },

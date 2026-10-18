@@ -18,13 +18,36 @@
       {
         "type": "datasource",
         "name": "ds",
-        "label": "Machine",
+        "label": "Prometheus",
         "query": "prometheus",
         "regex": "/^Prometheus( \\(.+\\))?$/",
         "refresh": 1,
         "hide": 0,
         "multi": false,
         "includeAll": false,
+        "current": {},
+        "options": []
+      },
+      {
+        "type": "query",
+        "name": "node",
+        "label": "Machine",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${ds}"
+        },
+        "query": {
+          "qryType": 1,
+          "query": "label_values(node_uname_info, job)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "definition": "label_values(node_uname_info, job)",
+        "refresh": 2,
+        "sort": 1,
+        "multi": false,
+        "includeAll": false,
+        "hide": 0,
+        "regex": "",
         "current": {},
         "options": []
       }
@@ -73,7 +96,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "time() - node_boot_time_seconds{job=\"node-exporter\"}",
+          "expr": "time() - node_boot_time_seconds{job=\"$node\"}",
           "legendFormat": "",
           "instant": true,
           "range": false
@@ -88,12 +111,21 @@
       "fieldConfig": {
         "defaults": {
           "custom": {},
-          "unit": "dtdurations"
+          "unit": "dtdurations",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
-        "colorMode": "background",
+        "colorMode": "none",
         "graphMode": "none",
         "textMode": "value",
         "reduceOptions": {
@@ -118,7 +150,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "count(node_cpu_seconds_total{job=\"node-exporter\", mode=\"idle\"})",
+          "expr": "count(node_cpu_seconds_total{job=\"$node\", mode=\"idle\"})",
           "legendFormat": "",
           "instant": true,
           "range": false
@@ -132,12 +164,21 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {}
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
-        "colorMode": "background",
+        "colorMode": "none",
         "graphMode": "none",
         "textMode": "value",
         "reduceOptions": {
@@ -162,7 +203,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "node_memory_MemTotal_bytes{job=\"node-exporter\"}",
+          "expr": "node_memory_MemTotal_bytes{job=\"$node\"}",
           "legendFormat": "",
           "instant": true,
           "range": false
@@ -177,12 +218,21 @@
       "fieldConfig": {
         "defaults": {
           "custom": {},
-          "unit": "bytes"
+          "unit": "bytes",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
-        "colorMode": "background",
+        "colorMode": "none",
         "graphMode": "none",
         "textMode": "value",
         "reduceOptions": {
@@ -207,7 +257,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "1 - avg(rate(node_cpu_seconds_total{job=\"node-exporter\", mode=\"idle\"}[5m]))",
+          "expr": "1 - avg(rate(node_cpu_seconds_total{job=\"$node\", mode=\"idle\"}[5m]))",
           "legendFormat": "",
           "instant": true,
           "range": false
@@ -269,7 +319,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "1 - node_memory_MemAvailable_bytes{job=\"node-exporter\"} / node_memory_MemTotal_bytes{job=\"node-exporter\"}",
+          "expr": "1 - node_memory_MemAvailable_bytes{job=\"$node\"} / node_memory_MemTotal_bytes{job=\"$node\"}",
           "legendFormat": "",
           "instant": true,
           "range": false
@@ -332,7 +382,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "count(count by (name) (container_last_seen{job=\"cadvisor\", name!=\"\"}))",
+          "expr": "count(count by (name) (container_last_seen{job=\"cadvisor\", name!=\"\"})) and on () group(node_uname_info{job=\"$node\", job=\"node-exporter\"})",
           "legendFormat": "",
           "instant": true,
           "range": false
@@ -346,12 +396,21 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {}
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
-        "colorMode": "background",
+        "colorMode": "none",
         "graphMode": "none",
         "textMode": "value",
         "reduceOptions": {
@@ -389,7 +448,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "sum by (mode) (rate(node_cpu_seconds_total{job=\"node-exporter\", mode!=\"idle\"}[$__rate_interval])) / scalar(count(node_cpu_seconds_total{job=\"node-exporter\", mode=\"idle\"}))",
+          "expr": "sum by (mode) (rate(node_cpu_seconds_total{job=\"$node\", mode!=\"idle\"}[$__rate_interval])) / scalar(count(node_cpu_seconds_total{job=\"$node\", mode=\"idle\"}))",
           "legendFormat": "{{mode}}"
         }
       ],
@@ -439,7 +498,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "node_load1{job=\"node-exporter\"}",
+          "expr": "node_load1{job=\"$node\"}",
           "legendFormat": "load1"
         },
         {
@@ -448,7 +507,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "node_load5{job=\"node-exporter\"}",
+          "expr": "node_load5{job=\"$node\"}",
           "legendFormat": "load5"
         },
         {
@@ -457,7 +516,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "node_load15{job=\"node-exporter\"}",
+          "expr": "node_load15{job=\"$node\"}",
           "legendFormat": "load15"
         },
         {
@@ -466,7 +525,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "scalar(count(node_cpu_seconds_total{job=\"node-exporter\", mode=\"idle\"}))",
+          "expr": "scalar(count(node_cpu_seconds_total{job=\"$node\", mode=\"idle\"}))",
           "legendFormat": "cores"
         }
       ],
@@ -512,7 +571,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "node_memory_MemTotal_bytes{job=\"node-exporter\"} - node_memory_MemAvailable_bytes{job=\"node-exporter\"}",
+          "expr": "node_memory_MemTotal_bytes{job=\"$node\"} - node_memory_MemAvailable_bytes{job=\"$node\"}",
           "legendFormat": "used"
         },
         {
@@ -521,7 +580,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "node_zfs_arc_size{job=\"node-exporter\"}",
+          "expr": "node_zfs_arc_size{job=\"$node\"}",
           "legendFormat": "ZFS ARC (within used)"
         },
         {
@@ -530,7 +589,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "node_memory_Cached_bytes{job=\"node-exporter\"} + node_memory_Buffers_bytes{job=\"node-exporter\"}",
+          "expr": "node_memory_Cached_bytes{job=\"$node\"} + node_memory_Buffers_bytes{job=\"$node\"}",
           "legendFormat": "page cache"
         },
         {
@@ -539,7 +598,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "node_memory_MemTotal_bytes{job=\"node-exporter\"}",
+          "expr": "node_memory_MemTotal_bytes{job=\"$node\"}",
           "legendFormat": "total"
         }
       ],
@@ -586,7 +645,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "rate(node_pressure_cpu_waiting_seconds_total{job=\"node-exporter\"}[$__rate_interval])",
+          "expr": "rate(node_pressure_cpu_waiting_seconds_total{job=\"$node\"}[$__rate_interval])",
           "legendFormat": "cpu"
         },
         {
@@ -595,7 +654,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "rate(node_pressure_memory_waiting_seconds_total{job=\"node-exporter\"}[$__rate_interval])",
+          "expr": "rate(node_pressure_memory_waiting_seconds_total{job=\"$node\"}[$__rate_interval])",
           "legendFormat": "memory"
         },
         {
@@ -604,7 +663,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "rate(node_pressure_io_waiting_seconds_total{job=\"node-exporter\"}[$__rate_interval])",
+          "expr": "rate(node_pressure_io_waiting_seconds_total{job=\"$node\"}[$__rate_interval])",
           "legendFormat": "io"
         }
       ],
@@ -665,7 +724,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "max by (mountpoint) (node_filesystem_size_bytes{job=\"node-exporter\", fstype=~\"zfs|xfs|ext4|btrfs\", mountpoint=~\"/|/mnt/[^/.][^/]*\"})",
+          "expr": "max by (mountpoint) (node_filesystem_size_bytes{job=\"$node\", fstype=~\"zfs|xfs|ext4|btrfs\", mountpoint=~\"/|/mnt/[^/.][^/]*|/tmp\"})",
           "legendFormat": "",
           "instant": true,
           "range": false,
@@ -677,7 +736,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "max by (mountpoint) (node_filesystem_avail_bytes{job=\"node-exporter\", fstype=~\"zfs|xfs|ext4|btrfs\", mountpoint=~\"/|/mnt/[^/.][^/]*\"})",
+          "expr": "max by (mountpoint) (node_filesystem_avail_bytes{job=\"$node\", fstype=~\"zfs|xfs|ext4|btrfs\", mountpoint=~\"/|/mnt/[^/.][^/]*|/tmp\"})",
           "legendFormat": "",
           "instant": true,
           "range": false,
@@ -689,7 +748,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "1 - max by (mountpoint) (node_filesystem_avail_bytes{job=\"node-exporter\", mountpoint=~\"/|/mnt/[^/.][^/]*\"}) / max by (mountpoint) (node_filesystem_size_bytes{job=\"node-exporter\", mountpoint=~\"/|/mnt/[^/.][^/]*\"})",
+          "expr": "1 - max by (mountpoint) (node_filesystem_avail_bytes{job=\"$node\", mountpoint=~\"/|/mnt/[^/.][^/]*|/tmp\"}) / max by (mountpoint) (node_filesystem_size_bytes{job=\"$node\", mountpoint=~\"/|/mnt/[^/.][^/]*|/tmp\"})",
           "legendFormat": "",
           "instant": true,
           "range": false,
@@ -786,7 +845,7 @@
         "showHeader": true,
         "cellHeight": "sm"
       },
-      "description": "The root filesystem and each pool's top-level dataset.",
+      "description": "The root filesystem and each pool's top-level dataset (Home Assistant: its data partition).",
       "transformations": [
         {
           "id": "joinByField",
@@ -840,7 +899,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "max by (zpool) (node_zfs_zpool_state{job=\"node-exporter\", state=\"online\"})",
+          "expr": "max by (zpool) (node_zfs_zpool_state{job=\"$node\", state=\"online\"})",
           "legendFormat": "{{zpool}}"
         }
       ],
@@ -917,7 +976,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "rate(node_disk_io_time_seconds_total{job=\"node-exporter\", device=~\"sd[a-z]+|nvme[0-9]+n[0-9]+|vd[a-z]+\"}[$__rate_interval])",
+          "expr": "rate(node_disk_io_time_seconds_total{job=\"$node\", device=~\"sd[a-z]+|nvme[0-9]+n[0-9]+|vd[a-z]+\"}[$__rate_interval])",
           "legendFormat": "{{device}}"
         }
       ],
@@ -965,7 +1024,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "sum(rate(node_disk_read_bytes_total{job=\"node-exporter\", device=~\"sd[a-z]+|nvme[0-9]+n[0-9]+|vd[a-z]+\"}[$__rate_interval]))",
+          "expr": "sum(rate(node_disk_read_bytes_total{job=\"$node\", device=~\"sd[a-z]+|nvme[0-9]+n[0-9]+|vd[a-z]+\"}[$__rate_interval]))",
           "legendFormat": "read"
         },
         {
@@ -974,7 +1033,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "-sum(rate(node_disk_written_bytes_total{job=\"node-exporter\", device=~\"sd[a-z]+|nvme[0-9]+n[0-9]+|vd[a-z]+\"}[$__rate_interval]))",
+          "expr": "-sum(rate(node_disk_written_bytes_total{job=\"$node\", device=~\"sd[a-z]+|nvme[0-9]+n[0-9]+|vd[a-z]+\"}[$__rate_interval]))",
           "legendFormat": "write"
         }
       ],
@@ -1021,7 +1080,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "sum(rate(node_zfs_arc_hits{job=\"node-exporter\"}[$__rate_interval])) / (sum(rate(node_zfs_arc_hits{job=\"node-exporter\"}[$__rate_interval])) + sum(rate(node_zfs_arc_misses{job=\"node-exporter\"}[$__rate_interval])))",
+          "expr": "sum(rate(node_zfs_arc_hits{job=\"$node\"}[$__rate_interval])) / (sum(rate(node_zfs_arc_hits{job=\"$node\"}[$__rate_interval])) + sum(rate(node_zfs_arc_misses{job=\"$node\"}[$__rate_interval])))",
           "legendFormat": "hit ratio"
         }
       ],
@@ -1081,7 +1140,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "sum by (interface) (rate(container_network_receive_bytes_total{job=\"cadvisor\", id=\"/\", interface!~\"lo|veth.*|br-.*|docker.*|vnet.*|tap.*\"}[$__rate_interval]))",
+          "expr": "sum by (interface) (rate(container_network_receive_bytes_total{job=\"cadvisor\", id=\"/\", interface!~\"lo|veth.*|br-.*|docker.*|vnet.*|tap.*|hassio\"}[$__rate_interval])) and on () group(node_uname_info{job=\"$node\", job=\"node-exporter\"})",
           "legendFormat": "{{interface}} in"
         },
         {
@@ -1090,8 +1149,26 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "-sum by (interface) (rate(container_network_transmit_bytes_total{job=\"cadvisor\", id=\"/\", interface!~\"lo|veth.*|br-.*|docker.*|vnet.*|tap.*\"}[$__rate_interval]))",
+          "expr": "-sum by (interface) (rate(container_network_transmit_bytes_total{job=\"cadvisor\", id=\"/\", interface!~\"lo|veth.*|br-.*|docker.*|vnet.*|tap.*|hassio\"}[$__rate_interval])) and on () group(node_uname_info{job=\"$node\", job=\"node-exporter\"})",
           "legendFormat": "{{interface}} out"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "expr": "rate(node_network_receive_bytes_total{job=\"$node\", job!=\"node-exporter\", device!~\"lo|veth.*|br-.*|docker.*|vnet.*|tap.*|hassio\"}[$__rate_interval])",
+          "legendFormat": "{{device}} in"
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "expr": "-rate(node_network_transmit_bytes_total{job=\"$node\", job!=\"node-exporter\", device!~\"lo|veth.*|br-.*|docker.*|vnet.*|tap.*|hassio\"}[$__rate_interval])",
+          "legendFormat": "{{device}} out"
         }
       ],
       "gridPos": {
@@ -1121,7 +1198,7 @@
           "sort": "desc"
         }
       },
-      "description": "From cAdvisor's root cgroup. A bridge and its NIC carry the same traffic.",
+      "description": "From cAdvisor's root cgroup (node-exporter for Home Assistant). A bridge and its NIC carry the same traffic.",
       "id": 20
     },
     {
@@ -1138,7 +1215,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "sum by (interface) (rate(container_network_receive_errors_total{job=\"cadvisor\", id=\"/\", interface!~\"lo|veth.*|br-.*|docker.*|vnet.*|tap.*\"}[$__rate_interval]))",
+          "expr": "sum by (interface) (rate(container_network_receive_errors_total{job=\"cadvisor\", id=\"/\", interface!~\"lo|veth.*|br-.*|docker.*|vnet.*|tap.*|hassio\"}[$__rate_interval])) and on () group(node_uname_info{job=\"$node\", job=\"node-exporter\"})",
           "legendFormat": "{{interface}} receive errors"
         },
         {
@@ -1147,7 +1224,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "sum by (interface) (rate(container_network_receive_packets_dropped_total{job=\"cadvisor\", id=\"/\", interface!~\"lo|veth.*|br-.*|docker.*|vnet.*|tap.*\"}[$__rate_interval]))",
+          "expr": "sum by (interface) (rate(container_network_receive_packets_dropped_total{job=\"cadvisor\", id=\"/\", interface!~\"lo|veth.*|br-.*|docker.*|vnet.*|tap.*|hassio\"}[$__rate_interval])) and on () group(node_uname_info{job=\"$node\", job=\"node-exporter\"})",
           "legendFormat": "{{interface}} receive packets_dropped"
         },
         {
@@ -1156,7 +1233,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "sum by (interface) (rate(container_network_transmit_errors_total{job=\"cadvisor\", id=\"/\", interface!~\"lo|veth.*|br-.*|docker.*|vnet.*|tap.*\"}[$__rate_interval]))",
+          "expr": "sum by (interface) (rate(container_network_transmit_errors_total{job=\"cadvisor\", id=\"/\", interface!~\"lo|veth.*|br-.*|docker.*|vnet.*|tap.*|hassio\"}[$__rate_interval])) and on () group(node_uname_info{job=\"$node\", job=\"node-exporter\"})",
           "legendFormat": "{{interface}} transmit errors"
         },
         {
@@ -1165,8 +1242,44 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "sum by (interface) (rate(container_network_transmit_packets_dropped_total{job=\"cadvisor\", id=\"/\", interface!~\"lo|veth.*|br-.*|docker.*|vnet.*|tap.*\"}[$__rate_interval]))",
+          "expr": "sum by (interface) (rate(container_network_transmit_packets_dropped_total{job=\"cadvisor\", id=\"/\", interface!~\"lo|veth.*|br-.*|docker.*|vnet.*|tap.*|hassio\"}[$__rate_interval])) and on () group(node_uname_info{job=\"$node\", job=\"node-exporter\"})",
           "legendFormat": "{{interface}} transmit packets_dropped"
+        },
+        {
+          "refId": "E",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "expr": "rate(node_network_receive_errs_total{job=\"$node\", job!=\"node-exporter\", device!~\"lo|veth.*|br-.*|docker.*|vnet.*|tap.*|hassio\"}[$__rate_interval])",
+          "legendFormat": "{{device}} receive errs"
+        },
+        {
+          "refId": "F",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "expr": "rate(node_network_receive_drop_total{job=\"$node\", job!=\"node-exporter\", device!~\"lo|veth.*|br-.*|docker.*|vnet.*|tap.*|hassio\"}[$__rate_interval])",
+          "legendFormat": "{{device}} receive drop"
+        },
+        {
+          "refId": "G",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "expr": "rate(node_network_transmit_errs_total{job=\"$node\", job!=\"node-exporter\", device!~\"lo|veth.*|br-.*|docker.*|vnet.*|tap.*|hassio\"}[$__rate_interval])",
+          "legendFormat": "{{device}} transmit errs"
+        },
+        {
+          "refId": "H",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "expr": "rate(node_network_transmit_drop_total{job=\"$node\", job!=\"node-exporter\", device!~\"lo|veth.*|br-.*|docker.*|vnet.*|tap.*|hassio\"}[$__rate_interval])",
+          "legendFormat": "{{device}} transmit drop"
         }
       ],
       "gridPos": {
@@ -1225,7 +1338,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "DCGM_FI_DEV_GPU_UTIL",
+          "expr": "max by (gpu) (DCGM_FI_DEV_GPU_UTIL) and on () group(node_uname_info{job=\"$node\", job=\"node-exporter\"})",
           "legendFormat": "gpu {{gpu}}"
         },
         {
@@ -1234,7 +1347,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "DCGM_FI_DEV_ENC_UTIL",
+          "expr": "max by (gpu) (DCGM_FI_DEV_ENC_UTIL) and on () group(node_uname_info{job=\"$node\", job=\"node-exporter\"})",
           "legendFormat": "enc {{gpu}}"
         },
         {
@@ -1243,7 +1356,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "DCGM_FI_DEV_DEC_UTIL",
+          "expr": "max by (gpu) (DCGM_FI_DEV_DEC_UTIL) and on () group(node_uname_info{job=\"$node\", job=\"node-exporter\"})",
           "legendFormat": "dec {{gpu}}"
         }
       ],
@@ -1291,7 +1404,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "DCGM_FI_DEV_FB_USED",
+          "expr": "max by (gpu) (DCGM_FI_DEV_FB_USED) and on () group(node_uname_info{job=\"$node\", job=\"node-exporter\"})",
           "legendFormat": "used {{gpu}}"
         },
         {
@@ -1300,7 +1413,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "DCGM_FI_DEV_FB_USED + DCGM_FI_DEV_FB_FREE",
+          "expr": "max by (gpu) (DCGM_FI_DEV_FB_USED + DCGM_FI_DEV_FB_FREE) and on () group(node_uname_info{job=\"$node\", job=\"node-exporter\"})",
           "legendFormat": "total {{gpu}}"
         }
       ],
@@ -1347,7 +1460,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "DCGM_FI_DEV_GPU_TEMP",
+          "expr": "max by (gpu) (DCGM_FI_DEV_GPU_TEMP) and on () group(node_uname_info{job=\"$node\", job=\"node-exporter\"})",
           "legendFormat": "°C {{gpu}}"
         },
         {
@@ -1356,7 +1469,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "DCGM_FI_DEV_POWER_USAGE",
+          "expr": "max by (gpu) (DCGM_FI_DEV_POWER_USAGE) and on () group(node_uname_info{job=\"$node\", job=\"node-exporter\"})",
           "legendFormat": "W {{gpu}}"
         }
       ],
@@ -1415,7 +1528,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "max by (chip) (node_hwmon_temp_celsius{job=\"node-exporter\"})",
+          "expr": "max by (chip) (node_hwmon_temp_celsius{job=\"$node\"})",
           "legendFormat": "{{chip}}"
         }
       ],
@@ -1475,7 +1588,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "topk(10, sum by (name) (rate(container_cpu_usage_seconds_total{job=\"cadvisor\", name!=\"\"}[$__rate_interval])))",
+          "expr": "topk(10, sum by (name) (rate(container_cpu_usage_seconds_total{job=\"cadvisor\", name!=\"\"}[$__rate_interval]))) and on () group(node_uname_info{job=\"$node\", job=\"node-exporter\"})",
           "legendFormat": "{{name}}"
         }
       ],
@@ -1523,7 +1636,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "topk(10, sum by (name) (container_memory_working_set_bytes{job=\"cadvisor\", name!=\"\"}))",
+          "expr": "topk(10, sum by (name) (container_memory_working_set_bytes{job=\"cadvisor\", name!=\"\"})) and on () group(node_uname_info{job=\"$node\", job=\"node-exporter\"})",
           "legendFormat": "{{name}}"
         }
       ],
