@@ -221,8 +221,8 @@ scrape_configs:
       - target_label: __address__
         replacement: blackbox-exporter:9115
 
-  # Protected Services (ADR 0006) carry a second Probe, `probe.idp_url`: the outpost must redirect
-  # an anonymous request to the IdP. Each one creates an outpost session file (kept 24h), hence 60s.
+  # Protected Services (ADR 0006) carry a second Probe, `probe.idp_url`: the outpost (or, for native
+  # OIDC, the Service's login path) must redirect an anonymous request to the IdP. Each one creates an outpost session file (kept 24h), hence 60s.
   - job_name: probe-idp
     scrape_interval: 60s
     metrics_path: /probe

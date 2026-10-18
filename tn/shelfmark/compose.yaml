@@ -55,6 +55,8 @@ services:
 
       # Probe (GLOSSARY.md): the public path a user takes; see prometheus.yml
       probe.url: https://cwd.${DOMAIN}/api/health
+      # Native OIDC: Shelfmark's own login path answers with the redirect to the IdP
+      probe.idp_url: https://cwd.${DOMAIN}/api/auth/oidc/login
 
       traefik.enable: true
       traefik.docker.network: proxy
@@ -74,7 +76,7 @@ services:
       traefik.http.services.shelfmark.loadbalancer.server.port: 8084
     volumes:
       - cwa-downloader_config:/config
-      # Books: Shelfmark hands each file to CWA's ingest folder; CWA organizes the Books Library.
+      # Books: Shelfmark passes each file into CWA's Ingest Folder; CWA organizes the Books Library.
       - ${ZFS_POOL_ROOT_HDD}/media/cwa-book-ingest:/cwa-book-ingest
       # Audiobooks: separate mounts, so hardlinks become copies and moves copy-then-delete until the
       # one-tree layout (ADR 0009, #543).
