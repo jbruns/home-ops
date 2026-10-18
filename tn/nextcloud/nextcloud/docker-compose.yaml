@@ -1,9 +1,19 @@
 services:
   nextcloud:
     # https://hub.docker.com/_/nextcloud
-    image: nextcloud:33.0.8
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: nextcloud:33.0.8@sha256:9ed3924f92f651aab622b23557b3f3dbcf04f7678567f50a41dbace2463c0a52
     container_name: nextcloud
-    restart: unless-stopped
+    # Run as the image's www-data instead of root-then-su, so no caps. The entrypoint supports this
+    # (installs and upgrades rsync without --chown); /var/www/html must stay wholly www-data owned.
+    user: "33:33"
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 959M working set; PHP memory_limit is 1G per request
+          memory: 2G
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/status.php | grep -q 'installed.:true'"]
       interval: 30s
@@ -11,7 +21,6 @@ services:
       retries: 3
       start_period: 300s
       start_interval: 5s
-    dns_search: .
     depends_on:
       mariadb:
         condition: service_healthy
@@ -54,7 +63,6 @@ services:
       traefik.http.middlewares.nextcloud-headers.headers.contentTypeNosniff: true
       traefik.http.middlewares.nextcloud-headers.headers.customResponseHeaders.X-Robots-Tag: 'noindex,nofollow'
 
-
       # Middleware for service discovery (https://docs.nextcloud.com/server/latest/admin_manual/configuration_server/reverse_proxy_configuration.html#service-discovery)
       traefik.http.middlewares.nextcloud-redirectregex.redirectregex.permanent: true
       traefik.http.middlewares.nextcloud-redirectregex.redirectregex.regex: 'https://(.*)/.well-known/(?:card|cal)dav'
@@ -64,12 +72,6 @@ services:
       traefik.http.middlewares.nextcloud-chain.chain.middlewares: crowdsec-bouncer, nextcloud-headers, nextcloud-redirectregex
 
       traefik.http.services.nextcloud.loadbalancer.server.port: 80
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
     volumes:
       - nextcloud_data:/var/www/html
       - ./php-limits.ini:/usr/local/etc/php/conf.d/php-limits.ini:ro
@@ -78,10 +80,21 @@ services:
       - proxy
 
   nextcloud-cron:
-    image: nextcloud:33.0.8
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: nextcloud:33.0.8@sha256:9ed3924f92f651aab622b23557b3f3dbcf04f7678567f50a41dbace2463c0a52
     container_name: nextcloud-cron
-    restart: unless-stopped
-    dns_search: .
+    # The image's /cron.sh is busybox crond, which needs root to switch to www-data. Run the same
+    # job (*/5 php -f cron.php) as www-data in a loop instead, so no caps; the marker file gives the
+    # healthcheck something to check.
+    user: "33:33"
+    init: true
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 266M working set; above PHP memory_limit (1G) so a job hits PHP's limit, not an OOM kill
+          memory: 1280M
     depends_on:
       mariadb:
         condition: service_healthy
@@ -92,17 +105,18 @@ services:
       nextcloud:
         condition: service_healthy
     # solely for Nextcloud cron job
-    entrypoint: /cron.sh
+    entrypoint: ["sh", "-c", "while :; do php -f /var/www/html/cron.php && touch /tmp/cron-ok; sleep 300; done"]
+    healthcheck:
+      test: ["CMD-SHELL", "find /tmp/cron-ok -mmin -15 | grep -q ."]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 300s
+      start_interval: 10s
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: warning
       startup-order: "2"
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
     volumes:
       - nextcloud_data:/var/www/html
       - ./php-limits.ini:/usr/local/etc/php/conf.d/php-limits.ini:ro
