@@ -1,12 +1,17 @@
 services:
   autobrr:
     # https://github.com/autobrr/autobrr/pkgs/container/autobrr
-    image: ghcr.io/autobrr/autobrr:v1.85
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: ghcr.io/autobrr/autobrr:v1.85@sha256:f7594d15dfe9a59e7bbc4bce8aee437a1d440d60b350e2ee74331c0d4ec01928
     container_name: autobrr
     user: ${MEDIA_UID}:${MEDIA_SHARED_GID}
-    security_opt:
-      - no-new-privileges=true
-    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 109M working set
+          memory: 256M
     healthcheck:
       test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:7474/api/healthz/liveness"]
       interval: 30s
@@ -14,7 +19,6 @@ services:
       retries: 3
       start_period: 60s
       start_interval: 5s
-    dns_search: .
     environment:
       # https://autobrr.com/installation/docker#environment-variables
       - TZ=${TZ}
@@ -45,12 +49,6 @@ services:
       probe.url: https://autobrr.${DOMAIN}/api/healthz/liveness
 
       traefik.http.services.autobrr.loadbalancer.server.port: 7474
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
     volumes:
       - autobrr_config:/config
     networks:

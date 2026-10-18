@@ -2,12 +2,17 @@ services:
   sabnzbd:
     # https://github.com/home-operations/containers/pkgs/container/sabnzbd
     # https://github.com/sabnzbd/sabnzbd
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
     image: ghcr.io/home-operations/sabnzbd:5.1.3@sha256:b1795982db498ed5691a7b1231f0fac7eed2a1d53e9c81b8e834d02695e76104
     user: ${SABNZBD_UID}:${MEDIA_SHARED_GID}
-    security_opt:
-      - no-new-privileges=true
     container_name: sabnzbd
-    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 255M working set
+          memory: 512M
     healthcheck:
       test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8080/api?mode=version"]
       interval: 30s
@@ -15,7 +20,6 @@ services:
       retries: 3
       start_period: 60s
       start_interval: 5s
-    dns_search: .
     environment:
       - TZ=${TZ}
     labels:
@@ -45,12 +49,6 @@ services:
       probe.url: https://sabnzbd.${DOMAIN}/api?mode=version
 
       traefik.http.services.sabnzbd.loadbalancer.server.port: 8080
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
     volumes:
       - sabnzbd_config:/config
       - ${ZFS_POOL_ROOT_HDD}/media/nzbdl:/data/nzbdl
@@ -62,16 +60,20 @@ services:
 
   sabnzbd-exporter:
     # https://github.com/onedr0p/exportarr
-    image: ghcr.io/onedr0p/exportarr:v2.3.0
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: ghcr.io/onedr0p/exportarr:v2.3.0@sha256:af535d94061cf97a52e1661945ffba78c03f9443eae7c0da1a80a5a4be56b520
     container_name: sabnzbd-exporter
     user: ${MEDIA_UID}:${MEDIA_GID}
-    security_opt:
-      - no-new-privileges=true
-    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 27M working set
+          memory: 64M
     depends_on:
       sabnzbd:
         condition: service_healthy
-    dns_search: .
     command: ["sabnzbd"]
     environment:
       # https://github.com/onedr0p/exportarr#configuration
@@ -82,12 +84,8 @@ services:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: info
       startup-order: "3"
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
+      # exportarr is distroless: no shell, wget or health subcommand to run a healthcheck with.
+      baseline.exempt.healthcheck: "distroless image: no shell or health subcommand"
     networks:
       - default
       - metrics
@@ -95,17 +93,21 @@ services:
   sabnzbd-status-exporter:
     # Usenet provider (server) health for Prometheus; see sabnzbd_status_exporter.py.
     # https://hub.docker.com/_/python
-    image: python:3.14.8-alpine3.24
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: python:3.14.8-alpine3.24@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
     container_name: sabnzbd-status-exporter
     user: ${MEDIA_UID}:${MEDIA_GID}
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 17M working set
+          memory: 64M
     read_only: true
-    security_opt:
-      - no-new-privileges=true
-    restart: unless-stopped
     depends_on:
       sabnzbd:
         condition: service_healthy
-    dns_search: .
     command: ["python3", "-u", "/app/sabnzbd_status_exporter.py"]
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:9712/metrics"]
@@ -121,12 +123,6 @@ services:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: info
       startup-order: "3"
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
     volumes:
       - ./sabnzbd_status_exporter.py:/app/sabnzbd_status_exporter.py:ro
     networks:
