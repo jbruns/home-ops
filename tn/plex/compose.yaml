@@ -2,16 +2,15 @@ services:
   plex:
     # https://github.com/home-operations/containers/pkgs/container/plex
     # https://github.com/plexinc/pms-docker
-    image: ghcr.io/home-operations/plex:1.43.4
+    extends:
+      file: ../_baseline.yaml
+      service: baseline
+    image: ghcr.io/home-operations/plex:1.43.4@sha256:fdc6fe82bc7d8acd08fc0aa581fcb76722803ba5905e2537135a697347dd6149
     container_name: plex
     user: ${PLEX_UID}:${MEDIA_SHARED_GID}
     group_add:
       - 107 # render
       - 44 # video
-    security_opt:
-      - no-new-privileges=true
-    restart: unless-stopped
-    dns_search: .
     # /identity answers once the server is accepting requests; the exporter waits for it.
     healthcheck:
       test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:32400/identity"]
@@ -54,12 +53,6 @@ services:
       probe.tcp: plex.${DOMAIN}:32400
 
       traefik.http.services.plex.loadbalancer.server.port: 32400
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
     ports:
       - 32400:32400 # http
       - 32410:32410/udp # gdm-udp0
@@ -76,6 +69,9 @@ services:
       - proxy
     deploy:
       resources:
+        limits:
+          # 30-day peak 634M
+          memory: 1G
         reservations:
           devices:
             - driver: nvidia
@@ -84,18 +80,23 @@ services:
 
   plex-exporter:
     # https://github.com/jsclayton/prometheus-plex-exporter
-    image: ghcr.io/jsclayton/prometheus-plex-exporter
+    extends:
+      file: ../_baseline.yaml
+      service: baseline
+    image: ghcr.io/jsclayton/prometheus-plex-exporter:latest@sha256:18ef1b2197efbcb75bd7276380955760995f10a9fbe55106809a6fcff91c2940
     container_name: plex-exporter
     user: ${MEDIA_UID}:${MEDIA_GID}
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 27M
+          memory: 64M
     # The exporter exits if Plex is not answering yet. At boot dockerd ignores depends_on,
     # so wait for Plex here rather than crash-looping (doco-cd refuses restarting containers).
     entrypoint: ["sh", "-c", "until wget -qO /dev/null \"$$PLEX_SERVER/identity\"; do sleep 5; done; exec /prometheus-plex-exporter"]
     depends_on:
       plex:
         condition: service_healthy
-    security_opt:
-      - no-new-privileges=true
-    restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:9000/metrics"]
       interval: 30s
@@ -103,7 +104,6 @@ services:
       retries: 3
       start_period: 60s
       start_interval: 5s
-    dns_search: .
     environment:
       # https://github.com/jsclayton/prometheus-plex-exporter?tab=readme-ov-file#configuration
       - PLEX_SERVER=http://plex:32400
@@ -112,12 +112,6 @@ services:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: info
       startup-order: "3"
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
     networks:
       - default
       - metrics
