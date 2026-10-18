@@ -7,9 +7,11 @@ services:
       service: baseline
     image: emby/embyserver:4.9.5.0@sha256:734a6f03c7c783a9e566b08d09a2b6376f41229ff29f032a7e00302e0be98f8a
     container_name: emby
-    # s6-overlay init: it cannot start as a non-root user (/run, s6-applyuidgid), so it chowns
-    # /config and drops to UID/GID itself. Verified with --cap-drop ALL on the Host.
-    cap_add: [CHOWN, SETUID, SETGID]
+    # The image's s6 run script only chowns /config and s6-applyuidgid's to UID/GID, which needs
+    # caps; start EmbyServer as that user instead (same args), so no caps. init reaps ffmpeg children.
+    user: ${EMBY_UID}:${MEDIA_SHARED_GID}
+    init: true
+    entrypoint: ["/system/EmbyServer", "-programdata", "/config", "-ffdetect", "/bin/ffdetect", "-ffmpeg", "/bin/ffmpeg", "-ffprobe", "/bin/ffprobe", "-restartexitcode", "3"]
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:32800/emby/System/Ping"]
       interval: 30s
@@ -18,9 +20,6 @@ services:
       start_period: 120s
       start_interval: 5s
     environment:
-      - UID=${EMBY_UID}
-      - GID=${MEDIA_SHARED_GID}
-      
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
     labels:
