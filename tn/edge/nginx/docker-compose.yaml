@@ -1,11 +1,16 @@
 services:
   nginx:
-    image: nginxinc/nginx-unprivileged:1.31.5
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: nginxinc/nginx-unprivileged:1.31.5@sha256:9d689e987337916e713a2d5fa84966550d9532e4cb512e7d6ad99df87ffe1ec8
     container_name: nginx
     user: ${COMMON_UID}:${COMMON_GID}
-    security_opt:
-      - no-new-privileges=true
-    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 46M working set
+          memory: 96M
     healthcheck:
       test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1/"]
       interval: 30s
@@ -13,7 +18,6 @@ services:
       retries: 3
       start_period: 60s
       start_interval: 5s
-    dns_search: .
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: warning
@@ -49,12 +53,6 @@ services:
 
       # Chain the catch-all middlewares together
       traefik.http.middlewares.catch-all.chain.middlewares: crowdsec-bouncer,error-pages
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
     volumes:
       # Friendly error page html
       - ./error-pages:/srv/http/default:ro
