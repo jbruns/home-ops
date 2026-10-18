@@ -2,12 +2,17 @@ services:
   nextpvr:
     # https://hub.docker.com/r/nextpvr/nextpvr_amd64
     # https://github.com/sub3/NextPVR/wiki/Install-Docker
-    image: nextpvr/nextpvr_amd64:stable
+    extends:
+      file: ../_baseline.yaml
+      service: baseline
+    image: nextpvr/nextpvr_amd64:stable@sha256:79841be624d5719153ac7d2303c55fe671aa7d6feed3eaeb4020d5e418f00546
     container_name: nextpvr
     user: ${MEDIA_UID}:${MEDIA_SHARED_GID}
-    security_opt:
-      - no-new-privileges=true
-    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 1443M
+          memory: 2304M
     healthcheck:
       test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8866/"]
       interval: 30s
@@ -15,7 +20,6 @@ services:
       retries: 3
       start_period: 60s
       start_interval: 5s
-    dns_search: .
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: warning
@@ -43,12 +47,6 @@ services:
       probe.url: https://nextpvr.${DOMAIN}/
 
       traefik.http.services.nextpvr.loadbalancer.server.port: 8866
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
     volumes:
       - nextpvr_config:/config
       - nextpvr_buffer:/buffer
