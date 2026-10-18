@@ -21,7 +21,8 @@ services:
         limits:
           memory: 192M
     environment:
-      AUTHENTIK_HOST: https://idp.${DOMAIN}
+      # The IdP is not under this Host's DOMAIN.
+      AUTHENTIK_HOST: ${IDP_URL}
       AUTHENTIK_INSECURE: "false"
       AUTHENTIK_TOKEN: ${AUTHENTIK_TOKEN}
     labels:

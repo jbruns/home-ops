@@ -114,7 +114,7 @@ services:
         print("rendered dependencies.yml", flush=True)
         signal.pause()
     environment:
-      - DOMAIN=${DOMAIN}
+      - IDP_URL=${IDP_URL}
       - NZBHYDRA_URL=${NZBHYDRA_URL}
       - NZBHYDRA_API_KEY=${NZBHYDRA_API_KEY}
     labels:

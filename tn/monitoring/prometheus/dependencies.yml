@@ -28,7 +28,7 @@
 # sessions keep working and only new sign-ins to Protected Services fail. A broken outpost is the
 # Critical case (alerting-rules.yml, idp). An external URL looks the same from any network here,
 # so monitoring's blackbox-exporter probes it rather than a prober in edge.
-- targets: ['https://idp.${DOMAIN}/-/health/live/']
+- targets: ['${IDP_URL}/-/health/live/']
   labels: {from: idp-outpost, to: idp, kind: external, tier: warning, stack: edge, prober: 'blackbox-exporter:9115', module: http_2xx}
 
 - targets: ['http://sabnzbd:8080/api?mode=version']
