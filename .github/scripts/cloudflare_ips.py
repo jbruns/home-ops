@@ -13,7 +13,7 @@ import sys
 import urllib.request
 from pathlib import Path
 
-TRAEFIK = Path(__file__).resolve().parents[2] / "tn/edge/traefik/docker-compose.yaml"
+TRAEFIK = Path(__file__).resolve().parents[2] / "tn/edge/traefik/service.yaml"
 API = "https://api.cloudflare.com/client/v4/ips"
 LIST_RE = re.compile(r"(forwardedHeaders\.trustedIPs=|forwardedHeadersTrustedIPs: )(\S+)")
 EXPECTED_LISTS = 3

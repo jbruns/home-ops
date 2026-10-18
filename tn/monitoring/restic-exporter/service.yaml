@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json
+services:
+  restic-exporter:
+    # https://github.com/ngosang/restic-exporter
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: ngosang/restic-exporter:2.1.2@sha256:a8f9cfa3016237c7008aefa4d9c6639bc9b34d2582eed07ac58dcf56632e4170
+    container_name: restic-exporter
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 1094M working set
+          memory: 1792M
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8001/metrics"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 5s
+    environment:
+      RESTIC_REPOSITORY: /backups
+      RESTIC_PASSWORD_FILE: /run/secrets/restic_password
+      REFRESH_INTERVAL: "3600"
+      INCLUDE_PATHS: "true"
+      # stack-back already runs `restic check` after every backup; a second check here would contend for the lock.
+      NO_CHECK: "true"
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: warning
+      startup-order: "3"
+
+    volumes:
+      # The local restic repository stack-back writes to; read-only, every restic call uses --no-lock.
+      - ${ZFS_POOL_ROOT_HDD}/docker-backups:/backups:ro
+    secrets:
+      - restic_password
+    networks:
+      - default
+
+# Stored encrypted in repo as <name>.sops.txt
+secrets:
+  restic_password:
+    file: ./restic_password.sops.txt

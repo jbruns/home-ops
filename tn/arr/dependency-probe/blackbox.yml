@@ -1,4 +1,4 @@
-# Modules for the arr Stack's Dependency Probes (see docker-compose.yaml).
+# Modules for the arr Stack's Dependency Probes (see service.yaml).
 modules:
   # SABnzbd `api?mode=version`: unauthenticated, answers {"version": ...}.
   sabnzbd:

@@ -16,6 +16,6 @@ networks:
     external: true
 
 include:
-  - ./mariadb/docker-compose.yaml
-  - ./valkey/docker-compose.yaml
-  - ./nextcloud/docker-compose.yaml
+  - ./mariadb/service.yaml
+  - ./valkey/service.yaml
+  - ./nextcloud/service.yaml

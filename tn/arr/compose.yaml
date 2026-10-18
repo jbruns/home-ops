@@ -13,10 +13,10 @@ networks:
     external: true
 
 include:
-  - ./arr-queue-exporter/docker-compose.yaml
-  - ./autobrr/docker-compose.yaml
-  - ./dependency-probe/docker-compose.yaml
-  - ./qbittorrent/docker-compose.yaml
-  - ./radarr/docker-compose.yaml
-  - ./sabnzbd/docker-compose.yaml
-  - ./sonarr/docker-compose.yaml
+  - ./arr-queue-exporter/service.yaml
+  - ./autobrr/service.yaml
+  - ./dependency-probe/service.yaml
+  - ./qbittorrent/service.yaml
+  - ./radarr/service.yaml
+  - ./sabnzbd/service.yaml
+  - ./sonarr/service.yaml

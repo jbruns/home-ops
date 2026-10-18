@@ -19,7 +19,7 @@ networks:
     external: true
 
 include:
-  - ./crowdsec/docker-compose.yaml
-  - ./idp-outpost/docker-compose.yaml
-  - ./nginx/docker-compose.yaml
-  - ./traefik/docker-compose.yaml
+  - ./crowdsec/service.yaml
+  - ./idp-outpost/service.yaml
+  - ./nginx/service.yaml
+  - ./traefik/service.yaml

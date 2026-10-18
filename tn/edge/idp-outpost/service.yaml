@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json
 services:
   idp-outpost:
     # The IdP's proxy outpost (GLOSSARY.md: IdP, Protected Service; ADR 0006). Traefik asks it, via

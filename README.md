@@ -9,6 +9,7 @@ Terms used here (Stack, Service, Datastore, Tier, Page, Digest, ...) are defined
 | Path | Contents |
 |---|---|
 | `tn/<stack>/compose.yaml` | One Stack per folder; the folder name is the Compose project name |
+| `tn/<stack>/<service>/service.yaml` | One Service plus the sidecars that exist only to serve it, listed in the Stack's `include:` |
 | `tn/<stack>/.sops.env` | SOPS-encrypted interpolation values for the Stack (required) |
 | `tn/<stack>/env.template` | The keys `.sops.env` must contain, with empty values |
 | `.doco-cd.yml` | How doco-cd discovers and deploys Stacks |
@@ -122,7 +123,7 @@ The script is not deployed by doco-cd. After changing it, copy it to `/mnt/luna/
 
 ## Adding a Stack
 
-1. Copy `templates/exposed/` (or `templates/protected/` for a Protected Service) to `tn/<stack>/` and rename `app`. `compose.yaml` is the entry; split Services into files with `include:` if you like.
+1. Copy `templates/exposed/` (or `templates/protected/` for a Protected Service) to `tn/<stack>/` and rename `app`. `compose.yaml` is the entry; to split Services out, put each in `<service>/service.yaml` and list it under `include:`.
 2. Every Service extends the Baseline (`tn/_baseline.yaml`, [ADR-0007](docs/adr/0007-service-baseline-via-extends.md)). It adds a Compose healthcheck, a digest-pinned image, a memory limit, any `cap_add` it needs (only where the image cannot run as its target user with `user:`), a `tier` label and a `startup-order` label. An item it cannot meet needs a `baseline.exempt.<item>` label giving the reason; `validate.py compose` lists them all.
 3. For an Exposed Service, join `proxy` (external) and set the `traefik.*` labels including `traefik.docker.network: proxy`. Routers are `<container>-http`, `-https`, `-health` and `-client-<protocol>`, and the Traefik service is named after the container ([ADR-0006](docs/adr/0006-protected-services.md)). For metrics, join `metrics` and add a scrape job in `prometheus.yml`.
 4. Give named volumes an explicit `name:`, so moving or renaming the Stack keeps the data.

@@ -1,7 +1,7 @@
 name: cloudflare-ips
 
 # Opens a PR when Cloudflare's published edge ranges no longer match the ones Traefik
-# trusts for X-Forwarded-For (tn/edge/traefik/docker-compose.yaml).
+# trusts for X-Forwarded-For (tn/edge/traefik/service.yaml).
 on:
   schedule:
     - cron: "17 14 * * 1"
