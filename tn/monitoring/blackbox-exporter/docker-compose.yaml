@@ -3,12 +3,17 @@ services:
   # Targets come from `probe.url` / `probe.tcp` labels via Prometheus docker_sd (prometheus.yml).
   blackbox-exporter:
     # https://github.com/prometheus/blackbox_exporter
-    image: prom/blackbox-exporter:v0.29.0
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: prom/blackbox-exporter:v0.29.0@sha256:9613f2884689b6fad9f1939f6a3b0388c93a022cfaededb19545b329b5c83dea
     container_name: blackbox-exporter
     user: ${MONITORING_UID}:${MONITORING_GID}
-    security_opt:
-      - no-new-privileges=true
-    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 68M working set
+          memory: 128M
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:9115/-/healthy"]
       interval: 30s
@@ -16,7 +21,6 @@ services:
       retries: 3
       start_period: 60s
       start_interval: 5s
-    dns_search: .
     command:
       - '--config.file=/etc/blackbox_exporter/blackbox.yml'
       - '--log.level=warn'
@@ -24,12 +28,6 @@ services:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: warning
       startup-order: "3"
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
     volumes:
       - ./blackbox.yml:/etc/blackbox_exporter/blackbox.yml:ro
     # Probes take the public path out through the Stack's default network.

@@ -1,8 +1,10 @@
 services:
   dcgm-exporter:
-    image: nvidia/dcgm-exporter:4.2.3-4.1.3-ubuntu22.04
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: nvidia/dcgm-exporter:4.2.3-4.1.3-ubuntu22.04@sha256:f28cc0c34de365cbefacb13e3d8485385705a97f41db639251d5f5b3c705c086
     container_name: dcgm-exporter
-    restart: unless-stopped
     healthcheck:
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9400"]
       interval: 30s
@@ -10,23 +12,22 @@ services:
       retries: 3
       start_period: 60s
       start_interval: 5s
-    dns_search: .
-    cap_add:
-      - SYS_ADMIN
+    # SYS_ADMIN: DCGM profiling metrics (DCGM_FI_PROF_*). NO_SETCAP: the entrypoint would otherwise
+    # setcap the binary (needs SETFCAP); as root it already holds SYS_ADMIN.
+    cap_add: [SYS_ADMIN]
+    environment:
+      NO_SETCAP: "1"
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: info
       startup-order: "3"
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
     networks:
       - default
     deploy:
       resources:
+        limits:
+          # 30-day peak 578M working set
+          memory: 1G
         reservations:
           devices:
             - driver: nvidia

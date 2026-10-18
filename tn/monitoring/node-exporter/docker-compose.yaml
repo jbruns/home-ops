@@ -1,8 +1,15 @@
 services:
   node-exporter:
-    image: prom/node-exporter:v1.12.1
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: prom/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
     container_name: node-exporter
-    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 38M working set
+          memory: 64M
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:9100/"]
       interval: 30s
@@ -10,7 +17,6 @@ services:
       retries: 3
       start_period: 60s
       start_interval: 5s
-    dns_search: .
     command:
       - '--path.procfs=/host/proc'
       - '--path.sysfs=/host/sys'
@@ -21,12 +27,6 @@ services:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: warning
       startup-order: "3"
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro

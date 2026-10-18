@@ -1,9 +1,16 @@
 services:
   restic-exporter:
     # https://github.com/ngosang/restic-exporter
-    image: ngosang/restic-exporter:2.1.2
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: ngosang/restic-exporter:2.1.2@sha256:a8f9cfa3016237c7008aefa4d9c6639bc9b34d2582eed07ac58dcf56632e4170
     container_name: restic-exporter
-    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 1094M working set
+          memory: 1792M
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8001/metrics"]
       interval: 30s
@@ -11,9 +18,6 @@ services:
       retries: 3
       start_period: 60s
       start_interval: 5s
-    dns_search: .
-    security_opt:
-      - no-new-privileges=true
     environment:
       RESTIC_REPOSITORY: /backups
       RESTIC_PASSWORD_FILE: /run/secrets/restic_password
@@ -26,12 +30,6 @@ services:
       tier: warning
       startup-order: "3"
 
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
     volumes:
       # The local restic repository stack-back writes to; read-only, every restic call uses --no-lock.
       - ${ZFS_POOL_ROOT_HDD}/docker-backups:/backups:ro
@@ -42,9 +40,16 @@ services:
 
   # Per-volume backup coverage (backup_coverage.py). Same image for python and restic.
   backup-coverage:
-    image: ngosang/restic-exporter:2.1.2
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: ngosang/restic-exporter:2.1.2@sha256:a8f9cfa3016237c7008aefa4d9c6639bc9b34d2582eed07ac58dcf56632e4170
     container_name: backup-coverage
-    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 938M working set
+          memory: 1536M
     entrypoint: ["/sbin/tini", "--"]
     command: ["python3", "-u", "/app/backup_coverage.py"]
     healthcheck:
@@ -54,9 +59,6 @@ services:
       retries: 3
       start_period: 60s
       start_interval: 5s
-    dns_search: .
-    security_opt:
-      - no-new-privileges=true
     environment:
       RESTIC_REPOSITORY: /backups
       RESTIC_PASSWORD_FILE: /run/secrets/restic_password
@@ -66,12 +68,6 @@ services:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: warning
       startup-order: "3"
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
     # Root, like restic-exporter: the repository files are root-only (0400).
     volumes:
       - ./backup_coverage.py:/app/backup_coverage.py:ro

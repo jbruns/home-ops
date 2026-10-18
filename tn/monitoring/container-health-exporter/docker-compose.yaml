@@ -3,17 +3,21 @@ services:
     # Docker health-check status for Prometheus (Uptime of Services that are not Exposed Services);
     # see container_health_exporter.py. Reads through the read-only docker-socket-proxy.
     # https://hub.docker.com/_/python
-    image: python:3.14.8-alpine3.24
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: python:3.14.8-alpine3.24@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
     container_name: container-health-exporter
-    restart: unless-stopped
     user: ${MONITORING_UID}:${MONITORING_GID}
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 26M working set
+          memory: 64M
     read_only: true
-    security_opt:
-      - no-new-privileges=true
     depends_on:
       docker-socket-proxy:
         condition: service_healthy
-    dns_search: .
     command: ["python3", "-u", "/app/container_health_exporter.py"]
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:9714/metrics"]
@@ -28,12 +32,6 @@ services:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: info
       startup-order: "3"
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
     volumes:
       - ./container_health_exporter.py:/app/container_health_exporter.py:ro
     networks:

@@ -1,12 +1,17 @@
 services:
   grafana:
     # https://hub.docker.com/r/grafana/grafana/tags
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
     image: grafana/grafana:12.4.12@sha256:83be3e511ede559bee80e2215bb1987cb1246075461cb961beb515b0341e7aea
     container_name: grafana
     user: ${MONITORING_UID}:${MONITORING_GID}
-    security_opt:
-      - no-new-privileges=true
-    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 216M working set
+          memory: 384M
     depends_on:
       prometheus:
         condition: service_healthy
@@ -19,7 +24,6 @@ services:
       retries: 3
       start_period: 60s
       start_interval: 5s
-    dns_search: .
     environment:
       # https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana
       # GF_<SectionName>_<KeyName>
@@ -59,12 +63,6 @@ services:
       probe.url: https://grafana.${DOMAIN}/api/health
 
       traefik.http.services.grafana.loadbalancer.server.port: 3000
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
     volumes:
       - type: bind
         source: ./provisioning/datasources.sops.yml
