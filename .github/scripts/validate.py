@@ -161,11 +161,10 @@ def check_layout(tracked: set[Path]) -> None:
             fail(f"doco-cd never discovers this; a Stack's entry file must be {ENTRY_NAME}", f)
         elif f.name == INCLUDED_NAME and f not in included:
             fail(f"no Stack's include: lists this {INCLUDED_NAME}, so it is never deployed", f)
-    # doco-cd scans working_dir (tn/) at depth 0 and Stack folders at depth 1, never deeper while
-    # depth is 1 (kimdre/doco-cd internal/config/deploy/auto_discovery.go). Its compose_files only
-    # match compose.yaml, so service.yaml files are not discovered at any depth; this is defence in
-    # depth: with depth 0 (unlimited) a stray compose.yaml in a Service folder would become its own
-    # Stack, and delete: true would remove Stacks that later disappear.
+    # doco-cd scans tn/ and each Stack folder, never deeper while depth is 1 (kimdre/doco-cd
+    # internal/config/deploy/auto_discovery.go). It only looks for compose.yaml, so service.yaml is
+    # never discovered; this is defence in depth: at depth 0 (unlimited) a compose.yaml in a Service
+    # folder would become a Stack, and delete: true would remove it when it disappears.
     depth = ((yaml.safe_load(DOCO_CD_CONFIG.read_text()) or {}).get("auto_discovery") or {}).get("depth")
     if depth != 1:
         fail(f"auto_discovery.depth must stay 1 (found {depth!r}): deeper discovery would deploy a compose.yaml below a Stack folder as a Stack of its own", DOCO_CD_CONFIG)
