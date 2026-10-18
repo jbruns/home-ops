@@ -1,0 +1,73 @@
+# AUDIOBOOKSHELF STACK (deployed by doco-cd). Moved from asotbz/ops tn/asot-media (#457).
+# Hostnames are under this Stack's own DOMAIN, not edge's.
+services:
+  audiobookshelf:
+    # https://github.com/advplyr/audiobookshelf/releases
+    extends:
+      file: ../_baseline.yaml
+      service: baseline
+    image: ghcr.io/advplyr/audiobookshelf:2.35.1@sha256:1eef6716183c52abafe5405e7d6be8390248ecd59c7488c44af871757ac8fc4d
+    container_name: audiobookshelf
+    user: ${BOOKS_UID}:${MEDIA_SHARED_GID}
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:80/healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 5s
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 95M
+          memory: 256M
+    environment:
+      - TZ=${TZ}
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: warning
+      startup-order: "2"
+      stack-back.volumes: true
+      stack-back.volumes.include: "audiobookshelf_config,audiobookshelf_metadata"
+
+      # Probe (GLOSSARY.md): the public path a user takes; see prometheus.yml
+      probe.url: https://abs.${DOMAIN}/healthcheck
+
+      traefik.enable: true
+      traefik.docker.network: proxy
+
+      traefik.http.routers.audiobookshelf-http.rule: Host(`abs.${DOMAIN}`)
+      traefik.http.routers.audiobookshelf-http.entrypoints: http
+      traefik.http.routers.audiobookshelf-http.middlewares: redirect-https
+
+      traefik.http.routers.audiobookshelf-https.rule: Host(`abs.${DOMAIN}`)
+      traefik.http.routers.audiobookshelf-https.entrypoints: https
+      traefik.http.routers.audiobookshelf-https.tls: true
+      traefik.http.routers.audiobookshelf-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.audiobookshelf-https.service: audiobookshelf
+      traefik.http.routers.audiobookshelf-https.middlewares: crowdsec-bouncer
+
+      traefik.http.services.audiobookshelf.loadbalancer.server.port: 80
+    volumes:
+      - ${ZFS_POOL_ROOT_HDD}/media/audiobooks:/audiobooks
+      - ${ZFS_POOL_ROOT_HDD}/media/podcasts:/podcasts
+      - audiobookshelf_config:/config
+      - audiobookshelf_metadata:/metadata
+    networks:
+      - default
+      - proxy
+
+volumes:
+  # Created by the asot-media Stack; the explicit name keeps them across the move.
+  audiobookshelf_config:
+    name: asot-media_audiobookshelf_config
+    external: true
+  audiobookshelf_metadata:
+    name: asot-media_audiobookshelf_metadata
+    external: true
+
+networks:
+  # Traefik and the Exposed Services it routes to; owned by the edge Stack.
+  proxy:
+    name: proxy
+    external: true
