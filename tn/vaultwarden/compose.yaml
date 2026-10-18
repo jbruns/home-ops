@@ -22,6 +22,8 @@ services:
           memory: 160M
     environment:
       # https://github.com/dani-garcia/vaultwarden/blob/main/.env.template
+      # Anything saved in the admin page goes to /data/config.json and overrides these (and the
+      # env_file); the startup log lists overridden keys. Stale smtp_* there caused #435's 535s.
       - DOMAIN=https://vault.${ALT_DOMAIN_HOME}
       - HELO_NAME=vault.${ALT_DOMAIN_HOME}
       - SMTP_FROM=${VAULTWARDEN_SMTP_FROM}
