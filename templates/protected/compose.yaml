@@ -11,8 +11,8 @@ services:
     # https://github.com/<upstream>/releases ; Renovate keeps tag and digest current.
     image: traefik/whoami:v1.11.0@sha256:200689790a0a0ea48ca45992e0450bc26ccab5307375b41c84dfc4f2475937ab
     container_name: app
-    # Advisory, for isolation: non-root user and read_only where the image allows it; cap_add only
-    # what the image needs after the Baseline's cap_drop: [ALL]. See templates/exposed/.
+    # Advisory, for isolation: non-root user and read_only where the image allows it. Run as the
+    # target user rather than cap_add for a root-start image where it can. See templates/exposed/.
     healthcheck:
       test: ["CMD", "/whoami", "--help"]
       interval: 30s

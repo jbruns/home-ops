@@ -12,8 +12,10 @@ services:
     container_name: app
     # Advisory, for isolation: run as a non-root user and with a read-only root filesystem where the
     # image allows it (user: ${APP_UID}:${MEDIA_SHARED_GID}, read_only: true plus tmpfs).
-    # cap_drop: [ALL] comes from the Baseline; add back only what the image needs, e.g. for an
-    # s6/linuxserver image that drops to PUID: cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE].
+    # cap_drop: [ALL] comes from the Baseline. An image that starts as root to chown and drop to
+    # PUID needs no caps if it runs as that user directly (user:, volumes already owned by it); only
+    # where its init cannot (s6-overlay), add back what it needs with a comment, e.g.
+    # cap_add: [CHOWN, SETUID, SETGID]  # s6 init chowns /config and drops to UID
     healthcheck:
       # Declared here even when the image has one, so the Baseline can see it.
       test: ["CMD", "/whoami", "--help"]

@@ -2,13 +2,18 @@ services:
   syncthing:
     # https://github.com/syncthing/syncthing/blob/main/README-Docker.md
     # https://hub.docker.com/r/syncthing/syncthing/tags
-    image: syncthing/syncthing:2.1
+    extends:
+      file: ../_baseline.yaml
+      service: baseline
+    image: syncthing/syncthing:2.1@sha256:4d0281bdcb4ed9baf503d251d0544ddd856f49fce3f114056257ae172b7fb670
     container_name: syncthing
-    restart: unless-stopped
-    dns_search: .
-    environment:
-      - PUID=${HOME_UID}
-      - PGID=${HOME_GID}
+    # Started directly as the data's owner, the entrypoint skips its chown and su-exec, so no caps.
+    user: ${HOME_UID}:${HOME_GID}
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 74M
+          memory: 128M
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: warning
@@ -46,17 +51,13 @@ services:
       interval: 1m
       timeout: 10s
       retries: 3
+      start_period: 60s
+      start_interval: 5s
     volumes:
       - syncthing_data:/var/syncthing
     networks:
       - default
       - proxy
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
 
 volumes:
   syncthing_data:
