@@ -2,7 +2,7 @@
 .env
 !*.sops.env
 
-# Repository-managed agent skills (installed by scripts/setup-agent-skills)
+# Repository-managed agent skills (installed by tools/agent-skills/setup-agent-skills)
 .agents/skills/
 
 # Decrypted Compose secrets (only the *.sops.txt form is committed)
@@ -11,3 +11,7 @@ tn/**/*.txt
 
 # Per-issue agent worktrees
 .worktrees/
+
+# Python caches from Repo Tooling and its tests
+__pycache__/
+.pytest_cache/

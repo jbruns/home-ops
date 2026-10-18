@@ -6,8 +6,8 @@ From the repository root, with Bash 3.2+, Git 2.25+ (sparse-checkout support),
 Python 3, and access to the upstream Git repository:
 
 ```sh
-scripts/setup-agent-skills
-scripts/setup-agent-skills check
+tools/agent-skills/setup-agent-skills
+tools/agent-skills/setup-agent-skills check
 ```
 
 Start a fresh agent session after installing or changing skills so the agent
@@ -29,8 +29,8 @@ explicit `include` entries.
 ## Change the pin or selection
 
 ```sh
-scripts/setup-agent-skills pin <upstream-tag-or-commit>
-scripts/setup-agent-skills check
+tools/agent-skills/setup-agent-skills pin <upstream-tag-or-commit>
+tools/agent-skills/setup-agent-skills check
 git diff -- .agent-skills.lock
 ```
 
@@ -55,14 +55,14 @@ it still manages this clone's `.agents/skills/`.
 
 ## Check and recover
 
-`scripts/setup-agent-skills check` works offline: it compares the lock settings
+`tools/agent-skills/setup-agent-skills check` works offline: it compares the lock settings
 and hashes every managed skill, including supporting files. Rerun setup to repair
 missing or changed files. Setup replaces local edits to managed skills and removes
 previously managed skills no longer selected. Keep custom work outside managed
 skill directories; an unmanaged directory with a selected name blocks setup.
 
 ```sh
-scripts/setup-agent-skills clean
+tools/agent-skills/setup-agent-skills clean
 ```
 
 Clean removes only skills listed in the local management state, preserving
@@ -73,7 +73,7 @@ reinstalling; the helper will not claim unmanaged directories.
 ## Installer maintenance
 
 ```sh
-scripts/test-setup-agent-skills
+tools/agent-skills/test-setup-agent-skills
 ```
 
 The regression suite uses temporary local Git repositories without network

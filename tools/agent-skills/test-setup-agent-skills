@@ -2,13 +2,13 @@
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/agent-skills-test.XXXXXX")"
 trap 'rm -rf "$TEMP_DIR"' EXIT
 
 SOURCE_DIR="$TEMP_DIR/source"
 PROJECT_DIR="$TEMP_DIR/project"
-HELPER="$PROJECT_DIR/scripts/setup-agent-skills"
+HELPER="$PROJECT_DIR/tools/agent-skills/setup-agent-skills"
 SKILLS="$PROJECT_DIR/.agents/skills"
 
 fail() {
@@ -64,9 +64,9 @@ add_skill misc/nested
 add_skill misc/extra
 REVISION="$(publish example engineering/nested engineering/other)"
 
-mkdir -p "$PROJECT_DIR/scripts"
+mkdir -p "$PROJECT_DIR/tools/agent-skills"
 git init --quiet "$PROJECT_DIR"
-cp "$REPO_ROOT/scripts/setup-agent-skills" "$PROJECT_DIR/scripts/"
+cp "$REPO_ROOT/tools/agent-skills/setup-agent-skills" "$PROJECT_DIR/tools/agent-skills/"
 
 # The published manifest is the default set; unpublished skills are skipped.
 write_lock

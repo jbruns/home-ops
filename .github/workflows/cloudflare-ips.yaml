@@ -28,7 +28,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: python3 .github/scripts/cloudflare_ips.py --update
+      - run: python3 tools/cloudflare-ips/cloudflare_ips.py --update
       - name: Open or refresh PR
         run: |
           if git diff --quiet; then

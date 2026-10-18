@@ -15,7 +15,7 @@ Subcommands:
               routers follow ADR 0006 (names, health and Client Paths, Protected Probes)
   isolation   tn/doco-cd and tn/_baseline.yaml changes ship in their own PR
   monitoring  promtool / amtool / loki / alloy checks, using the image versions the Stacks deploy;
-              Grafana dashboards JSON matches its generator (grafana/dashboards.py)
+              Grafana dashboards JSON matches its generator (tools/dashboards/dashboards.py)
   cloudflare  the Cloudflare ranges Traefik trusts are valid and identical everywhere they appear
 """
 import os
@@ -441,7 +441,7 @@ def check_monitoring() -> None:
     alloy_image = deployed_image(alloy / INCLUDED_NAME, "alloy")
     docker_run(alloy_image, {alloy / "config.alloy": "/etc/alloy/config.alloy"}, "/bin/alloy", "validate", "/etc/alloy/config.alloy")
 
-    generator = mon / "grafana" / "dashboards.py"
+    generator = ROOT / "tools/dashboards/dashboards.py"
     result = subprocess.run([sys.executable, str(generator), "--check"], capture_output=True, text=True)
     if result.returncode:
         fail(result.stdout.strip() or result.stderr.strip(), generator)
@@ -450,6 +450,7 @@ def check_monitoring() -> None:
 
 
 def check_cloudflare() -> None:
+    sys.path.insert(0, str(ROOT / "tools/cloudflare-ips"))
     import cloudflare_ips
 
     errs = cloudflare_ips.problems(cloudflare_ips.TRAEFIK.read_text())

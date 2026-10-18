@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """Generate the Grafana dashboards provisioned from the repo (stdlib only).
 
-    python3 tn/monitoring/grafana/dashboards.py           # write dashboards/*.json
-    python3 tn/monitoring/grafana/dashboards.py --check   # fail if they are stale (validate.py)
+    python3 tools/dashboards/dashboards.py           # write tn/monitoring/grafana/dashboards/*.json
+    python3 tools/dashboards/dashboards.py --check   # fail if they are stale (validate.py)
 
 Edit this file, never the JSON. Vocabulary follows GLOSSARY.md: Service, Stack, Tier, Probe,
 Uptime, Availability, Dependency. Datasources are referenced by the uids set in
-provisioning/datasources.sops.yml.
+tn/monitoring/grafana/provisioning/datasources.sops.yml.
 """
 import json
 import sys
 from pathlib import Path
 
-OUT = Path(__file__).resolve().parent / "dashboards"
+OUT = Path(__file__).resolve().parents[2] / "tn/monitoring/grafana/dashboards"
 
 PROM = {"type": "prometheus", "uid": "prometheus"}
 LOKI = {"type": "loki", "uid": "loki"}
@@ -757,7 +757,7 @@ def main():
                  if not (OUT / n).exists() or (OUT / n).read_text() != text]
         extra = sorted(p.name for p in OUT.glob("*.json") if p.name not in files)
         for n in stale:
-            print(f"{OUT / n}: stale; run python3 tn/monitoring/grafana/dashboards.py")
+            print(f"{OUT / n}: stale; run python3 tools/dashboards/dashboards.py")
         for n in extra:
             print(f"{OUT / n}: not produced by the generator")
         sys.exit(1 if stale or extra else 0)
