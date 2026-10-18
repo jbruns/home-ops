@@ -144,6 +144,21 @@ groups:
           summary: "{{ $labels.name }} is restarting repeatedly"
           description: "Container {{ $labels.name }} started {{ $value }} times in 15 minutes."
 
+      # The kernel killed a process in the container for exceeding its memory limit (the Baseline
+      # sets one on every Service, ADR 0007). Fires at the Service's Tier even when the container
+      # survives, e.g. when only a worker process was killed. Raise the limit or find the leak.
+      - alert: ContainerOOMKilled
+        expr: |
+          sum by (name, container_label_tier, container_label_com_docker_compose_project) (
+            increase(container_oom_events_total{container_label_tier=~"critical|warning"}[15m])
+          ) > 0
+        labels:
+          tier: "{{ $labels.container_label_tier }}"
+          stack: "{{ $labels.container_label_com_docker_compose_project }}"
+        annotations:
+          summary: "{{ $labels.name }} was OOM-killed"
+          description: "The kernel killed a process in {{ $labels.name }} for exceeding its memory limit in the last 15 minutes."
+
       # Only meaningful once a container has a memory limit.
       - alert: ContainerMemoryNearLimit
         expr: |
