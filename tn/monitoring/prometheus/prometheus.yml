@@ -33,6 +33,12 @@ scrape_configs:
       - targets: ['crowdsec:6060']
         labels: {container: crowdsec, stack: edge, tier: critical}
 
+  # The IdP outpost: connection to the IdP and forward-auth latency (alerting-rules.yml, idp)
+  - job_name: idp-outpost
+    static_configs:
+      - targets: ['idp-outpost:9300']
+        labels: {container: idp-outpost, stack: edge, tier: critical}
+
   # MEDIA STACK
   - job_name: plex
     static_configs:
@@ -212,7 +218,7 @@ scrape_configs:
       - target_label: __address__
         replacement: blackbox-exporter:9115
 
-  # Authentik-protected Services carry a second Probe, `probe.idp_url`: the outpost must redirect
+  # Protected Services (ADR 0006) carry a second Probe, `probe.idp_url`: the outpost must redirect
   # an anonymous request to the IdP. Each one creates an outpost session file (kept 24h), hence 60s.
   - job_name: probe-idp
     scrape_interval: 60s
