@@ -1,0 +1,22 @@
+# Users and groups host/create_usersgroups.sh creates on the Host, in this order.
+# Fields are separated by whitespace; '#' starts a comment.
+#
+#   group <name> <gid> <smb: true|false>
+#   user  <name> <uid> <primary group> <supplementary groups, comma-separated, or ->
+#
+# Users get no password, home or login shell, and no SMB access.
+
+group  media      1002  true
+group  sonarr     4001  false
+group  radarr     4002  false
+group  sabnzbd    4003  false
+group  navidrome  4004  false
+group  plex       4005  false
+group  emby       4006  false
+
+user   sonarr     4001  sonarr     media
+user   radarr     4002  radarr     media
+user   sabnzbd    4003  sabnzbd    media
+user   navidrome  4004  navidrome  media
+user   plex       4005  plex       media
+user   emby       4006  emby       media
