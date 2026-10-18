@@ -9,12 +9,13 @@ HOST_DIR = Path(__file__).resolve().parents[1]
 SCRIPT = HOST_DIR / "create_usersgroups.sh"
 
 # The commands the original one-shot script ran, in order: the identity set the data file must keep.
+# Names are now quoted as midcli strings ("media"), which midcli parses to the same values.
 ALL_COMMANDS = [
-    "account group create gid=1002 name=media smb=true",
-    *[f"account group create gid={gid} name={name} smb=false" for name, gid in [
+    'account group create gid=1002 name="media" smb=true',
+    *[f'account group create gid={gid} name="{name}" smb=false' for name, gid in [
         ("sonarr", 4001), ("radarr", 4002), ("sabnzbd", 4003), ("navidrome", 4004), ("plex", 4005), ("emby", 4006)]],
-    *[f"account user create username={name} full_name={name} uid={uid} group_create=false home_create=false "
-      f"password_disabled=true home=/var/empty group={name} groups=media smb=false shell=/usr/sbin/nologin"
+    *[f'account user create username="{name}" full_name="{name}" uid={uid} group_create=false home_create=false '
+      f'password_disabled=true home=/var/empty group="{name}" groups="media" smb=false shell=/usr/sbin/nologin'
       for name, uid in [("sonarr", 4001), ("radarr", 4002), ("sabnzbd", 4003), ("navidrome", 4004), ("plex", 4005),
                         ("emby", 4006)]],
 ]
@@ -85,7 +86,7 @@ def test_rerun_skips_what_exists(host):
     host.has_user("sonarr", 4001)
     r = host.run()
     assert r.returncode == 0, r.stderr
-    assert host.calls == [c for c in ALL_COMMANDS if "name=media" not in c and "sonarr" not in c]
+    assert host.calls == [c for c in ALL_COMMANDS if 'name="media"' not in c and "sonarr" not in c]
     assert "# skip: group media exists (gid 1002)" in r.stdout
     assert "# skip: user sonarr exists (uid 4001)" in r.stdout
 
@@ -93,7 +94,7 @@ def test_rerun_skips_what_exists(host):
 def test_second_run_is_a_no_op(host):
     for c in ALL_COMMANDS:
         kind = "group" if c.startswith("account group") else "user"
-        fields = dict(f.split("=", 1) for f in c.split()[3:])
+        fields = {k: v.strip('"') for k, v in (f.split("=", 1) for f in c.split()[3:])}
         if kind == "group":
             host.has_group(fields["name"], int(fields["gid"]))
         else:
@@ -116,17 +117,17 @@ def test_id_conflicts_fail_but_the_rest_is_created(host):
     assert "uid 4001 for user sonarr is taken by someone" in r.stderr
     assert "user radarr not created: missing group(s) radarr" in r.stderr
     assert host.calls == [c for c in ALL_COMMANDS
-                          if " name=media " not in c and " name=radarr " not in c
-                          and "username=radarr " not in c and "username=plex " not in c
-                          and "username=sonarr " not in c]
+                          if ' name="media" ' not in c and ' name="radarr" ' not in c
+                          and 'username="radarr" ' not in c and 'username="plex" ' not in c
+                          and 'username="sonarr" ' not in c]
 
 
 def test_cli_failure_is_reported_and_the_run_continues(host):
-    r = host.run(CLI_FAIL="name=plex ")
+    r = host.run(CLI_FAIL='name="plex" ')
     assert r.returncode == 1
-    assert "ERROR: cli failed: account group create gid=4005 name=plex smb=false" in r.stderr
+    assert 'ERROR: cli failed: account group create gid=4005 name="plex" smb=false' in r.stderr
     assert "user plex not created: missing group(s) plex" in r.stderr
-    assert host.calls == [c for c in ALL_COMMANDS if "username=plex " not in c]
+    assert host.calls == [c for c in ALL_COMMANDS if 'username="plex" ' not in c]
 
 
 def test_file_option_and_supplementary_groups(host, tmp_path):
@@ -136,16 +137,33 @@ def test_file_option_and_supplementary_groups(host, tmp_path):
     r = host.run("--file", str(data))
     assert r.returncode == 0, r.stderr
     assert host.calls == [
-        "account group create gid=5000 name=app smb=false",
-        "account user create username=app full_name=app uid=5000 group_create=false home_create=false "
-        "password_disabled=true home=/var/empty group=app smb=false shell=/usr/sbin/nologin",
-        "account user create username=two full_name=two uid=5001 group_create=false home_create=false "
-        "password_disabled=true home=/var/empty group=app groups=app,media smb=false shell=/usr/sbin/nologin",
+        'account group create gid=5000 name="app" smb=false',
+        'account user create username="app" full_name="app" uid=5000 group_create=false home_create=false '
+        'password_disabled=true home=/var/empty group="app" smb=false shell=/usr/sbin/nologin',
+        'account user create username="two" full_name="two" uid=5001 group_create=false home_create=false '
+        'password_disabled=true home=/var/empty group="app" groups="app","media" smb=false shell=/usr/sbin/nologin',
+    ]
+
+
+def test_hyphenated_names_are_quoted_for_midcli(host, tmp_path):
+    data = tmp_path / "ids.tsv"
+    data.write_text("group  my-group  5000  false\ngroup  x.y-z  5001  false\n"
+                    "user   my-app    5000  my-group  my-group,x.y-z\n")
+    r = host.run("--file", str(data), "--dry-run")
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.splitlines() == [
+        """cli -c 'account group create gid=5000 name="my-group" smb=false'""",
+        """cli -c 'account group create gid=5001 name="x.y-z" smb=false'""",
+        """cli -c 'account user create username="my-app" full_name="my-app" uid=5000 group_create=false """
+        """home_create=false password_disabled=true home=/var/empty group="my-group" groups="my-group","x.y-z" """
+        """smb=false shell=/usr/sbin/nologin'""",
     ]
 
 
 @pytest.mark.parametrize("line", ["group app 5000", "group app x false", "user app 5000 app", "host app 1 a b",
-                                  "group app 5000 maybe"])
+                                  "group app 5000 maybe", 'group a"b 5001 false', "group a\\b 5001 false",
+                                  'user a"b 5001 ok -', "user app 5001 a\\b -", 'user app 5001 ok ok,a"b',
+                                  "user app 5001 ok ok,,ok", "group 'a' 5001 false"])
 def test_malformed_data_changes_nothing(host, tmp_path, line):
     data = tmp_path / "ids.tsv"
     data.write_text(f"group ok 5000 false\n{line}\n")

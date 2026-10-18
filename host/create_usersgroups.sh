@@ -34,6 +34,18 @@ bad() {
     exit 2
 }
 
+# Names become midcli quoted strings ("name"), so they must not contain '"' or '\'; this set
+# excludes both, along with whitespace and the ',' that separates supplementary groups.
+NAME_RE='^[A-Za-z0-9_][A-Za-z0-9_.-]*$'
+check_name() {
+    [[ "$1" =~ $NAME_RE ]] || bad "invalid name '$1' (letters, digits, '_', '.', '-')"
+}
+
+# midcli string syntax: a JSON double-quoted string (unquoted values cannot contain '-').
+q() {
+    printf '"%s"' "$1"
+}
+
 groups=()
 users=()
 line_no=0
@@ -46,12 +58,20 @@ while IFS= read -r line || [ -n "$line" ]; do
     case "$1" in
         group)
             [ $# -eq 4 ] || bad "expected: group <name> <gid> <smb>"
+            check_name "$2"
             [[ "$3" =~ ^[0-9]+$ ]] || bad "gid must be a number"
             [[ "$4" =~ ^(true|false)$ ]] || bad "smb must be true or false"
             groups+=("$2 $3 $4")
             ;;
         user)
             [ $# -eq 5 ] || bad "expected: user <name> <uid> <primary group> <groups|->"
+            check_name "$2"
+            check_name "$4"
+            if [ "$5" != "-" ]; then
+                IFS=, read -r -a extra <<<"$5"
+                [ "${#extra[@]}" -gt 0 ] && [[ "$5" != *, ]] || bad "invalid group list '$5'"
+                for g in "${extra[@]}"; do check_name "$g"; done
+            fi
             [[ "$3" =~ ^[0-9]+$ ]] || bad "uid must be a number"
             users+=("$2 $3 $4 $5")
             ;;
@@ -97,7 +117,7 @@ ensure() {
 
 for g in ${groups[@]+"${groups[@]}"}; do
     read -r name gid smb <<<"$g"
-    if ensure group "$name" "$gid" "account group create gid=$gid name=$name smb=$smb"; then
+    if ensure group "$name" "$gid" "account group create gid=$gid name=$(q "$name") smb=$smb"; then
         present="$present$name "
     fi
 done
@@ -105,7 +125,11 @@ done
 for u in ${users[@]+"${users[@]}"}; do
     read -r name uid primary extra <<<"$u"
     supplementary=""
-    [ "$extra" = "-" ] || supplementary=" groups=$extra"
+    if [ "$extra" != "-" ]; then
+        # midcli reads a,b as a list; each element is quoted.
+        supplementary=" groups=$(IFS=,; for g in $extra; do printf '%s,' "$(q "$g")"; done)"
+        supplementary="${supplementary%,}"
+    fi
     missing=""
     for g in "$primary" $( [ "$extra" = "-" ] || echo "$extra" | tr ',' ' ' ); do
         case "$present" in
@@ -117,7 +141,7 @@ for u in ${users[@]+"${users[@]}"}; do
         error "user $name not created: missing group(s)$missing"
         continue
     fi
-    ensure user "$name" "$uid" "account user create username=$name full_name=$name uid=$uid group_create=false home_create=false password_disabled=true home=/var/empty group=$primary$supplementary smb=false shell=/usr/sbin/nologin" || true
+    ensure user "$name" "$uid" "account user create username=$(q "$name") full_name=$(q "$name") uid=$uid group_create=false home_create=false password_disabled=true home=/var/empty group=$(q "$primary")$supplementary smb=false shell=/usr/sbin/nologin" || true
 done
 
 exit "$status"

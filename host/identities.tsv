@@ -5,6 +5,7 @@
 #   user  <name> <uid> <primary group> <supplementary groups, comma-separated, or ->
 #
 # Users get no password, home or login shell, and no SMB access.
+# Names use letters, digits, '_', '.' and '-'; they are passed to cli as quoted strings.
 
 group  media      1002  true
 group  sonarr     4001  false
