@@ -1,11 +1,16 @@
 services:  
   alertmanager:
-    image: prom/alertmanager:v0.34.0
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: prom/alertmanager:v0.34.0@sha256:690c7b525f4367aa91f73e2f91c632206d32e97c6384bdbf2fb7a861b420340d
     container_name: alertmanager
     user: ${MONITORING_UID}:${MONITORING_GID}
-    security_opt:
-      - no-new-privileges=true
-    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 62M working set
+          memory: 128M
     healthcheck:
       test: ["CMD", "nc", "-z", "127.0.0.1", "9093"]
       interval: 30s
@@ -13,7 +18,6 @@ services:
       retries: 3
       start_period: 60s
       start_interval: 5s
-    dns_search: .
     command:
       - '--config.file=/etc/alertmanager/config.yml'
       - '--web.config.file=/etc/alertmanager/web.yml'
@@ -48,12 +52,6 @@ services:
       probe.module: http_auth
 
       traefik.http.services.alertmanager.loadbalancer.server.port: 9093
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
     volumes:
       - ./config.yml:/etc/alertmanager/config.yml:ro
       - type: bind
