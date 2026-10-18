@@ -29,6 +29,23 @@ services:
       - ENABLE_LOGGING=false
       - TZ=${TZ}
       - AA_DONATOR_KEY=${AA_DONATOR_KEY}
+      # Protected by native OIDC (ADR 0006): Shelfmark is a Requester for other users, so each needs
+      # their own identity. Admin comes from the IdP group; no local login, so no password to guess.
+      # The discovery URL, client ID and secret are in shelfmark.sops.env. Locked out: deploy once
+      # with AUTH_METHOD=none and the UI kept off the internet, fix, then revert.
+      # https://github.com/calibrain/shelfmark/blob/v1.4.0/docs/oidc.md
+      - AUTH_METHOD=oidc
+      - OIDC_ADMIN_GROUP=shelfmark-admins
+      - OIDC_AUTO_REDIRECT=true
+      - DISABLE_LOCAL_AUTH=true
+      # Organizer for Audiobooks (ADR 0009): a folder per book, as Audiobookshelf needs outside the
+      # Library root; {Author}/{Title} alone merges an author's books into one item.
+      # Environment values override (and lock) the in-app settings.
+      - DESTINATION_AUDIOBOOK=/audiobooks
+      - FILE_ORGANIZATION_AUDIOBOOK=organize
+      - TEMPLATE_AUDIOBOOK_ORGANIZE={Author}/{Title}/{Title}
+      - HARDLINK_TORRENTS_AUDIOBOOK=true
+    env_file: ./shelfmark.sops.env
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: warning
@@ -38,7 +55,6 @@ services:
 
       # Probe (GLOSSARY.md): the public path a user takes; see prometheus.yml
       probe.url: https://cwd.${DOMAIN}/api/health
-      probe.idp_url: https://cwd.${DOMAIN}/
 
       traefik.enable: true
       traefik.docker.network: proxy
@@ -47,26 +63,21 @@ services:
       traefik.http.routers.shelfmark-http.entrypoints: http
       traefik.http.routers.shelfmark-http.middlewares: redirect-https
 
-      # The web UI is Protected: crowdsec-bouncer, then the IdP (ADR 0006)
+      # The web UI signs in at the IdP itself (native OIDC), so no forward auth; /api/health is public
       traefik.http.routers.shelfmark-https.rule: Host(`cwd.${DOMAIN}`)
       traefik.http.routers.shelfmark-https.entrypoints: https
       traefik.http.routers.shelfmark-https.tls: true
       traefik.http.routers.shelfmark-https.tls.certresolver: ${CERT_RESOLVER}
       traefik.http.routers.shelfmark-https.service: shelfmark
-      traefik.http.routers.shelfmark-https.middlewares: protected
-
-      # The Probe's path, without the IdP
-      traefik.http.routers.shelfmark-health.rule: Host(`cwd.${DOMAIN}`) && Path(`/api/health`)
-      traefik.http.routers.shelfmark-health.entrypoints: https
-      traefik.http.routers.shelfmark-health.tls: true
-      traefik.http.routers.shelfmark-health.tls.certresolver: ${CERT_RESOLVER}
-      traefik.http.routers.shelfmark-health.service: shelfmark
-      traefik.http.routers.shelfmark-health.middlewares: crowdsec-bouncer
+      traefik.http.routers.shelfmark-https.middlewares: crowdsec-bouncer
 
       traefik.http.services.shelfmark.loadbalancer.server.port: 8084
     volumes:
       - cwa-downloader_config:/config
+      # Books: Shelfmark hands each file to CWA's ingest folder; CWA organizes the Books Library.
       - ${ZFS_POOL_ROOT_HDD}/media/cwa-book-ingest:/cwa-book-ingest
+      # Audiobooks: separate mounts, so hardlinks become copies and moves copy-then-delete until the
+      # one-tree layout (ADR 0009, #543).
       - ${ZFS_POOL_ROOT_HDD}/media/audiobooks:/audiobooks
       - ${ZFS_POOL_ROOT_HDD}/media/tordl/cwd-books:/data/tordl/cwd-books
       - ${ZFS_POOL_ROOT_HDD}/media/tordl/cwd-audiobooks:/data/tordl/cwd-audiobooks
