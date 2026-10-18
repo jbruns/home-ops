@@ -2,18 +2,31 @@ services:
   tracearr:
     # https://github.com/connorgallopo/Tracearr/pkgs/container/tracearr
     # https://github.com/connorgallopo/tracearr
-    image: ghcr.io/connorgallopo/tracearr:supervised-1.4.27
+    extends:
+      file: ../_baseline.yaml
+      service: baseline
+    image: ghcr.io/connorgallopo/tracearr:supervised-1.4.27@sha256:9948e47a12f3c7fb38c20a48aab1e3f68c5ba8a045a5eee4174db21f05f9d14a
     container_name: tracearr
     shm_size: 512mb  # Required for PostgreSQL shared memory (increase for large imports)
-    mem_limit: 3g    # Minimum 3GB required (PostgreSQL + Redis + Node.js)
+    deploy:
+      resources:
+        limits:
+          # Image minimum is 3GB (PostgreSQL + Redis + Node.js); 30-day peak 714M working set
+          memory: 3G
     ulimits:
       nofile:
         soft: 65536
         hard: 65536  # TimescaleDB chunks require many file descriptors
-    security_opt:
-      - no-new-privileges=true
-    restart: unless-stopped
-    dns_search: .
+    # Supervised image: entrypoint chowns/chmods data dirs as root, then gosu/supervisord drop to
+    # postgres, redis and tracearr users; it cannot start as a single non-root user.
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+      start_interval: 5s
     environment:
       - TZ=${TZ}
     labels:
@@ -43,12 +56,6 @@ services:
       probe.url: https://tracearr.${DOMAIN}/health
 
       traefik.http.services.tracearr.loadbalancer.server.port: 3000
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
     volumes:
       - tracearr_postgres:/data/postgres
       - tracearr_redis:/data/redis
