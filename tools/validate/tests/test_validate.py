@@ -387,6 +387,14 @@ def test_monitoring_paths_are_configurable(validate, repo, monkeypatch):
     assert calls[0] == ("prom/prometheus:v9", [prom / "prometheus.yml", prom / "x-rules.yml"])
 
 
+def test_monitoring_checks_dashboards_json_under_root(validate, repo, monkeypatch):
+    monkeypatch.setattr(validate, "docker_run", lambda *args: None)
+    write(repo, {"tools/dashboards/dashboards.py": "import sys; print(*sys.argv[1:]); raise SystemExit(1)\n"})
+    validate.configure(repo, {"dashboards-json": "json"})
+    validate.check_monitoring()
+    assert messages(validate) == f"--check --out {repo / 'json'}"
+
+
 def test_configure_rejects_unknown_path(validate, repo):
     with pytest.raises(KeyError):
         validate.configure(repo, {"nope": "x"})

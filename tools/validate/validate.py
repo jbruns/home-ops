@@ -36,7 +36,8 @@ import yaml
 
 TOOLS_DIR = Path(__file__).resolve().parents[1]
 ROOT = TOOLS_DIR.parent
-HOST_DIR = ROOT / "tn"
+# The folder doco-cd deploys Stacks from, relative to ROOT.
+HOST_DIR = "tn"
 # Files and folders individual checks read, relative to ROOT.
 PATHS = {
     "prometheus": "tn/monitoring/prometheus",
@@ -45,6 +46,7 @@ PATHS = {
     "alloy": "tn/monitoring/alloy",
     "blackbox": "tn/monitoring/blackbox-exporter/blackbox.yml",
     "dashboards": "tools/dashboards/dashboards.py",
+    "dashboards-json": "tn/monitoring/grafana/dashboards",
     "traefik": "tn/edge/traefik/service.yaml",
 }
 # ${VAR} but not $${VAR} (Compose's escape for a literal "$")
@@ -83,15 +85,13 @@ def tracked_files() -> set[Path]:
 ENTRY_NAME = "compose.yaml"
 # Each file a Stack's entry file includes: tn/<stack>/<service>/service.yaml, one Service plus its sidecars.
 INCLUDED_NAME = "service.yaml"
-DOCO_CD_CONFIG = ROOT / ".doco-cd.yml"
+DOCO_CD_CONFIG = ".doco-cd.yml"
 
 
 def configure(root: Path, paths: dict[str, str] | None = None) -> None:
     """Point every check at another repository root and/or override entries of PATHS."""
-    global ROOT, HOST_DIR, DOCO_CD_CONFIG
+    global ROOT
     ROOT = root.resolve()
-    HOST_DIR = ROOT / "tn"
-    DOCO_CD_CONFIG = ROOT / ".doco-cd.yml"
     for name, value in (paths or {}).items():
         if name not in PATHS:
             raise KeyError(f"unknown path {name!r}; choose from {', '.join(PATHS)}")
@@ -103,7 +103,7 @@ def path(name: str) -> Path:
 
 
 def stacks(base: Path | None = None) -> list[Path]:
-    return sorted(p.parent for p in ((base or ROOT) / "tn").glob(f"*/{ENTRY_NAME}"))
+    return sorted(p.parent for p in ((base or ROOT) / HOST_DIR).glob(f"*/{ENTRY_NAME}"))
 
 
 def entry(stack: Path) -> Path:
@@ -184,12 +184,13 @@ def check_layout(tracked: set[Path]) -> None:
             included.add(f)
             if f.name != INCLUDED_NAME or f.parent.parent != stack:
                 fail(f"{stack.name}: included file {_rel(f)} must be {_rel(stack)}/<service>/{INCLUDED_NAME}", entry(stack))
+    host_dir, doco_cd_config = ROOT / HOST_DIR, ROOT / DOCO_CD_CONFIG
     for f in sorted(tracked):
-        if not f.is_relative_to(HOST_DIR):
+        if not f.is_relative_to(host_dir):
             continue
         if re.fullmatch(r"docker-compose\.ya?ml", f.name):
             fail(f"rename to {INCLUDED_NAME} (one Service per file) or {ENTRY_NAME} (a Stack's entry file)", f)
-        elif f.name == INCLUDED_NAME and f.parent.parent == HOST_DIR:
+        elif f.name == INCLUDED_NAME and f.parent.parent == host_dir:
             fail(f"doco-cd never discovers this; a Stack's entry file must be {ENTRY_NAME}", f)
         elif f.name == INCLUDED_NAME and f not in included:
             fail(f"no Stack's include: lists this {INCLUDED_NAME}, so it is never deployed", f)
@@ -197,9 +198,9 @@ def check_layout(tracked: set[Path]) -> None:
     # internal/config/deploy/auto_discovery.go). It only looks for compose.yaml, so service.yaml is
     # never discovered; this is defence in depth: at depth 0 (unlimited) a compose.yaml in a Service
     # folder would become a Stack, and delete: true would remove it when it disappears.
-    depth = ((yaml.safe_load(DOCO_CD_CONFIG.read_text()) or {}).get("auto_discovery") or {}).get("depth")
+    depth = ((yaml.safe_load(doco_cd_config.read_text()) or {}).get("auto_discovery") or {}).get("depth")
     if depth != 1:
-        fail(f"auto_discovery.depth must stay 1 (found {depth!r}): deeper discovery would deploy a compose.yaml below a Stack folder as a Stack of its own", DOCO_CD_CONFIG)
+        fail(f"auto_discovery.depth must stay 1 (found {depth!r}): deeper discovery would deploy a compose.yaml below a Stack folder as a Stack of its own", doco_cd_config)
 
 
 def check_stack_secrets(stack: Path, tracked: set[Path]) -> None:
@@ -473,7 +474,8 @@ def check_monitoring() -> None:
     docker_run(alloy_image, {alloy / "config.alloy": "/etc/alloy/config.alloy"}, "/bin/alloy", "validate", "/etc/alloy/config.alloy")
 
     generator = path("dashboards")
-    result = subprocess.run([sys.executable, str(generator), "--check"], capture_output=True, text=True)
+    result = subprocess.run([sys.executable, str(generator), "--check", "--out", str(path("dashboards-json"))],
+                            capture_output=True, text=True)
     if result.returncode:
         fail(result.stdout.strip() or result.stderr.strip(), generator)
     else:

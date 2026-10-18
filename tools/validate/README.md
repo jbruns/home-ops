@@ -28,7 +28,8 @@ python3 tools/validate/validate.py secrets env          # just these
 - `--path NAME=PATH`: move one input, relative to `--root` or absolute. Names and defaults:
   `prometheus` (`tn/monitoring/prometheus`), `alertmanager`, `loki`, `alloy` (each
   `tn/monitoring/<name>`), `blackbox` (`tn/monitoring/blackbox-exporter/blackbox.yml`),
-  `dashboards` (`tools/dashboards/dashboards.py`), `traefik` (`tn/edge/traefik/service.yaml`).
+  `dashboards` (`tools/dashboards/dashboards.py`, the generator), `dashboards-json`
+  (`tn/monitoring/grafana/dashboards`, the generated JSON it checks), `traefik` (`tn/edge/traefik/service.yaml`).
 - `VALIDATE_BASE`: the ref `isolation` diffs against (default `origin/main`; CI sets the PR base).
 - `GITHUB_ACTIONS`: when set, failures print as GitHub annotations.
 

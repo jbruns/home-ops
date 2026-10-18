@@ -104,8 +104,7 @@ def validate(repo, monkeypatch):
     """The validate module, pointed at the fixture repository, with no recorded failures."""
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     monkeypatch.setattr(validate_module, "failures", [])
-    for name in ("ROOT", "HOST_DIR", "DOCO_CD_CONFIG"):
-        monkeypatch.setattr(validate_module, name, getattr(validate_module, name))
+    monkeypatch.setattr(validate_module, "ROOT", validate_module.ROOT)
     monkeypatch.setattr(validate_module, "PATHS", dict(validate_module.PATHS))
     validate_module.configure(repo)
     return validate_module

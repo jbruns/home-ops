@@ -73,11 +73,11 @@ run() {
     [ "$dry_run" -eq 1 ] || cli -c "$1" || { error "cli failed: $1"; return 1; }
 }
 
-# ensure <db> <kind> <name> <id> <command>: run command unless name exists; flag id mismatches.
+# ensure <group|user> <name> <id> <command>: run command unless name exists; flag id mismatches.
 # Returns 0 if the name exists or was created.
 ensure() {
-    local db="$1" kind="$2" name="$3" id="$4" command="$5" entry owner id_name
-    id_name="$([ "$kind" = group ] && echo gid || echo uid)"
+    local kind="$1" name="$2" id="$3" command="$4" db=group id_name=gid entry owner
+    [ "$kind" = group ] || { db=passwd; id_name=uid; }
     if entry="$(getent "$db" "$name")"; then
         local have
         have="$(echo "$entry" | cut -d: -f3)"
@@ -97,7 +97,7 @@ ensure() {
 
 for g in ${groups[@]+"${groups[@]}"}; do
     read -r name gid smb <<<"$g"
-    if ensure group group "$name" "$gid" "account group create gid=$gid name=$name smb=$smb"; then
+    if ensure group "$name" "$gid" "account group create gid=$gid name=$name smb=$smb"; then
         present="$present$name "
     fi
 done
@@ -117,7 +117,7 @@ for u in ${users[@]+"${users[@]}"}; do
         error "user $name not created: missing group(s)$missing"
         continue
     fi
-    ensure passwd user "$name" "$uid" "account user create username=$name full_name=$name uid=$uid group_create=false home_create=false password_disabled=true home=/var/empty group=$primary$supplementary smb=false shell=/usr/sbin/nologin" || true
+    ensure user "$name" "$uid" "account user create username=$name full_name=$name uid=$uid group_create=false home_create=false password_disabled=true home=/var/empty group=$primary$supplementary smb=false shell=/usr/sbin/nologin" || true
 done
 
 exit "$status"
