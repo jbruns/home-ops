@@ -1,11 +1,19 @@
 services:
   mariadb:
     # https://hub.docker.com/_/mariadb
-    image: mariadb:11.8.9
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: mariadb:11.8.9@sha256:f16d7a344413e519dff518f27bdb221388f84b0d274c97c4fb5f2cb0dc1b34fa
     container_name: mariadb
-    restart: unless-stopped
+    # The image's mysql user; the entrypoint skips its chown + gosu when not root, so no caps.
+    user: "999:999"
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 372M working set
+          memory: 768M
     stop_grace_period: 60s
-    dns_search: .
     # Exit 0 whenever the server answers, even "access denied"; no credentials needed.
     healthcheck:
       test: ["CMD", "mariadb-admin", "ping", "-h", "127.0.0.1", "--silent"]
@@ -28,12 +36,6 @@ services:
       startup-order: "1"
       stack-back.mariadb: true
 
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
     volumes:
       - mariadb_data:/var/lib/mysql
     networks:
@@ -46,12 +48,23 @@ services:
     # Its `exporter` account was created by hand, once (a fresh data volume needs it again):
     #   CREATE USER 'exporter'@'%' IDENTIFIED BY '<MARIADB_EXPORTER_PASSWORD>' WITH MAX_USER_CONNECTIONS 3;
     #   GRANT PROCESS, SLAVE MONITOR ON *.* TO 'exporter'@'%';
-    image: prom/mysqld-exporter:v0.20.0
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: prom/mysqld-exporter:v0.20.0@sha256:abed8dac117b4ae5b70757f988e44795935b9a72c3b58d720c67ba688f8cb79e
     container_name: mariadb-exporter
-    restart: unless-stopped
-    dns_search: .
-    security_opt:
-      - no-new-privileges=true
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:9104/metrics"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 5s
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 35M working set
+          memory: 64M
     command:
       - --mysqld.address=mariadb:3306
       - --mysqld.username=exporter
@@ -65,12 +78,6 @@ services:
       tier: info
       startup-order: "3"
 
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
     networks:
       - default
       - metrics
