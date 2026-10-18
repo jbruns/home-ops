@@ -84,11 +84,11 @@ def stat(title, expr, w=4, h=4, unit=None, mappings=None, steps=None, desc=None,
                           "reduceOptions": {"calcs": ["lastNotNull"]}})
 
 
-def timeseries(title, targets, w=12, h=8, unit=None, desc=None, stack=False, **extra):
-    custom = {"fillOpacity": 10, "showPoints": "never", "lineWidth": 1}
+def timeseries(title, targets, w=12, h=8, unit=None, desc=None, stack=False, custom=None, **extra):
+    base = {"fillOpacity": 10, "showPoints": "never", "lineWidth": 1}
     if stack:
-        custom |= {"stacking": {"mode": "normal"}, "fillOpacity": 40}
-    return panel("timeseries", title, targets, w, h, unit, desc, custom=custom,
+        base |= {"stacking": {"mode": "normal"}, "fillOpacity": 40}
+    return panel("timeseries", title, targets, w, h, unit, desc, custom=base | (custom or {}),
                  options={"legend": {"displayMode": "list", "placement": "bottom"},
                           "tooltip": {"mode": "multi", "sort": "desc"}}, **extra)
 
@@ -542,6 +542,17 @@ def dependencies():
         "2": {"text": "OFF (user)", "color": "text", "index": 3},
     }}]
     rate = "$__rate_interval"
+    # Only indexers with a limit configured in nzbhydra2 have a *_limit series, so only they appear.
+    allowance = [
+        target("max by (indexer) (nzbhydra2_indexer_api_hits / nzbhydra2_indexer_api_hit_limit)",
+               "{{indexer}} API", "A", instant=True, ds=REMOTE),
+        target("max by (indexer) (nzbhydra2_indexer_download_hits / nzbhydra2_indexer_download_hit_limit)",
+               "{{indexer}} downloads", "B", instant=True, ds=REMOTE),
+    ]
+    allowance_steps = {"mode": "absolute", "steps": [
+        {"color": "green", "value": None}, {"color": "orange", "value": 0.9}, {"color": "red", "value": 1}]}
+    allowance_desc = ("Hits as a share of each daily limit configured in nzbhydra2; indexers without one are not shown. "
+                      "NzbhydraIndexerLimitNear alerts above 90% for 15 minutes. Counts reset at midnight.")
     panels = [
         row("Map"),
         node_graph("Dependency map", nodes, edges, h=16,
@@ -576,7 +587,15 @@ def dependencies():
             desc="BACKOFF is nzbhydra2's temporary disable after errors. Gaps mean its machine is unreachable."),
         timeseries("Indexer API hits", [
             target("max by (indexer) (nzbhydra2_indexer_api_hits)", "{{indexer}}", "A", ds=REMOTE)],
-            h=8, ds=REMOTE, desc="Against each indexer's daily limit (see nzbhydra2)."),
+            h=8, ds=REMOTE, desc="Every indexer, with or without a daily limit. Counts reset at midnight."),
+        panel("bargauge", "Daily allowance used", allowance, 12, 8, "percentunit", ds=REMOTE,
+              desc=allowance_desc, defaults={"min": 0, "max": 1, "thresholds": allowance_steps},
+              options={"orientation": "horizontal", "displayMode": "gradient", "showUnfilled": True,
+                       "valueMode": "color", "reduceOptions": {"calcs": ["lastNotNull"]}}),
+        timeseries("Daily allowance used over time", [dict(t, instant=False, range=True) for t in allowance], unit="percentunit",
+                   h=8, ds=REMOTE, desc=allowance_desc,
+                   defaults={"min": 0, "thresholds": allowance_steps},
+                   custom={"thresholdsStyle": {"mode": "dashed"}}),
     ]
     return dashboard("dependencies", "Dependency map", panels, links=DASH_LINKS, time="now-24h",
                      desc="Internal and External Dependencies: the map, Dependency Probes, Usenet providers and indexers.")
