@@ -1,0 +1,76 @@
+# OWNFOIL STACK (deployed by doco-cd). Moved from asotbz/ops tn/asot-media (#457).
+# Hostnames are under this Stack's own DOMAIN, not edge's.
+services:
+  ownfoil:
+    # https://github.com/a1ex4/ownfoil/releases ; Switch clients use its basic auth on / (#503)
+    extends:
+      file: ../_baseline.yaml
+      service: baseline
+    image: a1ex4/ownfoil:2.3.0@sha256:d3f7c09ea450b64479dc57ada98d46b4ca72ac5016e54ed7f660e7b43d82ce39
+    container_name: ownfoil
+    # Starts as root, then drops to the PUID/UID user: chown, switch user, signal its child.
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID, KILL]
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8465/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 5s
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 545M
+          memory: 832M
+    environment:
+      # https://github.com/a1ex4/ownfoil#docker-compose
+      - PUID=${MEDIA_UID}
+      - PGID=${MEDIA_SHARED_GID}
+      - USER_ADMIN_NAME=${HINOX_ADMIN_USER}
+      - USER_ADMIN_PASSWORD=${HINOX_ADMIN_PASSWORD}
+      - USER_GUEST_NAME=${HINOX_USER}
+      - USER_GUEST_PASSWORD=${HINOX_PASSWORD}
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: warning
+      startup-order: "2"
+      stack-back.volumes: true
+      stack-back.volumes.include: "ownfoil_config"
+
+      # Probe (GLOSSARY.md): the public path a user takes; see prometheus.yml
+      probe.url: https://hnx.${DOMAIN}/login
+
+      traefik.enable: true
+      traefik.docker.network: proxy
+
+      traefik.http.routers.ownfoil-http.rule: Host(`hnx.${DOMAIN}`)
+      traefik.http.routers.ownfoil-http.entrypoints: http
+      traefik.http.routers.ownfoil-http.middlewares: redirect-https
+
+      traefik.http.routers.ownfoil-https.rule: Host(`hnx.${DOMAIN}`)
+      traefik.http.routers.ownfoil-https.entrypoints: https
+      traefik.http.routers.ownfoil-https.tls: true
+      traefik.http.routers.ownfoil-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.ownfoil-https.service: ownfoil
+      traefik.http.routers.ownfoil-https.middlewares: crowdsec-bouncer
+
+      traefik.http.services.ownfoil.loadbalancer.server.port: 8465
+    volumes:
+      - ${ZFS_POOL_ROOT_HDD}/roms/hinox:/games
+      - ${ZFS_POOL_ROOT_HDD}/roms/hinox/static/NX-OFW1901-Atmos191-060925.zip:/app/static/NX-OFW1901-Atmos191-060925.zip:ro
+      - ownfoil_config:/app/config
+    networks:
+      - default
+      - proxy
+
+volumes:
+  # Created by the asot-media Stack; the explicit name keeps them across the move.
+  ownfoil_config:
+    name: asot-media_ownfoil_config
+    external: true
+
+networks:
+  # Traefik and the Exposed Services it routes to; owned by the edge Stack.
+  proxy:
+    name: proxy
+    external: true
