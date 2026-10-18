@@ -2,12 +2,17 @@ services:
   navidrome:
     # https://hub.docker.com/r/deluan/navidrome
     # https://github.com/navidrome/navidrome/releases
-    image: deluan/navidrome:0.63.2
+    extends:
+      file: ../_baseline.yaml
+      service: baseline
+    image: deluan/navidrome:0.63.2@sha256:9012939114fbb1bb641b81cf96dec5ded15f0aafefe8d47a511d7cb919658e40
     container_name: navidrome
     user: ${NAVIDROME_UID}:${MEDIA_SHARED_GID}
-    security_opt:
-      - no-new-privileges=true
-    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 175M
+          memory: 256M
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:4533/ping"]
       interval: 30s
@@ -15,7 +20,6 @@ services:
       retries: 3
       start_period: 60s
       start_interval: 5s
-    dns_search: .
     environment:
       # https://www.navidrome.org/docs/usage/configuration-options/#environment-variables
       - ND_ENABLETRANSCODINGCONFIG=true
@@ -46,12 +50,6 @@ services:
       probe.url: https://navidrome.${DOMAIN}/ping
 
       traefik.http.services.navidrome.loadbalancer.server.port: 4533
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
     volumes:
       - navidrome_data:/data
       - ${ZFS_POOL_ROOT_HDD}/media/music/FLAC:/music:ro
