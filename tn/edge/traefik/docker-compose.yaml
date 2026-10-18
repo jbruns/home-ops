@@ -1,13 +1,18 @@
 services:
   traefik:
-    image: traefik:v3.7.13
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: traefik:v3.7.13@sha256:1c32e7c368204fd72812152ebdd2ac0425993df6fd982317deb02e48f2d5423c
     container_name: traefik
     user: ${COMMON_UID}:${COMMON_GID}
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 252M working set
+          memory: 384M
     group_add:
       - ${DOCKER_GID}
-    security_opt:
-      - no-new-privileges=true
-    restart: unless-stopped
     depends_on:
       crowdsec:
         condition: service_healthy
@@ -18,7 +23,6 @@ services:
       retries: 3
       start_period: 60s
       start_interval: 5s
-    dns_search: .
     command:
       # Debug-level logging as necessary
       # - --log.level=DEBUG
@@ -120,7 +124,6 @@ services:
       traefik.http.middlewares.crowdsec-bouncer.plugin.crowdsec-bouncer.crowdsecAppsecEnabled: true
       traefik.http.middlewares.crowdsec-bouncer.plugin.crowdsec-bouncer.crowdsecAppsecHost: crowdsec:7422
 
-
       ## IdP forward auth (ADR 0006). Defined here, not on the outpost, so a Protected Service's
       ## web UI fails closed (5xx) rather than open if the outpost is gone.
       traefik.http.middlewares.idp-forward-auth.forwardAuth.address: http://idp-outpost:9000/outpost.goauthentik.io/auth/traefik
@@ -136,12 +139,6 @@ services:
 
       ## Redirect to HTTPS
       traefik.http.middlewares.redirect-https.redirectScheme.scheme: https
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
     # Bind to the second Host IP only: the TrueNAS UI owns 80/443 on the primary address.
     ports:
       - ${DOCKER_HOST_IPV4}:443:443
@@ -167,34 +164,42 @@ services:
     # Rotates Traefik's access log daily at 00:00 UTC, keeping two old files. Copy-then-truncate
     # (copytruncate) keeps Traefik and CrowdSec on the same open file; CrowdSec reads only
     # access.log and follows the truncation.
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
     image: busybox:1.37@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
     container_name: traefik-logrotate
     user: ${COMMON_UID}:${COMMON_GID}
-    security_opt:
-      - no-new-privileges=true
-    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 3M working set
+          memory: 32M
     network_mode: none
     working_dir: /var/log/traefik
     command:
       - sh
       - -c
       - |
+        touch /tmp/rotated
         while :; do
           now=$$(date +%s)
           sleep $$(( (now / 86400 + 1) * 86400 - now ))
           [ -f access.log.1 ] && mv -f access.log.1 access.log.2
-          cp -p access.log access.log.1 && : > access.log
+          cp -p access.log access.log.1 && : > access.log && touch /tmp/rotated
         done
+    # Unhealthy once a daily rotation is missed (marker older than 25h).
+    healthcheck:
+      test: ["CMD-SHELL", "find /tmp/rotated -mmin -1500 | grep -q ."]
+      interval: 5m
+      timeout: 5s
+      retries: 2
+      start_period: 30s
+      start_interval: 5s
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: info
       startup-order: "3"
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "3"
-        tag: "{{.Name}}"
     volumes:
       - traefik_log:/var/log/traefik
 
