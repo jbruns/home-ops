@@ -206,8 +206,8 @@ STARTUP_LEVELS = {"0", "1", "2", "3"}
 LOGGING = {"driver": "json-file", "max-size": "10m", "max-file": "3"}
 HTTPS_RULE_RE = re.compile(r"^traefik\.http\.routers\..+-https\.rule$")
 
-# The Baseline (ADR 0007). Services that `extends` tn/_baseline.yaml are held to it; the rest are
-# the #495 retrofit backlog. doco-cd never extends it (it would race its own self-update).
+# The Baseline (ADR 0007). Every Service `extends` tn/_baseline.yaml, except doco-cd's, which carry
+# the same items inline (extending would race doco-cd's own self-update); both are held to it.
 BASELINE_FILE = "tn/_baseline.yaml"
 TEMPLATES_DIR = "templates"
 EXEMPT_PREFIX = "baseline.exempt."
@@ -344,13 +344,14 @@ def check_compose() -> None:
                 fail(f"{stack.name}: every template Service must extend {BASELINE_FILE}", src)
             if stack.name == "doco-cd" and on_baseline:
                 fail(f"doco-cd must not extend {BASELINE_FILE} (ADR 0007); keep its settings inline", src)
-            base_problems = []
-            for name in sorted(on_baseline & set(services)):
+            inline = set(services) if stack.name == "doco-cd" else set()
+            base_problems = [f"{name}: must extend {BASELINE_FILE}" for name in sorted(set(services) - on_baseline - inline)]
+            for name in sorted((on_baseline | inline) & set(services)):
                 p, e = baseline_problems(name, services[name])
                 base_problems += p
                 exemptions += [f"{stack.name}/{x}" for x in e]
             if not template:
-                counts["baseline"] += len(on_baseline & set(services))
+                counts["baseline"] += len((on_baseline | inline) & set(services))
                 counts["total"] += len(services)
             if bad:
                 fail(f"{stack.name}: services without a valid {STARTUP_LABEL} label (0-3, ADR-0003): {', '.join(sorted(bad))}", src)
@@ -364,7 +365,7 @@ def check_compose() -> None:
                 fail(f"{stack.name}: Baseline (ADR 0007): " + "; ".join(base_problems), src)
             if not bad and not probes and not logs and not restart and not base_problems:
                 print(f"compose ok: {stack.name}")
-    print(f"Baseline: {counts['baseline']} of {counts['total']} Services extend {BASELINE_FILE} (retrofit: #495)")
+    print(f"Baseline: {counts['baseline']} of {counts['total']} Services meet it (ADR 0007)")
     for x in exemptions:
         print(f"  Exemption {x}")
 
