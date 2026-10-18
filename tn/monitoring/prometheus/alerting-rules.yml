@@ -174,6 +174,43 @@ groups:
           summary: "{{ $labels.name }} is near its memory limit"
           description: "{{ $labels.name }} is using {{ $value | humanizePercentage }} of its memory limit."
 
+  # The IdP outpost (edge) behind every Protected Service's web UI (ADR 0006). Critical: when it
+  # breaks, those web UIs fail closed for everyone. The IdP's own health is DependencyDown (to=idp).
+  - name: idp
+    rules:
+      # The outpost lost its connection to the IdP. Inhibited by DependencyDown{to="idp"}.
+      - alert: IdpOutpostDisconnected
+        expr: authentik_outpost_connection == 0
+        for: 5m
+        annotations:
+          summary: The IdP outpost has lost the IdP
+          description: "idp-outpost has had no connection to the IdP for 5 minutes; it cannot pick up provider changes and sign-ins may fail."
+
+      # Every Protected Service's web UI fails its probe-idp Probe at once: the outpost (or the
+      # forward-auth middleware) is broken, not one Service. Inhibits those ProbeFailed alerts and
+      # is inhibited by InternetDown or Traefik's own ProbeFailed (alertmanager).
+      - alert: IdpForwardAuthFailing
+        expr: count(probe_success{job="probe-idp"} == 0) == count(probe_success{job="probe-idp"})
+        for: 3m
+        labels:
+          tier: critical
+          stack: edge
+          container: idp-outpost
+        annotations:
+          summary: Protected Services are not redirecting to the IdP
+          description: "Every probe-idp Probe has failed for 3 minutes; forward auth through idp-outpost is broken."
+
+      # Forward auth adds this to every request to a Protected web UI. At least 20 requests in
+      # 10 minutes, so a handful of slow Probes do not count.
+      - alert: IdpOutpostSlow
+        expr: |
+          histogram_quantile(0.95, sum by (le, container, stack, tier) (rate(authentik_outpost_proxy_request_duration_seconds_bucket[10m]))) > 2
+          and sum by (container, stack, tier) (rate(authentik_outpost_proxy_request_duration_seconds_count[10m])) * 600 >= 20
+        for: 15m
+        annotations:
+          summary: The IdP outpost is slow
+          description: "95th percentile forward-auth latency through idp-outpost has been {{ $value | humanizeDuration }} for 15 minutes."
+
   - name: datastores
     rules:
       # The Datastore stopped answering its exporter. Fires at the Datastore's Tier, not the

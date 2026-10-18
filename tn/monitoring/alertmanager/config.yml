@@ -52,6 +52,16 @@ inhibit_rules:
   - source_matchers: [alertname="ProbeFailed"]
     target_matchers: [alertname="Http5xxRatio"]
     equal: [container]
+  # The IdP outpost (edge): report the broken outpost, not every Protected Service; and an IdP
+  # outage, not the outpost losing it.
+  - source_matchers: [alertname="IdpForwardAuthFailing"]
+    target_matchers: [alertname="ProbeFailed", job="probe-idp"]
+  - source_matchers: [alertname="InternetDown"]
+    target_matchers: [alertname="IdpForwardAuthFailing"]
+  - source_matchers: [alertname="ProbeFailed", container="traefik"]
+    target_matchers: [alertname="IdpForwardAuthFailing"]
+  - source_matchers: [alertname="DependencyDown", to="idp"]
+    target_matchers: [alertname="IdpOutpostDisconnected"]
 
 receivers:
   - name: blackhole

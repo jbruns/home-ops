@@ -121,6 +121,19 @@ services:
       traefik.http.middlewares.crowdsec-bouncer.plugin.crowdsec-bouncer.crowdsecAppsecHost: crowdsec:7422
 
 
+      ## IdP forward auth (ADR 0006). Defined here, not on the outpost, so a Protected Service's
+      ## web UI fails closed (5xx) rather than open if the outpost is gone.
+      traefik.http.middlewares.idp-forward-auth.forwardAuth.address: http://idp-outpost:9000/outpost.goauthentik.io/auth/traefik
+      traefik.http.middlewares.idp-forward-auth.forwardAuth.trustForwardHeader: true
+      traefik.http.middlewares.idp-forward-auth.forwardAuth.authResponseHeaders: X-authentik-username,X-authentik-groups,X-authentik-email,X-authentik-name,X-authentik-uid,X-authentik-jwt,X-authentik-meta-jwks,X-authentik-meta-outpost,X-authentik-meta-provider,X-authentik-meta-app,X-authentik-meta-version
+      ## A Protected Service's web UI router
+      traefik.http.middlewares.protected.chain.middlewares: crowdsec-bouncer,idp-forward-auth
+      ## Per client, on Client Paths (no IdP in front, so the Service's own login takes the guessing).
+      ## depth 1 is the address Cloudflare appended to X-Forwarded-For: the client's.
+      traefik.http.middlewares.client-ratelimit.ratelimit.average: 30
+      traefik.http.middlewares.client-ratelimit.ratelimit.burst: 120
+      traefik.http.middlewares.client-ratelimit.ratelimit.sourcecriterion.ipstrategy.depth: 1
+
       ## Redirect to HTTPS
       traefik.http.middlewares.redirect-https.redirectScheme.scheme: https
     logging:

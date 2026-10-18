@@ -1,6 +1,6 @@
 # EDGE STACK (deployed by doco-cd)
-# Ingress: Traefik (ports 80/443), the CrowdSec engine behind its bouncer, and nginx for
-# error pages and the catch-all route.
+# Ingress: Traefik (ports 80/443), the CrowdSec engine behind its bouncer, nginx for
+# error pages and the catch-all route, and the IdP outpost behind Protected Services' forward auth.
 
 networks:
   # Traefik and the Exposed Services it routes to; owned here (ADR-0002).
@@ -20,5 +20,6 @@ networks:
 
 include:
   - ./crowdsec/docker-compose.yaml
+  - ./idp-outpost/docker-compose.yaml
   - ./nginx/docker-compose.yaml
   - ./traefik/docker-compose.yaml

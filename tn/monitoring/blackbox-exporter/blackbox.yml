@@ -13,7 +13,7 @@ modules:
     http:
       valid_status_codes: [401]
 
-  # Behind Authentik (`probe.idp_url`, job probe-idp): the outpost answers an anonymous request
+  # A Protected Service (`probe.idp_url`, job probe-idp): the IdP outpost answers an anonymous request
   # by redirecting to the IdP's authorize endpoint. Not followed, so the IdP is never touched.
   http_idp_redirect:
     prober: http

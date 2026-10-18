@@ -1,6 +1,6 @@
 # Protected Services: one outpost in edge, native OIDC first, Client Paths for required clients
 
-The asot-media Services were the first Protected Services. Their forward-auth outpost and middleware lived inside that Stack, but more Services will sign in at the IdP later, so this pattern is now shared. The proxy outpost runs in the edge Stack and defines one role-named forward-auth middleware and a shared chain with the CrowdSec bouncer. A Service is Protected by one of three mechanisms, in order of preference:
+The asot-media Services were the first Protected Services. Their forward-auth outpost and middleware lived inside that Stack, but more Services will sign in at the IdP later, so this pattern is now shared. The proxy outpost runs in the edge Stack, which defines one role-named forward-auth middleware and a shared chain with the CrowdSec bouncer. Traefik carries those definitions rather than the outpost, so a missing outpost fails closed. A Service is Protected by one of three mechanisms, in order of preference:
 
 1. native OIDC, where the Service redirects to the IdP itself and needs neither the outpost nor any Client Path,
 2. forward auth with identity handoff, where the Service trusts the outpost's identity header from Traefik's network only,

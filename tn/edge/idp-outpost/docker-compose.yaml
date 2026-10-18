@@ -1,0 +1,34 @@
+services:
+  idp-outpost:
+    # The IdP's proxy outpost (GLOSSARY.md: IdP, Protected Service; ADR 0006). Traefik asks it, via
+    # the idp-forward-auth middleware, whether a request to a Protected Service's web UI is signed
+    # in; it redirects anyone who is not to the IdP. The IdP itself runs off this Host.
+    # https://github.com/goauthentik/authentik/releases ; keep in step with the IdP's version.
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: ghcr.io/goauthentik/proxy:2026.5.5@sha256:6bb49066864e71b36a55cf91e5e75390625a808cc9fe365851e14b0978694d2e
+    container_name: idp-outpost
+    healthcheck:
+      test: ["CMD", "/proxy", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 5s
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+    environment:
+      AUTHENTIK_HOST: https://idp.${DOMAIN}
+      AUTHENTIK_INSECURE: "false"
+      AUTHENTIK_TOKEN: ${AUTHENTIK_TOKEN}
+    labels:
+      # Every Protected Service's web UI fails closed without it.
+      tier: critical
+      startup-order: "0"
+    networks:
+      - proxy
+      # :9300/metrics, job idp-outpost in prometheus.yml
+      - metrics
