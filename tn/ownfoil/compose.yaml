@@ -8,8 +8,12 @@ services:
       service: baseline
     image: a1ex4/ownfoil:2.3.0@sha256:d3f7c09ea450b64479dc57ada98d46b4ca72ac5016e54ed7f660e7b43d82ce39
     container_name: ownfoil
-    # Starts as root, then drops to the PUID/UID user: chown, switch user, signal its child.
-    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID, KILL]
+    # run.sh only adds a user, chowns /app and sudo's to PUID; start the app as that user instead,
+    # so no caps. /app/data (TitleDB, rebuilt at start) was chowned by run.sh; it is a tmpfs now.
+    user: ${MEDIA_UID}:${MEDIA_SHARED_GID}
+    entrypoint: ["python", "/app/app.py"]
+    tmpfs:
+      - /app/data:uid=${MEDIA_UID},gid=${MEDIA_SHARED_GID},mode=0755,size=384m
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8465/"]
       interval: 30s
@@ -20,12 +24,11 @@ services:
     deploy:
       resources:
         limits:
-          # 30-day peak 545M
-          memory: 832M
+          # 30-day peak 545M, plus the /app/data tmpfs (~175M), which counts against the limit
+          memory: 1G
     environment:
       # https://github.com/a1ex4/ownfoil#docker-compose
-      - PUID=${MEDIA_UID}
-      - PGID=${MEDIA_SHARED_GID}
+      - HOME=/tmp
       - USER_ADMIN_NAME=${HINOX_ADMIN_USER}
       - USER_ADMIN_PASSWORD=${HINOX_ADMIN_PASSWORD}
       - USER_GUEST_NAME=${HINOX_USER}

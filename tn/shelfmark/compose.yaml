@@ -8,8 +8,11 @@ services:
       service: baseline
     image: ghcr.io/calibrain/shelfmark:v1.4.0@sha256:4ef757349c3c7a7d90ba95b1e2a46ce4dd460a4776efbcf2aa1b1c476e7d5de5
     container_name: shelfmark
-    # Starts as root, then drops to the PUID/UID user: chown, switch user, signal its child.
-    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID, KILL]
+    # Started as the data's owner, the entrypoint takes its non-root path (no chown, no gosu), so
+    # no caps. That path needs a writable TMP_DIR and no entrypoint log under /var/log.
+    user: ${BOOKS_UID}:${MEDIA_SHARED_GID}
+    tmpfs:
+      - /tmp/shelfmark:uid=${BOOKS_UID},gid=${MEDIA_SHARED_GID},mode=0700
     healthcheck:
       test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8084/api/health"]
       interval: 30s
@@ -23,8 +26,7 @@ services:
           # 30-day peak 796M
           memory: 1200M
     environment:
-      - UID=${BOOKS_UID}
-      - GID=${MEDIA_SHARED_GID}
+      - ENABLE_LOGGING=false
       - TZ=${TZ}
       - AA_DONATOR_KEY=${AA_DONATOR_KEY}
     labels:
