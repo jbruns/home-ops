@@ -10,6 +10,11 @@ services:
       - no-new-privileges=true
     cap_drop:
       - ALL
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 83M working set; generous, since an OOM-killed deployer stops every Deploy
+          memory: 256M
     environment:
       TZ: ${TZ}
       SELF_UPDATE_ENABLED: "true"
@@ -58,11 +63,20 @@ services:
   # Relays doco-cd deploy notifications to Discord. doco-cd does not depend on it:
   # a failed notification never blocks a Deploy.
   apprise:
-    image: caronc/apprise:2.0.1
+    image: caronc/apprise:2.0.1@sha256:0b2913b15c8eb47c25345722985ffbfae701326edde21909c205d296d62dd52c
     restart: unless-stopped
     dns_search: .
+    # The image's apprise user; its startup script skips useradd/chown when not root, so no caps.
+    user: "1000:100"
     security_opt:
       - no-new-privileges=true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          # 30-day peak 233M working set
+          memory: 384M
     environment:
       TZ: ${TZ}
       APPRISE_WORKER_COUNT: 1
