@@ -1,0 +1,31 @@
+# The Baseline (GLOSSARY.md, ADR 0007): settings every Service carries. A Service pulls them in with
+#
+#   extends:
+#     file: ../_baseline.yaml   # relative to the file that declares the Service
+#     service: baseline
+#
+# Changing this file recreates every Service that extends it, in one Deploy that ignores Startup
+# Order, so a change here ships in its own PR (validate.py isolation). doco-cd does not extend it.
+#
+# What a Service adds itself, checked by validate.py compose on the rendered model:
+#   healthcheck              declared here in Compose, even when the image has one
+#   image                    pinned by digest (tag@sha256:...)
+#   memory limit             deploy.resources.limits.memory, ~1.5x the 30-day peak
+#   cap_add                  only what the image needs after cap_drop: [ALL]
+# A Service that cannot meet an item records an Exemption as a label:
+#   baseline.exempt.<item>: "<reason>"   items: healthcheck, no-new-privileges, digest, memory, cap_drop
+# and removes the inherited setting with `!reset` where needed (e.g. `cap_drop: !reset []`).
+services:
+  baseline:
+    restart: unless-stopped
+    dns_search: .
+    security_opt:
+      - no-new-privileges=true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+        tag: "{{.Name}}"
