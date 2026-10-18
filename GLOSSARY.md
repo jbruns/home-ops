@@ -46,7 +46,7 @@ One kind of organized media that Media Servers present (e.g. TV, Movies, Music, 
 _Avoid_: Collection, share, media folder
 
 **Requester**:
-A Service that decides what media to fetch and hands it to a Downloader, but never holds files itself (AudioBookRequest from users' requests, autobrr from announce filters).
+A Service that decides what media to fetch and hands it to a Downloader, but never holds files itself (Shelfmark from users' requests, autobrr from announce filters).
 _Avoid_: Indexer, grabber
 
 **Downloader**:
@@ -54,8 +54,12 @@ A Service that fetches media and is responsible for each file until an Organizer
 _Avoid_: Download client (when meaning the role), grabber
 
 **Organizer**:
-A Service that takes over a Downloader's finished file, moving it (or copying it while seeding must continue) into its own Library, and is responsible for it from then on (Sonarr for TV, Radarr for Movies). It cannot change any other Library.
+A Service that takes over a Downloader's finished file, moving it (or copying it while seeding must continue) into its own Library, and is responsible for it from then on (Sonarr for TV, Radarr for Movies, Shelfmark for Audiobooks, Calibre-Web-Automated for Books). It cannot change any other Library.
 _Avoid_: arr, *arr, manager
+
+**Ingest Folder**:
+A folder an Organizer takes files from that another Service, not a Downloader, fills (Calibre-Web-Automated's, which Shelfmark hands Books to). It is outside the Library.
+_Avoid_: Drop folder, watch folder, import folder
 
 **Media Server**:
 A Service that presents Libraries to users and only reads those it does not organize (Plex, Emby, Navidrome, Audiobookshelf).

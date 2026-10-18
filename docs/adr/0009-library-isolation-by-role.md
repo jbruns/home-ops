@@ -4,6 +4,8 @@ The goal is to limit what a fully compromised Service can destroy: SABnzbd must 
 
 Each Library gets its own tree, `/media/<library>/{library,usenet,torrents}`, and its one Organizer mounts that whole tree as a single bind mount. Docker bind mounts are separate mount points, so a rename between two of them fails with `EXDEV`; the Organizer would fall back to copy-then-delete, and hardlinks for seeding would break. Downloaders mount only their download folders. Media Servers mount Libraries read-only, except a recordings Library they organize themselves. A Service holding several Roles gets the union of what those Roles need, and nothing more.
 
+Shelfmark is the Requester and Organizer for Audiobooks: it takes over its own finished downloads and places them in the Audiobooks Library, one folder per book. It cannot adopt downloads it did not start, so it is the only Requester for Audiobooks (AudioBookRequest and its copy scripts are retired). Books is a two-Service chain: Shelfmark takes over the Downloader's file and hands it to Calibre-Web-Automated's Ingest Folder, and Calibre-Web-Automated, as the Books Organizer, moves it into the Books Library. CWA consumes the Ingest Folder, so Shelfmark never hardlinks into it, and Shelfmark never mounts the Books Library.
+
 ## Considered Options
 
 - **One `/media` mount for every Organizer** (the TRaSH Guides layout): rejected; it gives every Organizer write access to every Library.
