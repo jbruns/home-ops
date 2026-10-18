@@ -75,12 +75,12 @@ def stat(title, expr, w=4, h=4, unit=None, mappings=None, steps=None, desc=None,
     d = {}
     if mappings:
         d["mappings"] = mappings
-    if steps:
-        d["thresholds"] = {"mode": "absolute", "steps": steps}
     if decimals is not None:
         d["decimals"] = decimals
+    # Without steps, Grafana's default thresholds paint any value of 80 or more red.
+    d["thresholds"] = {"mode": "absolute", "steps": steps or [{"color": "text", "value": None}]}
     return panel("stat", title, [target(expr, instant=True, ds=ds)], w, h, unit, desc, ds=ds, defaults=d,
-                 options={"colorMode": "background", "graphMode": "none", "textMode": "value",
+                 options={"colorMode": "background" if steps or mappings else "none", "graphMode": "none", "textMode": "value",
                           "reduceOptions": {"calcs": ["lastNotNull"]}})
 
 
@@ -160,8 +160,8 @@ def layout(items):
     return items
 
 
-def query_var(name, label, query, multi=False, include_all=False, hide=0, regex=""):
-    return {"type": "query", "name": name, "label": label, "datasource": PROM,
+def query_var(name, label, query, multi=False, include_all=False, hide=0, regex="", ds=PROM):
+    return {"type": "query", "name": name, "label": label, "datasource": ds,
             "query": {"qryType": 1, "query": query, "refId": "PrometheusVariableQueryEditor-VariableQuery"},
             "definition": query, "refresh": 2, "sort": 1, "multi": multi, "includeAll": include_all,
             "hide": hide, "regex": regex, "current": {}, "options": []}
@@ -383,11 +383,17 @@ def service():
 # ---------------------------------------------------------------------------- Machine
 
 def machine():
-    n = 'job="node-exporter"'
+    n = 'job="$node"'
     disks = 'device=~"sd[a-z]+|nvme[0-9]+n[0-9]+|vd[a-z]+"'
-    # cAdvisor's root cgroup sees the machine's interfaces; node-exporter only sees its own netns.
-    nics = 'job="cadvisor", id="/", interface!~"lo|veth.*|br-.*|docker.*|vnet.*|tap.*"'
+    virtual = "lo|veth.*|br-.*|docker.*|vnet.*|tap.*|hassio"
+    # cAdvisor's root cgroup sees the machine's interfaces; our node-exporters only see their own
+    # netns. cAdvisor and DCGM run beside job node-exporter only, so `docker` hides them for any
+    # other node (Home Assistant), whose node-exporter shares the host netns.
+    nics = f'job="cadvisor", id="/", interface!~"{virtual}"'
+    docker = ' and on () group(node_uname_info{job="$node", job="node-exporter"})'
+    host_nics = f'job="$node", job!="node-exporter", device!~"{virtual}"'
     rate = "$__rate_interval"
+    mounts = "/|/mnt/[^/.][^/]*|/tmp"  # Home Assistant's node-exporter add-on sees its data partition as /tmp
     cores = f'scalar(count(node_cpu_seconds_total{{{n}, mode="idle"}}))'
     busy = [{"color": "green", "value": None}, {"color": "orange", "value": 0.8}, {"color": "red", "value": 0.95}]
 
@@ -407,7 +413,7 @@ def machine():
         stat("Memory used", f"1 - node_memory_MemAvailable_bytes{{{n}}} / node_memory_MemTotal_bytes{{{n}}}",
              unit="percentunit", steps=busy, ds=MACHINE,
              desc="ZFS ARC counts as used here; it shrinks under memory pressure (see Memory)."),
-        stat("Containers", 'count(count by (name) (container_last_seen{job="cadvisor", name!=""}))', ds=MACHINE),
+        stat("Containers", 'count(count by (name) (container_last_seen{job="cadvisor", name!=""}))' + docker, ds=MACHINE),
 
         row("CPU and memory"),
         ts("CPU by mode", [t(f'sum by (mode) (rate(node_cpu_seconds_total{{{n}, mode!="idle"}}[{rate}])) / {cores}',
@@ -427,15 +433,15 @@ def machine():
 
         row("Storage"),
         table("Filesystems", [
-            t(f'max by (mountpoint) (node_filesystem_size_bytes{{{n}, fstype=~"zfs|xfs|ext4|btrfs", mountpoint=~"/|/mnt/[^/.][^/]*"}})',
+            t(f'max by (mountpoint) (node_filesystem_size_bytes{{{n}, fstype=~"zfs|xfs|ext4|btrfs", mountpoint=~"{mounts}"}})',
               ref="A", instant=True, table=True),
-            t(f'max by (mountpoint) (node_filesystem_avail_bytes{{{n}, fstype=~"zfs|xfs|ext4|btrfs", mountpoint=~"/|/mnt/[^/.][^/]*"}})',
+            t(f'max by (mountpoint) (node_filesystem_avail_bytes{{{n}, fstype=~"zfs|xfs|ext4|btrfs", mountpoint=~"{mounts}"}})',
               ref="B", instant=True, table=True),
-            t(f'1 - max by (mountpoint) (node_filesystem_avail_bytes{{{n}, mountpoint=~"/|/mnt/[^/.][^/]*"}})'
-              f' / max by (mountpoint) (node_filesystem_size_bytes{{{n}, mountpoint=~"/|/mnt/[^/.][^/]*"}})',
+            t(f'1 - max by (mountpoint) (node_filesystem_avail_bytes{{{n}, mountpoint=~"{mounts}"}})'
+              f' / max by (mountpoint) (node_filesystem_size_bytes{{{n}, mountpoint=~"{mounts}"}})',
               ref="C", instant=True, table=True),
         ], {"Value #A": "Size", "Value #B": "Free", "Value #C": "Used"}, join="mountpoint", ds=MACHINE,
-            desc="The root filesystem and each pool's top-level dataset.",
+            desc="The root filesystem and each pool's top-level dataset (Home Assistant: its data partition).",
             overrides=[column_override("Size", unit="bytes"), column_override("Free", unit="bytes"),
                        column_override("Used", unit="percentunit", min=0, max=1,
                                        thresholds={"mode": "absolute", "steps": busy},
@@ -454,35 +460,40 @@ def machine():
 
         row("Network"),
         ts("Traffic by interface", [
-            t(f"sum by (interface) (rate(container_network_receive_bytes_total{{{nics}}}[{rate}]))", "{{interface}} in", "A"),
-            t(f"-sum by (interface) (rate(container_network_transmit_bytes_total{{{nics}}}[{rate}]))", "{{interface}} out", "B"),
-        ], unit="Bps", desc="From cAdvisor's root cgroup. A bridge and its NIC carry the same traffic."),
+            t(f"sum by (interface) (rate(container_network_receive_bytes_total{{{nics}}}[{rate}])){docker}", "{{interface}} in", "A"),
+            t(f"-sum by (interface) (rate(container_network_transmit_bytes_total{{{nics}}}[{rate}])){docker}", "{{interface}} out", "B"),
+            t(f"rate(node_network_receive_bytes_total{{{host_nics}}}[{rate}])", "{{device}} in", "C"),
+            t(f"-rate(node_network_transmit_bytes_total{{{host_nics}}}[{rate}])", "{{device}} out", "D"),
+        ], unit="Bps", desc="From cAdvisor's root cgroup (node-exporter for Home Assistant). A bridge and its NIC carry the same traffic."),
         ts("Errors and drops", [
-            t(f"sum by (interface) (rate(container_network_{d}_{k}_total{{{nics}}}[{rate}]))", f"{{{{interface}}}} {d} {k}", ref)
-            for (d, k), ref in zip([(d, k) for d in ("receive", "transmit") for k in ("errors", "packets_dropped")], "ABCD")],
+            t(f"sum by (interface) (rate(container_network_{d}_{k}_total{{{nics}}}[{rate}])){docker}", f"{{{{interface}}}} {d} {k}", ref)
+            for (d, k), ref in zip([(d, k) for d in ("receive", "transmit") for k in ("errors", "packets_dropped")], "ABCD")]
+           + [t(f"rate(node_network_{d}_{k}_total{{{host_nics}}}[{rate}])", f"{{{{device}}}} {d} {k}", ref)
+              for (d, k), ref in zip([(d, k) for d in ("receive", "transmit") for k in ("errs", "drop")], "EFGH")],
            unit="pps"),
 
         row("GPU"),
-        ts("GPU utilisation", [t(f"DCGM_FI_DEV_{m}_UTIL", f"{m.lower()} {{{{gpu}}}}", ref)
+        ts("GPU utilisation", [t(f"max by (gpu) (DCGM_FI_DEV_{m}_UTIL){docker}", f"{m.lower()} {{{{gpu}}}}", ref)
                                for m, ref in (("GPU", "A"), ("ENC", "B"), ("DEC", "C"))],
            w=8, unit="percent", desc="NVIDIA DCGM; empty on machines without a GPU. enc/dec are Plex transcodes."),
-        ts("GPU memory", [t("DCGM_FI_DEV_FB_USED", "used {{gpu}}", "A"),
-                          t("DCGM_FI_DEV_FB_USED + DCGM_FI_DEV_FB_FREE", "total {{gpu}}", "B")],
+        ts("GPU memory", [t("max by (gpu) (DCGM_FI_DEV_FB_USED)" + docker, "used {{gpu}}", "A"),
+                          t("max by (gpu) (DCGM_FI_DEV_FB_USED + DCGM_FI_DEV_FB_FREE)" + docker, "total {{gpu}}", "B")],
            w=8, unit="decmbytes"),
-        ts("GPU temperature and power", [t("DCGM_FI_DEV_GPU_TEMP", "°C {{gpu}}", "A"),
-                                         t("DCGM_FI_DEV_POWER_USAGE", "W {{gpu}}", "B")], w=8),
+        ts("GPU temperature and power", [t("max by (gpu) (DCGM_FI_DEV_GPU_TEMP)" + docker, "°C {{gpu}}", "A"),
+                                         t("max by (gpu) (DCGM_FI_DEV_POWER_USAGE)" + docker, "W {{gpu}}", "B")], w=8),
 
         row("Temperatures"),
         ts("Sensors (max per chip)", [t(f"max by (chip) (node_hwmon_temp_celsius{{{n}}})", "{{chip}}")],
            w=24, unit="celsius"),
 
         row("Containers"),
-        ts("Top 10 by CPU", [t(f'topk(10, sum by (name) (rate(container_cpu_usage_seconds_total{{job="cadvisor", name!=""}}[{rate}])))',
+        ts("Top 10 by CPU", [t(f'topk(10, sum by (name) (rate(container_cpu_usage_seconds_total{{job="cadvisor", name!=""}}[{rate}]))){docker}',
                                "{{name}}")], unit="short", desc="CPU cores in use."),
-        ts("Top 10 by memory", [t('topk(10, sum by (name) (container_memory_working_set_bytes{job="cadvisor", name!=""}))',
+        ts("Top 10 by memory", [t('topk(10, sum by (name) (container_memory_working_set_bytes{job="cadvisor", name!=""}))' + docker,
                                   "{{name}}")], unit="bytes"),
     ]
-    variables = [datasource_var("ds", "Machine", r"/^Prometheus( \(.+\))?$/")]
+    variables = [datasource_var("ds", "Prometheus", r"/^Prometheus( \(.+\))?$/"),
+                 query_var("node", "Machine", "label_values(node_uname_info, job)", ds=MACHINE)]
     return dashboard("machine", "Machine", panels, variables, links=DASH_LINKS, time="now-24h",
                      desc="One machine's CPU, memory, storage, network, GPU and busiest containers.")
 
@@ -571,7 +582,148 @@ def dependencies():
                      desc="Internal and External Dependencies: the map, Dependency Probes, Usenet providers and indexers.")
 
 
-DASHBOARDS = {"overview": overview, "service": service, "machine": machine, "dependencies": dependencies}
+# ---------------------------------------------------------------------------- Stacks
+
+def service_links(*containers):
+    return DASH_LINKS + [{"type": "link", "title": f"Service: {c}", "icon": "dashboard", "keepTime": True,
+                          "url": f"/d/service/service?var-container={c}"} for c in containers]
+
+
+def uptime_stat(container, w=4):
+    return stat(f"{container}", f'max(service:uptime:ok{{container="{container}"}})', w=w,
+                mappings=UP_MAPPING, steps=UP_STEPS, desc=f"{container}'s Uptime now.")
+
+
+def count_steps(color):
+    return [{"color": "green", "value": None}, {"color": color, "value": 1}]
+
+
+def plex():
+    # prometheus-plex-exporter swaps library/library_id/library_type on play_seconds_total;
+    # media_type is reliable.
+    playing = "rate(play_seconds_total[2m]) > 0"
+    rate = "$__rate_interval"
+    session_labels = ("user", "device", "media_type", "title", "grandchild_title", "stream_type",
+                      "stream_resolution", "stream_file_resolution", "stream_bitrate")
+    panels = [
+        row("Now"),
+        uptime_stat("plex"),
+        stat("Streams", f"count({playing}) or vector(0)", desc="Sessions playing (paused sessions drop out)."),
+        stat("Transcodes", f'count(({playing}) and on (session) play_seconds_total{{stream_type="transcode"}}) or vector(0)',
+             steps=[{"color": "green", "value": None}, {"color": "orange", "value": 3}]),
+        stat("Bandwidth out", "sum(rate(estimated_transmit_bytes_total[5m]))", unit="Bps",
+             desc="Plex's own estimate of bytes sent to clients."),
+        stat("Plex CPU", "max(host_cpu_util)", unit="percent", desc="Plex's view of its machine's CPU."),
+        stat("Plex memory", "max(host_mem_util)", unit="percent", desc="Plex's view of its machine's memory."),
+
+        row("Sessions"),
+        table("Playing now", [target(f"max by (session, {', '.join(session_labels)}) ({playing})",
+                                     instant=True, table=True)],
+              {"Value": "rate"}, w=24, h=7, join="session",
+              overrides=[column_override("rate", **{"custom.hidden": True}),
+                         column_override("session", **{"custom.hidden": True}),
+                         column_override("grandchild_title", displayName="episode"),
+                         column_override("stream_bitrate", unit="Kbits")]),
+        timeseries("Streams by type", [target(f"count by (stream_type) (rate(play_seconds_total[{rate}]) > 0)",
+                                              "{{stream_type}}")], stack=True),
+        timeseries("Bandwidth out", [target(f"sum(rate(estimated_transmit_bytes_total[{rate}]))", "sent")], unit="Bps"),
+        timeseries("GPU encode/decode", [target(f"max(DCGM_FI_DEV_{m}_UTIL)", m.lower(), ref)
+                                         for m, ref in (("ENC", "A"), ("DEC", "B"))],
+                   unit="percent", desc="NVIDIA DCGM: hardware transcodes."),
+        timeseries("Plex container", [
+            target(f'sum(rate(container_cpu_usage_seconds_total{{job="cadvisor", name="plex"}}[{rate}]))', "CPU cores", "A"),
+            target('sum(container_memory_working_set_bytes{job="cadvisor", name="plex"})', "memory", "B")],
+            overrides=[{"matcher": {"id": "byName", "options": "memory"},
+                        "properties": [{"id": "unit", "value": "bytes"},
+                                       {"id": "custom.axisPlacement", "value": "right"}]}]),
+
+        row("Watching"),
+        table("Play time by user", [target(f"sum by (user) (increase(play_seconds_total[$__range]))",
+                                           instant=True, table=True)],
+              {"Value": "Played"}, w=6, join="user",
+              overrides=[column_override("Played", unit="dtdurations")], desc="Over the dashboard's time range."),
+        table("Play time by device", [target(f"sum by (device) (increase(play_seconds_total[$__range]))",
+                                             instant=True, table=True)],
+              {"Value": "Played"}, w=6, join="device", overrides=[column_override("Played", unit="dtdurations")]),
+        table("Libraries", [
+            target("max by (library) (library_storage_total)", ref="A", instant=True, table=True),
+            target("max by (library) (library_duration_total)", ref="B", instant=True, table=True),
+        ], {"Value #A": "Size", "Value #B": "Runtime"}, w=12, join="library",
+            overrides=[column_override("Size", unit="bytes"), column_override("Runtime", unit="dtdurationms")]),
+    ]
+    return dashboard("plex", "Plex", panels, links=service_links("plex"), time="now-24h",
+                     desc="Plex sessions, transcodes, bandwidth and libraries (prometheus-plex-exporter).")
+
+
+def arr():
+    rate = "$__rate_interval"
+    apps = (("sonarr", "A"), ("radarr", "B"))
+
+    def per_app(fmt, legend="{{app}}"):
+        return [target(fmt.format(app=a), legend.replace("{{app}}", a), ref) for a, ref in apps]
+
+    health = " or ".join(f'label_replace({a}_system_health_issues > 0, "app", "{a}", "", "")' for a, _ in apps)
+    panels = [
+        row("Status"),
+        uptime_stat("sonarr", w=3), uptime_stat("radarr", w=3), uptime_stat("sabnzbd", w=3),
+        stat("Health issues", "sum(sonarr_system_health_issues) + sum(radarr_system_health_issues)", w=3,
+             steps=count_steps("orange"), desc="Issues on Sonarr and Radarr's System > Status page."),
+        stat("Stuck in queue", "count(arr_queue_item_stuck) or vector(0)", w=3, steps=count_steps("red"),
+             desc="Queue items waiting on an import, or flagged warning/error (arr-queue-exporter)."),
+        stat("sabnzbd queue", "max(sabnzbd_queue_length)", w=3),
+        stat("Download speed", "max(sabnzbd_speed_bps)", w=3, unit="Bps"),
+        stat("sabnzbd", "max(sabnzbd_paused)", w=3, steps=count_steps("orange"),
+             mappings=[{"type": "value", "options": {"0": {"text": "RUNNING", "index": 0},
+                                                     "1": {"text": "PAUSED", "index": 1}}}]),
+        table("Health issues", [target(f"max by (app, type, source, message) ({health})", instant=True, table=True)],
+              {"Value": "n"}, w=12, h=6, join="message", overrides=[column_override("n", **{"custom.hidden": True})]),
+        table("Stuck queue items", [target("max by (app, title, state, status, message) (arr_queue_item_info)",
+                                           instant=True, table=True)],
+              {"Value": "n"}, w=12, h=6, join="title", overrides=[column_override("n", **{"custom.hidden": True})]),
+
+        row("Library"),
+        stat("Series", "max(sonarr_series_total)", w=3),
+        stat("Episodes", "max(sonarr_episode_downloaded_total)", w=3, desc="Downloaded episodes."),
+        stat("Episodes missing", "max(sonarr_episode_missing_total)", w=3),
+        stat("Episodes below cutoff", "max(sonarr_episode_cutoff_unmet_total)", w=3),
+        stat("Movies", "max(radarr_movie_downloaded_total)", w=3, desc="Downloaded movies."),
+        stat("Movies missing", "max(radarr_movie_missing_total)", w=3),
+        stat("Movies wanted", "max(radarr_movie_wanted_total)", w=3),
+        stat("Movies below cutoff", "max(radarr_movie_cutoff_unmet_total)", w=3),
+        timeseries("Missing", [target("max(sonarr_episode_missing_total)", "episodes", "A"),
+                               target("max(radarr_movie_missing_total)", "movies", "B")], w=8),
+        timeseries("Activity", per_app("max(increase({app}_history_total[1h]))"), w=8,
+                   desc="History entries per hour (grabs, imports, deletes)."),
+        timeseries("Root folder free space", per_app("min by (path) ({app}_rootfolder_freespace_bytes)",
+                                                      "{{app}} {{path}}"), w=8, unit="bytes"),
+
+        row("Queue"),
+        timeseries("Queue by state", [target("sum by (app, state) (arr_queue_items)", "{{app}} {{state}}")],
+                   stack=True, desc="Sonarr and Radarr queue items by tracked download state."),
+        timeseries("Stuck items", [target("count by (app) (arr_queue_item_stuck)", "{{app}}")]),
+
+        row("sabnzbd"),
+        timeseries("Download speed", [target("max(sabnzbd_speed_bps)", "speed")], unit="Bps"),
+        timeseries("Downloaded by provider", [target(f"sum by (server) (rate(sabnzbd_server_downloaded_bytes[{rate}]))",
+                                                     "{{server}}")], unit="Bps", stack=True,
+                   desc="Provider health is on the Dependency map."),
+        timeseries("Queue", [target("max(sabnzbd_remaining_bytes)", "remaining", "A"),
+                             target("max(sabnzbd_queue_length)", "items", "B")],
+                   overrides=[{"matcher": {"id": "byName", "options": "remaining"},
+                               "properties": [{"id": "unit", "value": "bytes"}]},
+                              {"matcher": {"id": "byName", "options": "items"},
+                               "properties": [{"id": "custom.axisPlacement", "value": "right"}]}]),
+        timeseries("Download folders free", [
+            target("max by (folder) (sabnzbd_disk_total_bytes - sabnzbd_disk_used_bytes)", "{{folder}}")], unit="bytes"),
+    ]
+    links = service_links("sonarr", "radarr", "sabnzbd") + [
+        {"type": "link", "title": "Dependency map", "icon": "dashboard", "keepTime": True, "url": "/d/dependencies"}]
+    return dashboard("arr", "arr", panels, links=links, time="now-24h",
+                     desc="Sonarr, Radarr and sabnzbd: health, library, queue and downloads (exportarr, arr-queue-exporter).")
+
+
+DASHBOARDS = {"overview": overview, "service": service, "machine": machine, "dependencies": dependencies,
+              "plex": plex, "arr": arr}
 
 
 def render():
