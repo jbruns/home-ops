@@ -1,6 +1,6 @@
 # DEPENDENCIES (GLOSSARY.md): one Dependency Probe per edge, dependent -> Dependency.
 # A template: dependencies-render fills in each placeholder from its environment (prometheus/
-# docker-compose.yaml passes them from .sops.env) and writes the file Prometheus reads as file_sd
+# service.yaml passes them from .sops.env) and writes the file Prometheus reads as file_sd
 # (job `dependency` in prometheus.yml). probe_success{from,to} draws the Dependency map, and
 # DependencyDown alerts once per `to`. A new placeholder must also be added to that environment
 # (validate.py checks); write a literal dollar sign as two.

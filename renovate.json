@@ -94,12 +94,19 @@
       "automerge": true
     }
   ],
+  "docker-compose": {
+    "description": "Also each Service's tn/<stack>/<service>/service.yaml; the defaults stay",
+    "managerFilePatterns": [
+      "/^tn/[^/]+/[^/]+/service\\.yaml$/"
+    ]
+  },
   "customManagers": [
     {
       "customType": "regex",
       "description": "Use GitHub Releases for emby/embyserver to filter out beta versions",
       "managerFilePatterns": [
-        "/(^|/)(docker-)?compose\\.ya?ml$/"
+        "/(^|/)(docker-)?compose\\.ya?ml$/",
+        "/^tn/[^/]+/[^/]+/service\\.yaml$/"
       ],
       "matchStrings": [
         "image:\\s*emby/embyserver:(?<currentValue>[\\d.]+)"
@@ -113,7 +120,8 @@
       "customType": "regex",
       "description": "Use custom datasource for portainer-ee to only track LTS releases",
       "managerFilePatterns": [
-        "/(^|/)(docker-)?compose\\.ya?ml$/"
+        "/(^|/)(docker-)?compose\\.ya?ml$/",
+        "/^tn/[^/]+/[^/]+/service\\.yaml$/"
       ],
       "matchStrings": [
         "image:\\s*portainer/portainer-ee:(?<currentValue>[\\d.]+)"

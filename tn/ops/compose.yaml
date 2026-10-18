@@ -13,5 +13,5 @@ networks:
     external: true
 
 include:
-  - ./portainer/docker-compose.yaml
-  - ./stack-back/docker-compose.yaml
+  - ./portainer/service.yaml
+  - ./stack-back/service.yaml

@@ -4,7 +4,9 @@
 Subcommands:
   secrets     every sensitive file referenced by Compose is tracked only in SOPS-encrypted form
               (doco-cd Stacks, entry file compose.yaml, reference the *.sops.* files directly),
-              and no plaintext twin (x.yml beside x.sops.yml) is tracked
+              and no plaintext twin (x.yml beside x.sops.yml) is tracked; every file a Stack includes is
+              tn/<stack>/<service>/service.yaml and some Stack includes it, and .doco-cd.yml keeps
+              auto_discovery.depth 1
   env         every ${VAR} a Stack uses exists in its env.template and its encrypted .sops.env
   compose     `docker compose config` succeeds for every Stack and templates/* with placeholder values;
               every Service has a startup-order label, json-file logging and restart: unless-stopped,
@@ -63,6 +65,9 @@ def tracked_files() -> set[Path]:
 
 # doco-cd auto-discovers a Stack only by tn/<stack>/compose.yaml (see .doco-cd.yml).
 ENTRY_NAME = "compose.yaml"
+# Each file a Stack's entry file includes: tn/<stack>/<service>/service.yaml, one Service plus its sidecars.
+INCLUDED_NAME = "service.yaml"
+DOCO_CD_CONFIG = ROOT / ".doco-cd.yml"
 
 
 def stacks(base: Path = ROOT) -> list[Path]:
@@ -133,12 +138,37 @@ def check_secrets() -> None:
                 fail(f"plaintext twin of a SOPS file is tracked: {_rel(twin)}", f)
         elif f.name == ".env" or f.suffix == ".env":
             fail("plaintext .env file is tracked; encrypt it as *.sops.env", f)
-    for f in sorted(tracked):
-        if f.parent.parent == ROOT / "tn" and f.name == "docker-compose.yaml" and not (f.parent / ENTRY_NAME).exists():
-            fail(f"doco-cd never discovers this; a Stack's entry file must be {ENTRY_NAME}", f)
+    check_layout(tracked)
     for stack in stacks():
         check_stack_secrets(stack, tracked)
     print("secrets ok" if not failures else "secrets: problems found")
+
+
+def check_layout(tracked: set[Path]) -> None:
+    """A Stack is tn/<stack>/compose.yaml; each file it includes is <service>/service.yaml."""
+    included: set[Path] = set()
+    for stack in stacks():
+        for f in compose_files(entry(stack))[1:]:
+            included.add(f)
+            if f.name != INCLUDED_NAME or f.parent.parent != stack:
+                fail(f"{stack.name}: included file {_rel(f)} must be {_rel(stack)}/<service>/{INCLUDED_NAME}", entry(stack))
+    for f in sorted(tracked):
+        if not f.is_relative_to(HOST_DIR):
+            continue
+        if re.fullmatch(r"docker-compose\.ya?ml", f.name):
+            fail(f"rename to {INCLUDED_NAME} (one Service per file) or {ENTRY_NAME} (a Stack's entry file)", f)
+        elif f.name == INCLUDED_NAME and f.parent.parent == HOST_DIR:
+            fail(f"doco-cd never discovers this; a Stack's entry file must be {ENTRY_NAME}", f)
+        elif f.name == INCLUDED_NAME and f not in included:
+            fail(f"no Stack's include: lists this {INCLUDED_NAME}, so it is never deployed", f)
+    # doco-cd scans working_dir (tn/) at depth 0 and Stack folders at depth 1, never deeper while
+    # depth is 1 (kimdre/doco-cd internal/config/deploy/auto_discovery.go). Its compose_files only
+    # match compose.yaml, so service.yaml files are not discovered at any depth; this is defence in
+    # depth: with depth 0 (unlimited) a stray compose.yaml in a Service folder would become its own
+    # Stack, and delete: true would remove Stacks that later disappear.
+    depth = ((yaml.safe_load(DOCO_CD_CONFIG.read_text()) or {}).get("auto_discovery") or {}).get("depth")
+    if depth != 1:
+        fail(f"auto_discovery.depth must stay 1 (found {depth!r}): deeper discovery would deploy a compose.yaml below a Stack folder as a Stack of its own", DOCO_CD_CONFIG)
 
 
 def check_stack_secrets(stack: Path, tracked: set[Path]) -> None:
@@ -181,7 +211,7 @@ def check_dependencies_env() -> None:
     """dependencies-render fails on any placeholder in dependencies.yml its environment lacks."""
     prom = HOST_DIR / "monitoring/prometheus"
     template = prom / "dependencies.yml"
-    svc = yaml.safe_load((prom / "docker-compose.yaml").read_text())["services"]["dependencies-render"]
+    svc = yaml.safe_load((prom / INCLUDED_NAME).read_text())["services"]["dependencies-render"]
     passed = {e.split("=", 1)[0] for e in svc.get("environment") or []}
     if missing := sorted(set(VAR_RE.findall(template.read_text())) - passed):
         fail(f"dependencies.yml placeholders not passed to dependencies-render: {', '.join(missing)}", template)
@@ -391,7 +421,7 @@ def docker_run(image: str, mounts: dict[Path, str], entrypoint: str, *args: str)
 def check_monitoring() -> None:
     mon = HOST_DIR / "monitoring"
     prom = mon / "prometheus"
-    prom_image = deployed_image(prom / "docker-compose.yaml", "prometheus")
+    prom_image = deployed_image(prom / INCLUDED_NAME, "prometheus")
     rule_files = sorted(prom.glob("*rules*.yml"))
     prom_mounts = {f: f"/etc/prometheus/{f.name}" for f in [prom / "prometheus.yml", *rule_files]}
     docker_run(prom_image, prom_mounts, "promtool", "check", "config", "--syntax-only", "/etc/prometheus/prometheus.yml")
@@ -399,17 +429,17 @@ def check_monitoring() -> None:
 
     am = mon / "alertmanager"
     if (am / "config.yml") in tracked_files():
-        am_image = deployed_image(am / "docker-compose.yaml", "alertmanager")
+        am_image = deployed_image(am / INCLUDED_NAME, "alertmanager")
         docker_run(am_image, {am / "config.yml": "/etc/alertmanager/config.yml"}, "amtool", "check-config", "/etc/alertmanager/config.yml")
     else:
         warn("alertmanager config is encrypted-only; amtool check skipped until it is split from its secrets")
 
     loki = mon / "loki"
-    loki_image = deployed_image(loki / "docker-compose.yaml", "loki")
+    loki_image = deployed_image(loki / INCLUDED_NAME, "loki")
     docker_run(loki_image, {loki / "loki.yaml": "/etc/loki/loki.yaml"}, "/usr/bin/loki", "-config.file=/etc/loki/loki.yaml", "-verify-config")
 
     alloy = mon / "alloy"
-    alloy_image = deployed_image(alloy / "docker-compose.yaml", "alloy")
+    alloy_image = deployed_image(alloy / INCLUDED_NAME, "alloy")
     docker_run(alloy_image, {alloy / "config.alloy": "/etc/alloy/config.alloy"}, "/bin/alloy", "validate", "/etc/alloy/config.alloy")
 
     generator = mon / "grafana" / "dashboards.py"

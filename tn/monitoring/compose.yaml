@@ -16,15 +16,16 @@ networks:
     external: true
 
 include:
-  - ./alertmanager/docker-compose.yaml
-  - ./alloy/docker-compose.yaml
-  - ./blackbox-exporter/docker-compose.yaml
-  - ./cadvisor/docker-compose.yaml
-  - ./container-health-exporter/docker-compose.yaml
-  - ./dcgm-exporter/docker-compose.yaml
-  - ./docker-socket-proxy/docker-compose.yaml
-  - ./grafana/docker-compose.yaml
-  - ./loki/docker-compose.yaml
-  - ./node-exporter/docker-compose.yaml
-  - ./prometheus/docker-compose.yaml
-  - ./restic-exporter/docker-compose.yaml
+  - ./alertmanager/service.yaml
+  - ./alloy/service.yaml
+  - ./backup-coverage/service.yaml
+  - ./blackbox-exporter/service.yaml
+  - ./cadvisor/service.yaml
+  - ./container-health-exporter/service.yaml
+  - ./dcgm-exporter/service.yaml
+  - ./docker-socket-proxy/service.yaml
+  - ./grafana/service.yaml
+  - ./loki/service.yaml
+  - ./node-exporter/service.yaml
+  - ./prometheus/service.yaml
+  - ./restic-exporter/service.yaml
