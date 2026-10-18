@@ -13,8 +13,9 @@ services:
     deploy:
       resources:
         limits:
-          # 30-day peak 38M working set; backups run in separate runner containers
-          memory: 64M
+          # 30-day peak 38M is rcb alone (backups run in a separate, unlimited runner container), but
+          # manual rcb status/snapshots run restic here too; 64M OOM-killed it.
+          memory: 512M
     healthcheck:
       test: ["CMD", "pgrep", "crond"]
       interval: 30s
