@@ -19,6 +19,18 @@ _Avoid_: App, container
 **Exposed Service**:
 A Service reachable by users through the reverse proxy.
 
+**Protected Service**:
+An Exposed Service whose web UI users sign in at the IdP, either through the reverse proxy or through the Service's own IdP support. Required clients that cannot sign in there reach it through a Client Path.
+_Avoid_: Authentik-protected, SSO app, behind Authentik
+
+**Client Path**:
+A route into a Protected Service that skips the IdP so a required non-browser client (e.g. an OPDS reader or Tinfoil) keeps working; the Service's own sign-in still applies.
+_Avoid_: Bypass, hole, auth exception
+
+**IdP**:
+The identity provider where users of a Protected Service sign in. It is an External Dependency of every Protected Service.
+_Avoid_: Authentik (the product, not the role), SSO
+
 **Datastore**:
 A Service whose only job is to hold state for the other Services in its Stack (MariaDB, Valkey, Postgres); never shared across Stacks.
 _Avoid_: Backend, DB container
@@ -28,6 +40,14 @@ _Avoid_: Backend, DB container
 **Deploy**:
 Making the Host match what the repo's default branch declares for a Stack.
 _Avoid_: Sync, rollout, redeploy
+
+**Baseline**:
+The settings every Service must carry so that it is safe and observable by default, unless it records an Exemption.
+_Avoid_: Template (the template is a starting point; the Baseline is the enforced minimum), defaults
+
+**Exemption**:
+A recorded, reasoned waiver of one Baseline item for one Service; an Exemption for an item the Service already meets is invalid.
+_Avoid_: Override, exception
 
 ## Reliability
 
@@ -60,7 +80,7 @@ An outside-in check that a Service answers as a user would reach it.
 _Avoid_: Health check (that is the Service's own self-report)
 
 **Uptime**:
-Whether a Service is serving: for an Exposed Service, its Probes succeed (behind Authentik, both the redirect to the IdP and an unauthenticated health path); for any other Service, its own health check reports healthy. A running container behind a failing Probe is not up.
+Whether a Service is serving: for an Exposed Service, its Probes succeed (for a Protected Service, both the redirect to the IdP and an unauthenticated health path); for any other Service, its own health check reports healthy. A running container behind a failing Probe is not up.
 _Avoid_: Availability (reserve for Uptime aggregated over a period), up (the scrape metric)
 
 **Availability**:
