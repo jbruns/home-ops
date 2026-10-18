@@ -39,6 +39,12 @@ services:
       - crowdsec_log:/var/log/crowdsec
       - crowdsec_data:/var/lib/crowdsec/data
       - crowdsec_config:/etc/crowdsec
+      # Home public addresses never get banned; only this Host's CrowdSec carries them
+      - type: bind
+        source: ./home-whitelist.sops.yaml
+        target: /etc/crowdsec/parsers/s02-enrich/home-whitelist.yaml
+        read_only: true
+        x-sops: true
       # Allow Crowdsec to read and parse Traefik access logs
       - traefik_log:/var/log/traefik:ro
     networks:

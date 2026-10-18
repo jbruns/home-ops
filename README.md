@@ -83,6 +83,7 @@ Renovate runs Friday mornings (America/Los_Angeles), pins digests, and waits 5 d
 - The private key lives on the Host at `/mnt/luna/homeops/age.key` (root, 0400) and in an offline backup. Nowhere else.
 - Edit a Stack's values with `sops tn/<stack>/.sops.env`. Add a new key to `env.template` too, or CI fails.
 - Files a Compose file mounts or loads (`env_file`, `secrets`) must be named `*.sops.*` and tracked. Plaintext `.env` and `*.txt` files under `tn/` are gitignored.
+- Home public addresses are whitelisted in CrowdSec by `tn/edge/crowdsec/home-whitelist.sops.yaml` (a parser, edited with `sops`). Only this Host carries it.
 - doco-cd writes decrypted files as root with mode 0600. A non-root Service must therefore read secrets through `env_file`, not Compose `secrets`.
 
 Validate locally before pushing (needs Docker and `pip install -r .github/scripts/requirements.txt`):
