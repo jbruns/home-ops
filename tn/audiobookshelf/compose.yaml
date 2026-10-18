@@ -49,7 +49,8 @@ services:
 
       traefik.http.services.audiobookshelf.loadbalancer.server.port: 80
     volumes:
-      - ${ZFS_POOL_ROOT_HDD}/media/audiobooks:/audiobooks
+      # A Media Server only reads the Audiobooks Library; Shelfmark organizes it (ADR 0009).
+      - ${ZFS_POOL_ROOT_HDD}/media/audiobooks:/audiobooks:ro
       - ${ZFS_POOL_ROOT_HDD}/media/podcasts:/podcasts
       - audiobookshelf_config:/config
       - audiobookshelf_metadata:/metadata
