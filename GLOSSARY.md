@@ -9,8 +9,12 @@ The single TrueNAS machine that runs every Service.
 _Avoid_: Server, NAS, box
 
 **Stack**:
-The unit of deployment: one or more Services plus the Datastores they need, deployed, isolated, and backed up together (e.g. nextcloud, vaultwarden, arr, edge).
+The unit of deployment: one or more Services plus the Datastores they need, deployed, isolated, and backed up together (e.g. nextcloud, vaultwarden, sonarr, edge).
 _Avoid_: Project, App Group, app
+
+**Platform Stack**:
+A Stack grouped by the role it plays for the other Stacks rather than by app (edge, monitoring, ops). It is the only kind of Stack that may hold more than one app.
+_Avoid_: Infra stack, core stack, common
 
 **Service**:
 One long-running workload in a Stack, plus any sidecars that exist only to serve it.
@@ -34,6 +38,53 @@ _Avoid_: Authentik (the product, not the role), SSO
 **Datastore**:
 A Service whose only job is to hold state for the other Services in its Stack (MariaDB, Valkey, Postgres); never shared across Stacks.
 _Avoid_: Backend, DB container
+
+## Media
+
+**Library**:
+One kind of organized media that Media Servers present (e.g. TV, Movies, Music, Audiobooks).
+_Avoid_: Collection, share, media folder
+
+**Requester**:
+A Service that decides what media to fetch and hands it to a Downloader, but never holds files itself (AudioBookRequest from users' requests, autobrr from announce filters).
+_Avoid_: Indexer, grabber
+
+**Downloader**:
+A Service that fetches media and is responsible for each file until an Organizer takes it over (qBittorrent, SABnzbd). It never changes a Library.
+_Avoid_: Download client (when meaning the role), grabber
+
+**Organizer**:
+A Service that takes over a Downloader's finished file, moving it (or copying it while seeding must continue) into its own Library, and is responsible for it from then on (Sonarr for TV, Radarr for Movies). It cannot change any other Library.
+_Avoid_: arr, *arr, manager
+
+**Media Server**:
+A Service that presents Libraries to users and only reads those it does not organize (Plex, Emby, Navidrome, Audiobookshelf).
+_Avoid_: Player, streamer
+
+**Role**:
+A part a Service plays in getting media into a Library: Requester, Downloader, Organizer, or Media Server. A Service may hold several Roles (Sonarr is a Requester and an Organizer; a recording Plex organizes its recordings Library), and gets only the storage access its Roles need.
+_Avoid_: Type, kind
+
+## Custom code
+
+**Custom Component**:
+Code we wrote that runs on the Host, kept only because no upstream or community option covers the need, and generic enough to adopt on another host.
+_Avoid_: Script, glue, homegrown exporter
+
+**Repo Tooling**:
+Code we wrote that runs only in CI or on a contributor's machine, never on the Host.
+_Avoid_: Scripts, helpers
+
+**Retirement Condition**:
+The stated upstream or community capability whose arrival makes a Custom Component unnecessary.
+_Avoid_: Sunset, deprecation note
+
+**Contract Test**:
+A check that a Custom Component still works against the version of each upstream it depends on that the repo currently pins.
+
+**Canary**:
+A check that a Custom Component works against the newest stable release of each upstream it depends on. It warns ahead of a version bump and never blocks a merge.
+_Avoid_: Nightly, smoke test
 
 ## Delivery
 
