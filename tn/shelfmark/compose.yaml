@@ -57,6 +57,7 @@ services:
       probe.url: https://cwd.${DOMAIN}/api/health
       # Native OIDC: Shelfmark's own login path answers with the redirect to the IdP
       probe.idp_url: https://cwd.${DOMAIN}/api/auth/oidc/login
+      probe.idp_auth: oidc
 
       traefik.enable: true
       traefik.docker.network: proxy

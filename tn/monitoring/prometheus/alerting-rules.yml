@@ -199,11 +199,12 @@ groups:
           summary: The IdP outpost has lost the IdP
           description: "idp-outpost has had no connection to the IdP for 5 minutes; it cannot pick up provider changes and sign-ins may fail."
 
-      # Every Protected Service's web UI fails its probe-idp Probe at once: the outpost (or the
-      # forward-auth middleware) is broken, not one Service. Inhibits those ProbeFailed alerts and
+      # Every forward-auth Protected Service's web UI fails its probe-idp Probe at once: the outpost
+      # (or the forward-auth middleware) is broken, not one Service. Native-OIDC Probes (auth="oidc")
+      # skip the outpost, so they stay out of it and alert on their own as ProbeFailed. Inhibits those ProbeFailed alerts and
       # is inhibited by InternetDown or Traefik's own ProbeFailed (alertmanager).
       - alert: IdpForwardAuthFailing
-        expr: count(probe_success{job="probe-idp"} == 0) == count(probe_success{job="probe-idp"})
+        expr: count(probe_success{job="probe-idp", auth="forward"} == 0) == count(probe_success{job="probe-idp", auth="forward"})
         for: 3m
         labels:
           tier: critical
@@ -211,7 +212,7 @@ groups:
           container: idp-outpost
         annotations:
           summary: Protected Services are not redirecting to the IdP
-          description: "Every probe-idp Probe has failed for 3 minutes; forward auth through idp-outpost is broken."
+          description: "Every forward-auth probe-idp Probe has failed for 3 minutes; forward auth through idp-outpost is broken."
 
       # Forward auth adds this to every request to a Protected web UI. At least 20 requests in
       # 10 minutes, so a handful of slow Probes do not count.
