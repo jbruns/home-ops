@@ -683,8 +683,167 @@
           "sort": "desc"
         }
       },
-      "description": "Against each indexer's daily limit (see nzbhydra2).",
+      "description": "Every indexer, with or without a daily limit. Counts reset at midnight.",
       "id": 12
+    },
+    {
+      "type": "bargauge",
+      "title": "Daily allowance used",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-remote"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-remote"
+          },
+          "expr": "max by (indexer) (nzbhydra2_indexer_api_hits / nzbhydra2_indexer_api_hit_limit)",
+          "legendFormat": "{{indexer}} API",
+          "instant": true,
+          "range": false
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-remote"
+          },
+          "expr": "max by (indexer) (nzbhydra2_indexer_download_hits / nzbhydra2_indexer_download_hit_limit)",
+          "legendFormat": "{{indexer}} downloads",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 0,
+        "y": 48
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.9
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "description": "Hits as a share of each daily limit configured in nzbhydra2; indexers without one are not shown. NzbhydraIndexerLimitNear alerts above 90% for 15 minutes. Counts reset at midnight.",
+      "id": 13
+    },
+    {
+      "type": "timeseries",
+      "title": "Daily allowance used over time",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-remote"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-remote"
+          },
+          "expr": "max by (indexer) (nzbhydra2_indexer_api_hits / nzbhydra2_indexer_api_hit_limit)",
+          "legendFormat": "{{indexer}} API",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-remote"
+          },
+          "expr": "max by (indexer) (nzbhydra2_indexer_download_hits / nzbhydra2_indexer_download_hit_limit)",
+          "legendFormat": "{{indexer}} downloads",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 12,
+        "y": 48
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "lineWidth": 1,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "unit": "percentunit",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.9
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Hits as a share of each daily limit configured in nzbhydra2; indexers without one are not shown. NzbhydraIndexerLimitNear alerts above 90% for 15 minutes. Counts reset at midnight.",
+      "id": 14
     }
   ],
   "schemaVersion": 41,
