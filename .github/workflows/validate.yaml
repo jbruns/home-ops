@@ -25,7 +25,15 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: scripts/test-setup-agent-skills
+      - run: tools/agent-skills/test-setup-agent-skills
+
+  tool-tests:
+    name: tool tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: python3 -m pip install --quiet --requirement tools/requirements-test.txt
+      - run: python3 -m pytest tools host
 
   repo:
     name: secrets, env, compose, cloudflare
@@ -34,20 +42,20 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - run: python3 -m pip install --quiet --requirement .github/scripts/requirements.txt
-      - run: python3 .github/scripts/validate.py secrets env compose cloudflare
+      - run: python3 -m pip install --quiet --requirement tools/validate/requirements.txt
+      - run: python3 tools/validate/validate.py secrets env compose cloudflare
       - if: github.event_name == 'pull_request'
         env:
           VALIDATE_BASE: ${{ github.event.pull_request.base.sha }}
-        run: python3 .github/scripts/validate.py isolation
+        run: python3 tools/validate/validate.py isolation
 
   monitoring:
     name: prometheus, alertmanager, loki
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: python3 -m pip install --quiet --requirement .github/scripts/requirements.txt
-      - run: python3 .github/scripts/validate.py monitoring
+      - run: python3 -m pip install --quiet --requirement tools/validate/requirements.txt
+      - run: python3 tools/validate/validate.py monitoring
 
   gitleaks:
     name: gitleaks
@@ -78,7 +86,7 @@ jobs:
   validate:
     name: validate
     if: always()
-    needs: [repo, monitoring, gitleaks, tooling, agent-skills]
+    needs: [repo, monitoring, gitleaks, tooling, agent-skills, tool-tests]
     runs-on: ubuntu-24.04
     steps:
       - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')

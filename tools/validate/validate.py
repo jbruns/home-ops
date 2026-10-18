@@ -15,9 +15,14 @@ Subcommands:
               routers follow ADR 0006 (names, health and Client Paths, Protected Probes)
   isolation   tn/doco-cd and tn/_baseline.yaml changes ship in their own PR
   monitoring  promtool / amtool / loki / alloy checks, using the image versions the Stacks deploy;
-              Grafana dashboards JSON matches its generator (grafana/dashboards.py)
+              Grafana dashboards JSON matches its generator (tools/dashboards/dashboards.py)
   cloudflare  the Cloudflare ranges Traefik trusts are valid and identical everywhere they appear
+
+Usage: validate.py [--root DIR] [--path NAME=PATH ...] [check ...]   (no check: run them all)
+  --root  the repository to check (default: the one this file is in)
+  --path  override one of PATHS below, relative to --root or absolute
 """
+import argparse
 import os
 import re
 import shutil
@@ -29,8 +34,21 @@ from pathlib import Path
 
 import yaml
 
-ROOT = Path(__file__).resolve().parents[2]
-HOST_DIR = ROOT / "tn"
+TOOLS_DIR = Path(__file__).resolve().parents[1]
+ROOT = TOOLS_DIR.parent
+# The folder doco-cd deploys Stacks from, relative to ROOT.
+HOST_DIR = "tn"
+# Files and folders individual checks read, relative to ROOT.
+PATHS = {
+    "prometheus": "tn/monitoring/prometheus",
+    "alertmanager": "tn/monitoring/alertmanager",
+    "loki": "tn/monitoring/loki",
+    "alloy": "tn/monitoring/alloy",
+    "blackbox": "tn/monitoring/blackbox-exporter/blackbox.yml",
+    "dashboards": "tools/dashboards/dashboards.py",
+    "dashboards-json": "tn/monitoring/grafana/dashboards",
+    "traefik": "tn/edge/traefik/service.yaml",
+}
 # ${VAR} but not $${VAR} (Compose's escape for a literal "$")
 VAR_RE = re.compile(r"(?<!\$)\$\{([A-Za-z_][A-Za-z0-9_]*)")
 SOPS_MARKERS = ("sops_version=", '"sops":', "sops:")
@@ -67,11 +85,25 @@ def tracked_files() -> set[Path]:
 ENTRY_NAME = "compose.yaml"
 # Each file a Stack's entry file includes: tn/<stack>/<service>/service.yaml, one Service plus its sidecars.
 INCLUDED_NAME = "service.yaml"
-DOCO_CD_CONFIG = ROOT / ".doco-cd.yml"
+DOCO_CD_CONFIG = ".doco-cd.yml"
 
 
-def stacks(base: Path = ROOT) -> list[Path]:
-    return sorted(p.parent for p in (base / "tn").glob(f"*/{ENTRY_NAME}"))
+def configure(root: Path, paths: dict[str, str] | None = None) -> None:
+    """Point every check at another repository root and/or override entries of PATHS."""
+    global ROOT
+    ROOT = root.resolve()
+    for name, value in (paths or {}).items():
+        if name not in PATHS:
+            raise KeyError(f"unknown path {name!r}; choose from {', '.join(PATHS)}")
+        PATHS[name] = value
+
+
+def path(name: str) -> Path:
+    return ROOT / PATHS[name]
+
+
+def stacks(base: Path | None = None) -> list[Path]:
+    return sorted(p.parent for p in ((base or ROOT) / HOST_DIR).glob(f"*/{ENTRY_NAME}"))
 
 
 def entry(stack: Path) -> Path:
@@ -152,12 +184,13 @@ def check_layout(tracked: set[Path]) -> None:
             included.add(f)
             if f.name != INCLUDED_NAME or f.parent.parent != stack:
                 fail(f"{stack.name}: included file {_rel(f)} must be {_rel(stack)}/<service>/{INCLUDED_NAME}", entry(stack))
+    host_dir, doco_cd_config = ROOT / HOST_DIR, ROOT / DOCO_CD_CONFIG
     for f in sorted(tracked):
-        if not f.is_relative_to(HOST_DIR):
+        if not f.is_relative_to(host_dir):
             continue
         if re.fullmatch(r"docker-compose\.ya?ml", f.name):
             fail(f"rename to {INCLUDED_NAME} (one Service per file) or {ENTRY_NAME} (a Stack's entry file)", f)
-        elif f.name == INCLUDED_NAME and f.parent.parent == HOST_DIR:
+        elif f.name == INCLUDED_NAME and f.parent.parent == host_dir:
             fail(f"doco-cd never discovers this; a Stack's entry file must be {ENTRY_NAME}", f)
         elif f.name == INCLUDED_NAME and f not in included:
             fail(f"no Stack's include: lists this {INCLUDED_NAME}, so it is never deployed", f)
@@ -165,9 +198,9 @@ def check_layout(tracked: set[Path]) -> None:
     # internal/config/deploy/auto_discovery.go). It only looks for compose.yaml, so service.yaml is
     # never discovered; this is defence in depth: at depth 0 (unlimited) a compose.yaml in a Service
     # folder would become a Stack, and delete: true would remove it when it disappears.
-    depth = ((yaml.safe_load(DOCO_CD_CONFIG.read_text()) or {}).get("auto_discovery") or {}).get("depth")
+    depth = ((yaml.safe_load(doco_cd_config.read_text()) or {}).get("auto_discovery") or {}).get("depth")
     if depth != 1:
-        fail(f"auto_discovery.depth must stay 1 (found {depth!r}): deeper discovery would deploy a compose.yaml below a Stack folder as a Stack of its own", DOCO_CD_CONFIG)
+        fail(f"auto_discovery.depth must stay 1 (found {depth!r}): deeper discovery would deploy a compose.yaml below a Stack folder as a Stack of its own", doco_cd_config)
 
 
 def check_stack_secrets(stack: Path, tracked: set[Path]) -> None:
@@ -208,7 +241,7 @@ def check_env() -> None:
 
 def check_dependencies_env() -> None:
     """dependencies-render fails on any placeholder in dependencies.yml its environment lacks."""
-    prom = HOST_DIR / "monitoring/prometheus"
+    prom = path("prometheus")
     template = prom / "dependencies.yml"
     svc = yaml.safe_load((prom / INCLUDED_NAME).read_text())["services"]["dependencies-render"]
     passed = {e.split("=", 1)[0] for e in svc.get("environment") or []}
@@ -320,7 +353,7 @@ def router_problems(name: str, labels: dict) -> list[str]:
 
 
 def probe_modules() -> set[str]:
-    return set(yaml.safe_load((HOST_DIR / "monitoring/blackbox-exporter/blackbox.yml").read_text())["modules"])
+    return set(yaml.safe_load(path("blackbox").read_text())["modules"])
 
 
 def probe_problems(name: str, labels: dict, modules: set[str]) -> list[str]:
@@ -418,43 +451,45 @@ def docker_run(image: str, mounts: dict[Path, str], entrypoint: str, *args: str)
 
 
 def check_monitoring() -> None:
-    mon = HOST_DIR / "monitoring"
-    prom = mon / "prometheus"
+    prom = path("prometheus")
     prom_image = deployed_image(prom / INCLUDED_NAME, "prometheus")
     rule_files = sorted(prom.glob("*rules*.yml"))
     prom_mounts = {f: f"/etc/prometheus/{f.name}" for f in [prom / "prometheus.yml", *rule_files]}
     docker_run(prom_image, prom_mounts, "promtool", "check", "config", "--syntax-only", "/etc/prometheus/prometheus.yml")
     docker_run(prom_image, prom_mounts, "promtool", "check", "rules", *[f"/etc/prometheus/{f.name}" for f in rule_files])
 
-    am = mon / "alertmanager"
+    am = path("alertmanager")
     if (am / "config.yml") in tracked_files():
         am_image = deployed_image(am / INCLUDED_NAME, "alertmanager")
         docker_run(am_image, {am / "config.yml": "/etc/alertmanager/config.yml"}, "amtool", "check-config", "/etc/alertmanager/config.yml")
     else:
         warn("alertmanager config is encrypted-only; amtool check skipped until it is split from its secrets")
 
-    loki = mon / "loki"
+    loki = path("loki")
     loki_image = deployed_image(loki / INCLUDED_NAME, "loki")
     docker_run(loki_image, {loki / "loki.yaml": "/etc/loki/loki.yaml"}, "/usr/bin/loki", "-config.file=/etc/loki/loki.yaml", "-verify-config")
 
-    alloy = mon / "alloy"
+    alloy = path("alloy")
     alloy_image = deployed_image(alloy / INCLUDED_NAME, "alloy")
     docker_run(alloy_image, {alloy / "config.alloy": "/etc/alloy/config.alloy"}, "/bin/alloy", "validate", "/etc/alloy/config.alloy")
 
-    generator = mon / "grafana" / "dashboards.py"
-    result = subprocess.run([sys.executable, str(generator), "--check"], capture_output=True, text=True)
+    generator = path("dashboards")
+    result = subprocess.run([sys.executable, str(generator), "--check", "--out", str(path("dashboards-json"))],
+                            capture_output=True, text=True)
     if result.returncode:
         fail(result.stdout.strip() or result.stderr.strip(), generator)
     else:
-        print("ok: grafana dashboards match dashboards.py")
+        print(f"ok: grafana dashboards match {generator.name}")
 
 
 def check_cloudflare() -> None:
+    sys.path.insert(0, str(TOOLS_DIR / "cloudflare-ips"))
     import cloudflare_ips
 
-    errs = cloudflare_ips.problems(cloudflare_ips.TRAEFIK.read_text())
+    traefik = path("traefik")
+    errs = cloudflare_ips.problems(traefik.read_text())
     for err in errs:
-        fail(err, cloudflare_ips.TRAEFIK)
+        fail(err, traefik)
     if not errs:
         print("cloudflare ok")
 
@@ -488,10 +523,23 @@ CHECKS = {
     "isolation": check_isolation,
 }
 
-if __name__ == "__main__":
-    selected = sys.argv[1:] or list(CHECKS)
-    for name in selected:
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(description="Repository validation for home-ops.")
+    parser.add_argument("--root", type=Path, default=ROOT, help="repository to check")
+    parser.add_argument("--path", action="append", default=[], metavar="NAME=PATH",
+                        help=f"override a path ({', '.join(PATHS)})")
+    parser.add_argument("checks", nargs="*", metavar="check", help=f"{', '.join(CHECKS)} (default: all)")
+    args = parser.parse_args(argv)
+    overrides = dict(p.split("=", 1) for p in args.path if "=" in p)
+    if len(overrides) != len(args.path) or set(overrides) - set(PATHS):
+        parser.error(f"--path takes NAME=PATH with NAME one of {', '.join(PATHS)}")
+    configure(args.root, overrides)
+    for name in args.checks or list(CHECKS):
         if name not in CHECKS:
             sys.exit(f"unknown check {name!r}; choose from {', '.join(CHECKS)}")
         CHECKS[name]()
-    sys.exit(1 if failures else 0)
+    return 1 if failures else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

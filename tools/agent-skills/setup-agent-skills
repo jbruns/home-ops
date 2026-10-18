@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LOCK_FILE="${AGENT_SKILLS_LOCK:-$REPO_ROOT/.agent-skills.lock}"
 SKILLS_DIR="$REPO_ROOT/.agents/skills"
 STATE_FILE="$SKILLS_DIR/.agent-skills-managed"
@@ -25,8 +25,8 @@ die() {
 
 usage() {
     cat <<'EOF'
-Usage: scripts/setup-agent-skills [setup|check|clean]
-       scripts/setup-agent-skills pin <ref>
+Usage: tools/agent-skills/setup-agent-skills [setup|check|clean]
+       tools/agent-skills/setup-agent-skills pin <ref>
 
   setup  Install the repository's pinned skills (default).
   check  Verify that the local installation matches .agent-skills.lock.
@@ -262,27 +262,27 @@ check_installation() (
     write_lock_state >"$expected"
 
     [ -f "$STATE_FILE" ] ||
-        die "agent skills are not installed; run scripts/setup-agent-skills"
+        die "agent skills are not installed; run tools/agent-skills/setup-agent-skills"
     awk '$1 != "skill"' "$STATE_FILE" >"$actual_metadata"
     cmp -s "$expected" "$actual_metadata" ||
-        die "agent skills are stale; run scripts/setup-agent-skills"
+        die "agent skills are stale; run tools/agent-skills/setup-agent-skills"
 
     skills_count=0
     while read -r key skill expected_hash extra; do
         [ "$key" = "skill" ] || continue
         [ -z "${extra:-}" ] && [[ "${expected_hash:-}" =~ ^[0-9a-f]{40}$ ]] ||
-            die "invalid installed state for '$skill'; run scripts/setup-agent-skills"
+            die "invalid installed state for '$skill'; run tools/agent-skills/setup-agent-skills"
         validate_skill_path "$skill"
         name="$(skill_name "$skill")"
         [ -f "$SKILLS_DIR/$name/SKILL.md" ] ||
-            die "missing installed skill '$name'; run scripts/setup-agent-skills"
+            die "missing installed skill '$name'; run tools/agent-skills/setup-agent-skills"
         actual_hash="$(hash_installed_skill "$name")"
         [ "$actual_hash" = "$expected_hash" ] ||
-            die "installed skill '$name' has local changes; run scripts/setup-agent-skills"
+            die "installed skill '$name' has local changes; run tools/agent-skills/setup-agent-skills"
         skills_count=$((skills_count + 1))
     done <"$STATE_FILE"
     [ "$skills_count" -gt 0 ] ||
-        die "no skills are installed; run scripts/setup-agent-skills"
+        die "no skills are installed; run tools/agent-skills/setup-agent-skills"
 
     echo "Agent skills match $source_ref ($source_revision)."
 )

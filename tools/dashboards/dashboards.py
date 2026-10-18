@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 """Generate the Grafana dashboards provisioned from the repo (stdlib only).
 
-    python3 tn/monitoring/grafana/dashboards.py           # write dashboards/*.json
-    python3 tn/monitoring/grafana/dashboards.py --check   # fail if they are stale (validate.py)
+    python3 tools/dashboards/dashboards.py           # write tn/monitoring/grafana/dashboards/*.json
+    python3 tools/dashboards/dashboards.py --check   # fail if they are stale (validate.py)
+    python3 tools/dashboards/dashboards.py --out DIR # write or check another folder
 
 Edit this file, never the JSON. Vocabulary follows GLOSSARY.md: Service, Stack, Tier, Probe,
 Uptime, Availability, Dependency. Datasources are referenced by the uids set in
-provisioning/datasources.sops.yml.
+tn/monitoring/grafana/provisioning/datasources.sops.yml.
 """
+import argparse
 import json
 import sys
 from pathlib import Path
 
-OUT = Path(__file__).resolve().parent / "dashboards"
+OUT = Path(__file__).resolve().parents[2] / "tn/monitoring/grafana/dashboards"
 
 PROM = {"type": "prometheus", "uid": "prometheus"}
 LOKI = {"type": "loki", "uid": "loki"}
@@ -750,20 +752,25 @@ def render():
             for name, build in DASHBOARDS.items()}
 
 
-def main():
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Generate the Grafana dashboards provisioned from the repo.")
+    parser.add_argument("--check", action="store_true", help="fail if the JSON in --out is stale")
+    parser.add_argument("--out", type=Path, default=OUT, help=f"dashboards folder (default: {OUT})")
+    args = parser.parse_args(argv)
+    out = args.out
     files = render()
-    if "--check" in sys.argv:
+    if args.check:
         stale = [n for n, text in files.items()
-                 if not (OUT / n).exists() or (OUT / n).read_text() != text]
-        extra = sorted(p.name for p in OUT.glob("*.json") if p.name not in files)
+                 if not (out / n).exists() or (out / n).read_text() != text]
+        extra = sorted(p.name for p in out.glob("*.json") if p.name not in files)
         for n in stale:
-            print(f"{OUT / n}: stale; run python3 tn/monitoring/grafana/dashboards.py")
+            print(f"{out / n}: stale; run python3 tools/dashboards/dashboards.py")
         for n in extra:
-            print(f"{OUT / n}: not produced by the generator")
+            print(f"{out / n}: not produced by the generator")
         sys.exit(1 if stale or extra else 0)
-    OUT.mkdir(exist_ok=True)
+    out.mkdir(exist_ok=True)
     for n, text in files.items():
-        (OUT / n).write_text(text)
+        (out / n).write_text(text)
 
 
 if __name__ == "__main__":
