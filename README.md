@@ -121,12 +121,13 @@ The script is not deployed by doco-cd. After changing it, copy it to `/mnt/luna/
 
 ## Adding a Stack
 
-1. Create `tn/<stack>/compose.yaml`: the Services, plus `include:` for per-Service files if you like.
-2. Give every Service `restart: unless-stopped`, `dns_search: .`, a healthcheck where possible, a `tier` label, and a `startup-order` label.
-3. For an Exposed Service, join `proxy` (external) and set the `traefik.*` labels including `traefik.docker.network: proxy`. For metrics, join `metrics` and add a scrape job in `prometheus.yml`.
-4. For a database, keep it on the Stack's `default` network, label it `stack-back.mariadb: true`, and add it to `backup`.
-5. Write `env.template`. Create and encrypt `.sops.env` (it must exist even if empty).
-6. Open a PR. doco-cd deploys the Stack once it merges.
+1. Copy `templates/exposed/` (or `templates/protected/` for a Protected Service) to `tn/<stack>/` and rename `app`. `compose.yaml` is the entry; split Services into files with `include:` if you like.
+2. Every Service extends the Baseline (`tn/_baseline.yaml`, [ADR-0007](docs/adr/0007-service-baseline-via-extends.md)). It adds a Compose healthcheck, a digest-pinned image, a memory limit, any `cap_add` it needs, a `tier` label and a `startup-order` label. An item it cannot meet needs a `baseline.exempt.<item>` label giving the reason; `validate.py compose` lists them all.
+3. For an Exposed Service, join `proxy` (external) and set the `traefik.*` labels including `traefik.docker.network: proxy`. Routers are `<container>-http`, `-https`, `-health` and `-client-<protocol>`, and the Traefik service is named after the container ([ADR-0006](docs/adr/0006-protected-services.md)). For metrics, join `metrics` and add a scrape job in `prometheus.yml`.
+4. Give named volumes an explicit `name:`, so moving or renaming the Stack keeps the data.
+5. For a database, keep it on the Stack's `default` network, label it `stack-back.mariadb: true`, and add it to `backup`.
+6. Write `env.template`. Create and encrypt `.sops.env` (it must exist even if empty).
+7. Open a PR. doco-cd deploys the Stack once it merges. A change to `tn/_baseline.yaml` recreates every Service that extends it, so it ships in its own PR.
 
 ## Bootstrapping a fresh Host
 

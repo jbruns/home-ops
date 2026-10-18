@@ -1,0 +1,76 @@
+# Template for an Exposed Service (GLOSSARY.md). Copy this directory to tn/<stack>/, rename `app`
+# throughout, and see README.md "Adding a Stack". validate.py renders this file as a Stack, so it
+# must stay valid. For a Protected Service start from templates/protected/ instead.
+services:
+  app:
+    # Settings every Service shares (ADR 0007). Exemptions: see tn/_baseline.yaml.
+    extends:
+      file: ../_baseline.yaml
+      service: baseline
+    # https://github.com/<upstream>/releases ; Renovate keeps tag and digest current.
+    image: traefik/whoami:v1.11.0@sha256:200689790a0a0ea48ca45992e0450bc26ccab5307375b41c84dfc4f2475937ab
+    container_name: app
+    # Advisory, for isolation: run as a non-root user and with a read-only root filesystem where the
+    # image allows it (user: ${APP_UID}:${MEDIA_SHARED_GID}, read_only: true plus tmpfs).
+    # cap_drop: [ALL] comes from the Baseline; add back only what the image needs, e.g. for an
+    # s6/linuxserver image that drops to PUID: cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE].
+    healthcheck:
+      # Declared here even when the image has one, so the Baseline can see it.
+      test: ["CMD", "/whoami", "--help"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 5s
+    deploy:
+      resources:
+        limits:
+          # ~1.5x the 30-day peak of container_memory_working_set_bytes; ContainerMemoryNearLimit
+          # (Digest) and ContainerOOMKilled (Service's Tier) say when it is wrong.
+          memory: 256M
+    environment:
+      - TZ=${TZ}
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: warning
+      # Startup Order (ADR 0003): 0 edge, 1 Datastores, 2 Exposed Services, 3 sidecars
+      startup-order: "2"
+      stack-back.volumes: true
+      stack-back.volumes.include: "app_config"
+
+      traefik.enable: true
+      traefik.docker.network: proxy
+
+      # Routers are <container>-http|-https|-health|-client-<protocol> (ADR 0006).
+      traefik.http.routers.app-http.rule: Host(`app.${DOMAIN}`)
+      traefik.http.routers.app-http.entrypoints: http
+      traefik.http.routers.app-http.middlewares: redirect-https
+
+      traefik.http.routers.app-https.rule: Host(`app.${DOMAIN}`)
+      traefik.http.routers.app-https.entrypoints: https
+      traefik.http.routers.app-https.tls: true
+      traefik.http.routers.app-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.app-https.service: app
+      traefik.http.routers.app-https.middlewares: crowdsec-bouncer
+
+      # Named after the container: Http5xxRatio maps Traefik services back to containers by name.
+      traefik.http.services.app.loadbalancer.server.port: 80
+
+      # Probe (GLOSSARY.md): the public path a user takes; see prometheus.yml
+      probe.url: https://app.${DOMAIN}/health
+    volumes:
+      - app_config:/config
+    networks:
+      - default
+      - proxy
+
+volumes:
+  app_config:
+    # An explicit name keeps the volume when the Stack is renamed or moved.
+    name: app_config
+
+networks:
+  # Traefik and the Exposed Services it routes to; owned by the edge Stack.
+  proxy:
+    name: proxy
+    external: true

@@ -1,0 +1,87 @@
+# Template for a Protected Service (GLOSSARY.md, ADR 0006): an Exposed Service whose web UI is behind
+# the IdP. Copy this directory to tn/<stack>/, rename `app` throughout, and see README.md "Adding a
+# Stack". validate.py renders this file as a Stack, so it must stay valid. Prefer the app's native
+# OIDC over forward auth where it has it; then this is just templates/exposed/.
+services:
+  app:
+    # Settings every Service shares (ADR 0007). Exemptions: see tn/_baseline.yaml.
+    extends:
+      file: ../_baseline.yaml
+      service: baseline
+    # https://github.com/<upstream>/releases ; Renovate keeps tag and digest current.
+    image: traefik/whoami:v1.11.0@sha256:200689790a0a0ea48ca45992e0450bc26ccab5307375b41c84dfc4f2475937ab
+    container_name: app
+    # Advisory, for isolation: non-root user and read_only where the image allows it; cap_add only
+    # what the image needs after the Baseline's cap_drop: [ALL]. See templates/exposed/.
+    healthcheck:
+      test: ["CMD", "/whoami", "--help"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 5s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    environment:
+      - TZ=${TZ}
+    labels:
+      tier: warning
+      startup-order: "2"
+      stack-back.volumes: true
+      stack-back.volumes.include: "app_config"
+
+      traefik.enable: true
+      traefik.docker.network: proxy
+
+      traefik.http.routers.app-http.rule: Host(`app.${DOMAIN}`)
+      traefik.http.routers.app-http.entrypoints: http
+      traefik.http.routers.app-http.middlewares: redirect-https
+
+      # The web UI: `protected` is crowdsec-bouncer then idp-forward-auth (edge Stack).
+      traefik.http.routers.app-https.rule: Host(`app.${DOMAIN}`)
+      traefik.http.routers.app-https.entrypoints: https
+      traefik.http.routers.app-https.tls: true
+      traefik.http.routers.app-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.app-https.service: app
+      traefik.http.routers.app-https.middlewares: protected
+
+      # The Probe's path, without forward auth: one exact Path(), nothing else.
+      traefik.http.routers.app-health.rule: Host(`app.${DOMAIN}`) && Path(`/health`)
+      traefik.http.routers.app-health.entrypoints: https
+      traefik.http.routers.app-health.tls: true
+      traefik.http.routers.app-health.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.app-health.service: app
+      traefik.http.routers.app-health.middlewares: crowdsec-bouncer
+
+      # A Client Path (GLOSSARY.md): what a required app (OPDS reader, console, mobile app) uses
+      # without the IdP, authenticated by the Service itself. Delete it if there is none. Only
+      # -client- routers may match on headers.
+      traefik.http.routers.app-client-opds.rule: Host(`app.${DOMAIN}`) && PathPrefix(`/opds`)
+      traefik.http.routers.app-client-opds.entrypoints: https
+      traefik.http.routers.app-client-opds.tls: true
+      traefik.http.routers.app-client-opds.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.app-client-opds.service: app
+      traefik.http.routers.app-client-opds.middlewares: crowdsec-bouncer,client-ratelimit
+
+      traefik.http.services.app.loadbalancer.server.port: 80
+
+      # Probes: probe.url is the Service through its health router; probe.idp_url is the web UI,
+      # which must redirect to the IdP (job probe-idp, prometheus.yml).
+      probe.url: https://app.${DOMAIN}/health
+      probe.idp_url: https://app.${DOMAIN}/
+    volumes:
+      - app_config:/config
+    networks:
+      - default
+      - proxy
+
+volumes:
+  app_config:
+    name: app_config
+
+networks:
+  proxy:
+    name: proxy
+    external: true
