@@ -16,7 +16,9 @@ services:
     stop_grace_period: 60s
     # Exit 0 whenever the server answers, even "access denied"; no credentials needed.
     healthcheck:
-      test: ["CMD", "mariadb-admin", "ping", "-h", "127.0.0.1", "--silent"]
+      # The image's check, via its healthcheck user (.my-healthcheck.cnf in the datadir). mariadb-admin
+      # ping passed even on "Access denied", logging a warning every 30s.
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 30s
       timeout: 5s
       retries: 3
