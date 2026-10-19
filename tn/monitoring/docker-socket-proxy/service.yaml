@@ -1,6 +1,7 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json
 services:
-  # Read-only Docker API for Prometheus docker_sd: container and network listing only.
+  # Read-only Docker API for Prometheus docker_sd and container-health-exporter: container and
+  # network listing and container inspect only.
   docker-socket-proxy:
     # https://github.com/Tecnativa/docker-socket-proxy
     extends:

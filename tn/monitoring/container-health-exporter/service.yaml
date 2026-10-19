@@ -2,38 +2,41 @@
 services:
   container-health-exporter:
     # Docker health-check status for Prometheus (Uptime of Services that are not Exposed Services);
-    # see container_health_exporter.py. Reads through the read-only docker-socket-proxy.
-    # https://hub.docker.com/_/python
+    # a Custom Component (ADR 0008). Reads through the read-only docker-socket-proxy.
+    # https://github.com/jbruns/homelab-components/tree/main/components/container-health-exporter
     extends:
       file: ../../_baseline.yaml
       service: baseline
-    image: python:3.14.8-alpine3.24@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+    image: ghcr.io/jbruns/container-health-exporter:1.0.0@sha256:3ab4c8d11ecfdfb6af4c1f7e8599fd7f63459440e4149f297f1f67ba175e08a8
     container_name: container-health-exporter
     user: ${MONITORING_UID}:${MONITORING_GID}
     deploy:
       resources:
         limits:
-          # 30-day peak 26M working set
+          # 30-day peak 26M working set, measured on the bind-mounted script before the image
           memory: 64M
     read_only: true
     depends_on:
       docker-socket-proxy:
         condition: service_healthy
-    command: ["python3", "-u", "/app/container_health_exporter.py"]
+    # Probes the exporter's own /healthz, never Docker: the Docker API failing shows as
+    # container_health_up 0, not as this container going unhealthy.
     healthcheck:
-      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:9714/metrics"]
+      test: ["CMD", "/usr/bin/python3", "-m", "container_health_exporter", "healthcheck"]
       interval: 60s
-      timeout: 15s
+      timeout: 5s
       retries: 3
       start_period: 10s
       start_interval: 2s
     environment:
+      # GET /v1.44/containers/json and /v1.44/containers/<id>/json; the proxy's CONTAINERS=1 allows both.
       - DOCKER_HOST=docker-socket-proxy:2375
+      # Keep the `tier` label on container_healthy and skip ad-hoc containers (ADR 0003), as before.
+      - CONTAINER_LABELS=tier
+      - IGNORE_LABEL=startup-order=skip
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: info
       startup-order: "3"
-    volumes:
-      - ./container_health_exporter.py:/app/container_health_exporter.py:ro
     networks:
       - default
