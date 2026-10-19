@@ -1,45 +1,61 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json
 services:
-  # Per-volume backup coverage (backup_coverage.py). Same image for python and restic.
   backup-coverage:
+    # Per-volume and per-database backup coverage: is every path stack-back should back up in the
+    # newest restic snapshot? A Custom Component (ADR 0008). Reads through the read-only
+    # docker-socket-proxy.
+    # https://github.com/jbruns/homelab-components/tree/main/components/backup-coverage
     extends:
       file: ../../_baseline.yaml
       service: baseline
-    image: ngosang/restic-exporter:2.1.2@sha256:a8f9cfa3016237c7008aefa4d9c6639bc9b34d2582eed07ac58dcf56632e4170
+    image: ghcr.io/jbruns/backup-coverage:1.0.0@sha256:ed5722b10e3f0bd0e9b90d51080d392467bb404116a97f490e7d97c014a96fe8
     container_name: backup-coverage
+    # Root, like restic-exporter: the repository files are root-only (0400).
+    user: "0:0"
     deploy:
       resources:
         limits:
-          # 30-day peak 938M working set
+          # 30-day peak 938M working set, measured on the bind-mounted script before the image
           memory: 1536M
-    entrypoint: ["/sbin/tini", "--"]
-    command: ["python3", "-u", "/app/backup_coverage.py"]
+    read_only: true
+    depends_on:
+      docker-socket-proxy:
+        condition: service_healthy
+    # Probes the exporter's own /healthz, never Docker or restic: a failed check shows as
+    # backup_coverage_up 0, not as this container going unhealthy.
     healthcheck:
-      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8002/metrics"]
+      test: ["CMD", "/usr/bin/python3", "-m", "backup_coverage", "healthcheck"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 60s
       start_interval: 5s
     environment:
+      # GET /v1.44/containers/json, /containers/<id>/json, /volumes and /system/df; the proxy's
+      # CONTAINERS, VOLUMES and SYSTEM allow them.
+      DOCKER_HOST: tcp://docker-socket-proxy:2375
       RESTIC_REPOSITORY: /backups
       RESTIC_PASSWORD_FILE: /run/secrets/restic_password
-      RESTIC_CACHE_DIR: /tmp/restic-cache
+      RESTIC_CACHE_DIR: /cache
       REFRESH_INTERVAL: "3600"
+      # stack-back's own settings, as in ../../ops/stack-back.sops.env, so the paths match its own.
+      EXCLUDE_BIND_MOUNTS: "true"
+      INCLUDE_ALL_COMPOSE_PROJECTS: "true"
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: warning
       startup-order: "3"
-    # Root, like restic-exporter: the repository files are root-only (0400).
     volumes:
-      - ./backup_coverage.py:/app/backup_coverage.py:ro
       - ${ZFS_POOL_ROOT_HDD}/docker-backups:/backups:ro
-      # Reads stack-back labels and mounts of every container, stopped ones too.
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # restic's cache, kept across recreates; not backed up (no stack-back label).
+      - restic_cache:/cache
     secrets:
       - restic_password
     networks:
       - default
+
+volumes:
+  restic_cache:
 
 # restic-exporter's repository password, stored encrypted in repo as <name>.sops.txt
 secrets:
