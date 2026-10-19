@@ -83,6 +83,19 @@
         "pinDigest"
       ],
       "automerge": true
+    },
+    {
+      "description": "startup-order Custom Component on the Host: never automerge; after merging, install it on the Host (host/README.md)",
+      "matchDatasources": [
+        "github-release-attachments"
+      ],
+      "matchPackageNames": [
+        "jbruns/homelab-components"
+      ],
+      "automerge": false,
+      "prBodyNotes": [
+        "After merging, install the new release on the Host: [runbook](https://github.com/jbruns/home-ops/blob/main/host/README.md#runbook-install-or-upgrade-startup-order)."
+      ]
     }
   ],
   "docker-compose": {
@@ -130,6 +143,19 @@
       "matchStrings": [
         "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+\\w+:\\s*\"?(?<currentValue>[^\\s\"]+)\"?"
       ]
+    },
+    {
+      "customType": "regex",
+      "description": "startup-order release pinned for the Host: tag and the sha256 of its startup-order.sh asset",
+      "managerFilePatterns": [
+        "/^host/startup-order\\.pin$/"
+      ],
+      "matchStrings": [
+        "STARTUP_ORDER_TAG=(?<currentValue>\\S+)\\s+STARTUP_ORDER_SHA256=(?<currentDigest>[0-9a-f]{64})"
+      ],
+      "depNameTemplate": "jbruns/homelab-components",
+      "datasourceTemplate": "github-release-attachments",
+      "versioningTemplate": "regex:^startup-order-v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$"
     }
   ],
   "customDatasources": {
