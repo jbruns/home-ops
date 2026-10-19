@@ -11,7 +11,9 @@ commands. Vocabulary: [`GLOSSARY.md`](../../GLOSSARY.md).
 > ACL denies are the only thing keeping Sonarr and Radarr, which mount the whole media dataset rw,
 > out of the other Libraries. From step 3 until the #543 PR is merged and deployed, doco-cd and
 > every media Stack stay stopped. If the window has to stop part-way, [roll back](#rollback)
-> instead of starting anything.
+> instead of starting anything. After the merge, only doco-cd starts the changed Stacks, and step
+> 10's gate removes any container still built from the old compose. Never `docker start` an
+> existing container of a changed Stack.
 
 ## Placeholders
 
@@ -32,19 +34,23 @@ namespaces. This gives a root shell with the Host's GNU tools (`getfacl`, `setfa
 `docker`). Define it once in the admin shell on the Host:
 
 ```sh
-MEDIA_ROOT=…                               # substitute the media dataset's mountpoint
+MEDIA_ROOT=…                               # the media dataset's mountpoint, no trailing slash
 export M="$MEDIA_ROOT"
 export B=<backup-dataset>/543               # substitute; created in step 2
+export SHA=                                 # set in step 9 (and in a rollback)
 hostsh() {
   sudo -n docker run --rm -i --label startup-order=skip --privileged --pid=host \
-    -e M="$M" -e B="$B" alpine:3 nsenter -t 1 -m -u -n -i sh -s
+    -e M="$M" -e B="$B" -e SHA="$SHA" alpine:3 nsenter -t 1 -m -u -n -i sh -s
 }
 ```
 
-Each block below is `hostsh <<'EOF' … EOF`. It runs in a fresh shell, which gets `M` and `B` from
-the environment. `--label startup-order=skip` keeps the helper out of the startup-order tooling
+Each block below is `hostsh <<'EOF' … EOF`. It runs in a fresh shell, which gets `M`, `B` and `SHA`
+from the environment. `--label startup-order=skip` keeps the helper out of the startup-order tooling
 ([host/README.md](../../host/README.md)). Blocks that only need Docker run as plain
 `sudo -n docker …`.
+
+Don't reboot the Host or restart Docker during the window: keep every media container's state
+exactly as the steps leave it.
 
 ## Before the window
 
@@ -58,12 +64,59 @@ Do these in the days before; none of them changes storage.
    - Sonarr and Radarr: Settings → Media Management → Permissions → *Set Permissions* = **off**.
    - SABnzbd: Config → Folders → *Permissions for completed downloads* = **`2770`**.
    - qBittorrent: no `UMASK` in its environment (the compose sets none).
-3. **Drain the download queues** on the day: pause SABnzbd once in-progress post-processing has
-   finished, and wait until Sonarr's, Radarr's and Shelfmark's queues are empty or show only
-   pending items.
-4. **qBittorrent:** confirm no torrent uses the `cwd-books` or `cwd-audiobooks` category. Those
-   folders move, and a torrent in them would lose its files. If one exists, let Shelfmark finish,
-   then remove the torrent (keeping its files) before the window.
+3. **Drain gate, on the day.** The window changes where each Library's finished downloads live.
+   SABnzbd's history keeps each finished job's old path, so a job that is finished but not yet
+   imported can't be imported after the window. So nothing may be finished-but-unimported when
+   step 1 starts:
+   - Stop intake: pause SABnzbd's queue (jobs still queued finish into the new folders after the
+     window), disable autobrr's filters, add no torrents by hand, and make no new Shelfmark
+     requests.
+   - Let running downloads and post-processing finish, and let Sonarr, Radarr and Shelfmark import
+     everything finished.
+   - Check that nothing is waiting. Sonarr's and Radarr's Activity → Queue show no item that is
+     completed, importing, import pending, import blocked or failed; or by API:
+
+     ```sh
+     for a in sonarr:8989 radarr:7878; do n=${a%:*}
+       sudo -n docker exec "$n" sh -c "k=\$(sed -n 's:.*<ApiKey>\(.*\)</ApiKey>.*:\1:p' /config/config.xml);
+         wget -qO- --header \"X-Api-Key: \$k\" 'http://127.0.0.1:${a#*:}/api/v3/queue?pageSize=500&includeUnknownSeriesItems=true&includeUnknownMovieItems=true'" \
+         | grep -o '"trackedDownloadState":"[a-zA-Z]*"' | sort | uniq -c | sed "s/^/$n /"
+     done
+     ```
+
+     Expect only `downloading` (paused in SABnzbd), or nothing at all.
+   - Shelfmark's queue shows nothing completed and not yet processed.
+   - SABnzbd's History: every job in `series`, `movies`, `books` or `audiobooks` was either
+     imported (its Organizer removes it) or is deleted now.
+   - qBittorrent: no torrent uses the `cwd-books` or `cwd-audiobooks` category. Those folders move,
+     and a torrent in them would lose its files. If one exists, let Shelfmark finish, then remove
+     the torrent (keeping its files).
+
+   **If any check fails, postpone the window.** Step 6 moves no finished downloads: what is left in
+   SABnzbd's completed category folders stays there for review.
+4. **Dronescan.** `dronescan/` was the old TV and Movies drop point, reached through the `media`
+   SMB share. The window retires it in favour of the `tv-ingest` and `movies-ingest` Ingest Folder
+   shares: one shared drop folder would have to be mounted by both Sonarr and Radarr, which breaks
+   isolation. Step 6 moves each top-level entry into `tv/ingest/` or `movies/ingest/`. Preview the
+   classification now (read-only):
+
+   ```sh
+   hostsh <<'EOF'
+   for e in "$M/dronescan"/* "$M/dronescan"/.[!.]*; do
+     [ -e "$e" ] || continue
+     if find "$e" -type f | grep -qE '[Ss][0-9]{1,2}[Ee][0-9]{1,3}'; then c=tv
+     elif basename "$e" | grep -qE '(19|20)[0-9]{2}'; then c=movies
+     else c=UNSURE; fi
+     printf '%-7s %s\n' "$c" "$(basename "$e")"
+   done
+   EOF
+   ```
+
+   A name with an episode tag (`S01E02`) is TV; otherwise a year in its name makes it a movie.
+   Correct a wrong guess, or classify an `UNSURE` entry, by writing `tv <name>` or `movies <name>`
+   (or `skip <name>`, to leave it in `dronescan/`) as a line of `$B/dronescan-classes.txt`; those
+   lines win over the guess. Nothing in the repo or in any app's settings refers to `dronescan/`
+   (only Sonarr's and Radarr's import history mention it).
 5. **Keep the PR open.** Don't merge it before step 9.
 6. **Silence alerts** in Alertmanager for the window plus a margin (for example 6h), with two
    silences:
@@ -255,30 +308,33 @@ Target layout under `$MEDIA_ROOT`:
 | Folder | From | Owner | Mounted by |
 |---|---|---|---|
 | `tv/library/` | everything now in `tv/` | sonarr | Sonarr (tree); Plex and Emby `ro` |
-| `tv/usenet/` | contents of `nzbdl/completed/Series/` | sabnzbd | SABnzbd; Sonarr (tree) |
-| `tv/torrents/` | new | qbittor | qBittorrent; Sonarr (tree) |
-| `tv/ingest/` | new | sonarr | Sonarr (tree); SMB `tv-ingest` |
+| `tv/usenet/` | new | sabnzbd | SABnzbd; Sonarr (tree) |
+| `tv/ingest/` | new, plus the TV entries of `dronescan/` | sonarr | Sonarr (tree); SMB `tv-ingest` |
 | `movies/library/` | everything now in `movies/` | radarr | Radarr (tree); Plex and Emby `ro` |
-| `movies/usenet/` | contents of `nzbdl/completed/Movies/` | sabnzbd | SABnzbd; Radarr (tree) |
-| `movies/torrents/` | new | qbittor | qBittorrent; Radarr (tree) |
-| `movies/ingest/` | new | radarr | Radarr (tree); SMB `movies-ingest` |
+| `movies/usenet/` | new | sabnzbd | SABnzbd; Radarr (tree) |
+| `movies/ingest/` | new, plus the movie entries of `dronescan/` | radarr | Radarr (tree); SMB `movies-ingest` |
 | `audiobooks/library/` | everything now in `audiobooks/` | shelfmark | Shelfmark (tree); Audiobookshelf `ro` |
-| `audiobooks/usenet/` | new (`nzbdl/completed/Audiobooks/` is empty) | sabnzbd | SABnzbd; Shelfmark (tree) |
+| `audiobooks/usenet/` | new | sabnzbd | SABnzbd; Shelfmark (tree) |
 | `audiobooks/torrents/` | new (`tordl/cwd-audiobooks/` is empty) | qbittor | qBittorrent; Shelfmark (tree) |
 | `books/library/` | everything now in `books/` (the calibre library) | cwa | CWA |
-| `books/usenet/` | contents of `nzbdl/completed/Books/` | sabnzbd | SABnzbd; Shelfmark |
+| `books/usenet/` | new | sabnzbd | SABnzbd; Shelfmark |
 | `books/torrents/` | new (`tordl/cwd-books/` is empty) | qbittor | qBittorrent; Shelfmark |
 | `books/ingest/` | `cwa-book-ingest/`, renamed | cwa | CWA; Shelfmark; SMB `books-ingest` |
 
 `nzbdl/` (SABnzbd's incomplete folder and the categories with no Organizer) and `tordl/` (torrents
-for no Library) stay, as do `podcasts/`, `music/`, `ebooks/`, `dronescan/`, `music_videos/` and the
-three recordings folders.
+for no Library) stay, as do `podcasts/`, `music/`, `ebooks/`, `music_videos/` and the three
+recordings folders. `dronescan/` is emptied into the two Ingest Folders and removed.
+
+No finished download moves: after the drain gate, anything left in `nzbdl/completed/{Series,Movies,Books}`
+is not tracked by any app. It stays in SABnzbd's own folder for review, and the empty category
+folders are removed. TV and Movies get no `torrents/` folder until Sonarr or Radarr get a torrent
+client (a follow-up); creating one then is a `mk` line plus a qBittorrent mount.
 
 First check that nothing is in the way. Every line must say `ok`:
 
 ```sh
 hostsh <<'EOF'
-for p in tv/library tv/usenet tv/torrents tv/ingest movies/library movies/usenet movies/torrents \
+for p in tv/library tv/usenet tv/ingest movies/library movies/usenet \
          movies/ingest audiobooks/library audiobooks/usenet audiobooks/torrents books/library \
          books/usenet books/torrents books/ingest; do
   [ -e "$M/$p" ] && echo "IN THE WAY: $p" || echo "ok: $p"
@@ -287,7 +343,7 @@ for d in tordl/cwd-books tordl/cwd-audiobooks nzbdl/completed/Audiobooks; do
   [ -z "$(ls -A "$M/$d" 2>/dev/null)" ] && echo "ok: $d is empty" || echo "NOT EMPTY: $d"
 done
 for d in Series Movies Books; do
-  printf 'ok: nzbdl/completed/%s has %s entries\n' "$d" "$(ls -A "$M/nzbdl/completed/$d" 2>/dev/null | wc -l)"
+  printf 'ok: nzbdl/completed/%s has %s entries (left for review)\n' "$d" "$(ls -A "$M/nzbdl/completed/$d" 2>/dev/null | wc -l)"
 done
 EOF
 ```
@@ -314,20 +370,16 @@ lib audiobooks shelfmark
 lib books cwa
 chown -v shelfmark "$M/audiobooks" >> "$LOG"    # the tree's top folder belongs to its Organizer
 
-# Usenet: finished jobs not yet imported move with their category.
+# Usenet: new category folders. Leftovers in the old ones stay in nzbdl/ (drain gate).
 mk tv/usenet sabnzbd
-find "$M/nzbdl/completed/Series" -mindepth 1 -maxdepth 1 -exec mv -v -t "$M/tv/usenet" -- {} + >> "$LOG"
 mk movies/usenet sabnzbd
-find "$M/nzbdl/completed/Movies" -mindepth 1 -maxdepth 1 -exec mv -v -t "$M/movies/usenet" -- {} + >> "$LOG"
 mk books/usenet sabnzbd
-find "$M/nzbdl/completed/Books" -mindepth 1 -maxdepth 1 -exec mv -v -t "$M/books/usenet" -- {} + >> "$LOG"
 mk audiobooks/usenet sabnzbd
-rmdir -v "$M/nzbdl/completed/Series" "$M/nzbdl/completed/Movies" "$M/nzbdl/completed/Books" \
-         "$M/nzbdl/completed/Audiobooks" >> "$LOG"
+for d in Series Movies Books Audiobooks; do
+  rmdir -v "$M/nzbdl/completed/$d" >> "$LOG" 2>/dev/null || echo "left for review: nzbdl/completed/$d"
+done
 
 # Torrents: Shelfmark's two categories were empty (checked above); new folders replace them.
-mk tv/torrents qbittor
-mk movies/torrents qbittor
 mk audiobooks/torrents qbittor
 mk books/torrents qbittor
 rmdir -v "$M/tordl/cwd-books" "$M/tordl/cwd-audiobooks" >> "$LOG"
@@ -337,14 +389,39 @@ mk tv/ingest sonarr
 mk movies/ingest radarr
 mv -v -T "$M/cwa-book-ingest" "$M/books/ingest" >> "$LOG"
 
+# Dronescan: each top-level entry goes to an Ingest Folder; $B/dronescan.moves records each move
+# (NUL-separated) for the rollback.
+if [ -d "$M/dronescan" ]; then
+  for e in "$M/dronescan"/* "$M/dronescan"/.[!.]*; do
+    [ -e "$e" ] || continue
+    n=$(basename "$e"); c=
+    [ -f "$B/dronescan-classes.txt" ] && c=$(awk -v n="$n" 'substr($0, index($0, " ") + 1) == n { print $1 }' "$B/dronescan-classes.txt")
+    if [ -z "$c" ]; then
+      if find "$e" -type f | grep -qE '[Ss][0-9]{1,2}[Ee][0-9]{1,3}'; then c=tv
+      elif printf '%s' "$n" | grep -qE '(19|20)[0-9]{2}'; then c=movies
+      else c=UNSURE; fi
+    fi
+    case "$c" in
+      tv|movies) mv -v -t "$M/$c/ingest" -- "$e" >> "$LOG"; printf '%s\0' "$c/ingest/$n" >> "$B/dronescan.moves" ;;
+      *) echo "left in dronescan ($c): $n" ;;
+    esac
+  done
+  rmdir -v "$M/dronescan" >> "$LOG" 2>/dev/null || echo "dronescan/ is not empty: see 'left in dronescan' above"
+fi
+
 wc -l "$LOG"
 for t in tv movies audiobooks books; do stat -c '%U:%G %a %n' "$M/$t" "$M/$t"/*; done
+ls -A "$M/tv/ingest" "$M/movies/ingest" | head -40
 getfacl -p -n "$M/tv/usenet" | grep default
 EOF
 ```
 
 Expect every folder in the listing to be `<owner>:media 2770`, and the default ACL
-`default:user::rwx default:group::rwx default:mask::rwx default:other::---`.
+`default:user::rwx default:group::rwx default:mask::rwx default:other::---`. Any `left in
+dronescan` line is for the operator: classify it in `$B/dronescan-classes.txt` and rerun only the
+dronescan part, or leave it (`dronescan/` then stays, with no share and no Service mounting it).
+After the window, import the dronescan entries with Sonarr's and Radarr's Manual Import (mode Move)
+from `/data/tv/ingest` and `/data/movies/ingest`, as for any SMB drop.
 
 ### 7. Change the in-app paths
 
@@ -485,9 +562,8 @@ set `create_host_path: false`.
 ```sh
 hostsh <<'EOF'
 for p in tv movies audiobooks tv/library movies/library audiobooks/library books/library books/ingest \
-         tv/usenet movies/usenet books/usenet audiobooks/usenet tv/torrents movies/torrents \
-         books/torrents audiobooks/torrents nzbdl tordl podcasts plex_recordings emby_recordings \
-         nextpvr_recordings; do
+         tv/usenet movies/usenet books/usenet audiobooks/usenet books/torrents audiobooks/torrents \
+         nzbdl tordl podcasts plex_recordings emby_recordings nextpvr_recordings; do
   [ -d "$M/$p" ] && echo "ok: $p" || echo "MISSING: $p"
 done
 EOF
@@ -502,9 +578,15 @@ doco-cd is stopped, so the merge deploys nothing yet. Merge the #543 PR on GitHu
 git fetch origin main && git checkout --detach origin/main
 grep -rnE 'ZFS_POOL_ROOT_HDD\}/media(:|$)' tn/   # expect nothing
 grep -rn 'BOOKS_UID' tn/                         # expect nothing
+export SHA=$(git rev-parse HEAD)                 # the merge commit; step 10 checks for it
 ```
 
-### 10. Start doco-cd, then everything it doesn't start
+Merge nothing else to `main` until step 10 is done: the gate expects every changed Stack to carry
+exactly this commit.
+
+### 10. Start doco-cd and gate every changed Stack
+
+Start only doco-cd:
 
 ```sh
 hostsh <<'EOF'
@@ -512,24 +594,112 @@ docker start $(docker ps -aq --filter label=com.docker.compose.project=doco-cd -
 EOF
 ```
 
-Within one poll (about 2 minutes), doco-cd redeploys the Stacks the PR changed: Plex, Emby, Sonarr,
-Radarr, SABnzbd, qBittorrent, autobrr, Shelfmark, Audiobookshelf, Calibre-Web-Automated, NextPVR
-and Ownfoil. Watch its log for a failed Deploy (a `bind source path does not exist` error means a
-folder from step 8 is missing). It doesn't touch unchanged Stacks, so then start every media
-container that is still stopped, Navidrome at least:
+Within one poll (about 2 minutes), doco-cd deploys the merge to the Stacks it changed: Plex, Emby,
+Sonarr, Radarr, SABnzbd, qBittorrent, autobrr, Shelfmark, Audiobookshelf, Calibre-Web-Automated,
+NextPVR and Ownfoil. Each Deploy recreates the Stack's containers from the new compose and starts
+them. A Deploy that fails (a `bind source path does not exist` error means a folder from step 8 is
+missing; an image pull can fail too) leaves that Stack's old, stopped containers behind, and doco-cd
+retries it with a forced recreate.
+
+An old container still has the whole-dataset mount and, after the ACL reset, nothing keeps it out of
+the other Libraries. So **start nothing by hand.** Run the gate. It waits up to 15 minutes for every
+container of every changed Stack to match the merged compose: the `cd.doco.deployment.target.sha`
+label doco-cd sets is `$SHA`; the user is the Service's UID and `media` (Calibre-Web-Automated:
+`PUID`); and its mounts under `$M` are exactly the table's, with no mount of `$M` itself. A
+container not in the table (an exporter) must mount nothing under `$M`. When time runs out, the gate
+removes every container of each Stack that still fails (`docker rm -f`), so nothing old can be
+started again.
 
 ```sh
 hostsh <<'EOF'
-for s in plex emby sonarr radarr sabnzbd qbittorrent autobrr shelfmark audiobookshelf \
-         calibre-web-automated navidrome nextpvr ownfoil; do
-  ids=$(docker ps -aq --filter "label=com.docker.compose.project=$s" --filter status=exited)
-  [ -z "$ids" ] || docker start $ids
+want='sonarr 4001:1002 tv:/data/tv:rw
+radarr 4002:1002 movies:/data/movies:rw
+sabnzbd 4003:1002 nzbdl:/data/nzbdl:rw tv/usenet:/data/tv/usenet:rw movies/usenet:/data/movies/usenet:rw books/usenet:/data/books/usenet:rw audiobooks/usenet:/data/audiobooks/usenet:rw
+qbittorrent 4007:1002 tordl:/data/tordl:rw books/torrents:/data/books/torrents:rw audiobooks/torrents:/data/audiobooks/torrents:rw
+plex 4005:1002 tv/library:/data/tv:ro movies/library:/data/movies:ro plex_recordings:/recordings:rw
+emby 4006:1002 tv/library:/data/tv:ro movies/library:/data/movies:ro emby_recordings:/recordings:rw
+shelfmark 4009:1002 audiobooks:/data/audiobooks:rw books/ingest:/cwa-book-ingest:rw books/usenet:/data/books/usenet:rw books/torrents:/data/books/torrents:rw
+audiobookshelf 4010:1002 audiobooks/library:/audiobooks:ro podcasts:/podcasts:rw
+calibre-web-automated 4008 books/ingest:/cwa-book-ingest:rw books/library:/calibre-library:rw
+nextpvr 4011:1002 nextpvr_recordings:/recordings:rw
+ownfoil 4012:1002
+autobrr 4013:1002'
+stacks='plex emby sonarr radarr sabnzbd qbittorrent autobrr shelfmark audiobookshelf calibre-web-automated nextpvr ownfoil'
+[ -n "$SHA" ] || { echo "SHA is not set (step 9)"; exit 1; }
+words() { tr ' ' '\n' | sed '/^$/d' | sort | tr '\n' ' '; }
+gate() {   # prints one FAIL line per problem; returns 1 if there was one
+  rc=0
+  for s in $stacks; do
+    ids=$(docker ps -aq --filter "label=com.docker.compose.project=$s")
+    [ -n "$ids" ] || { echo "FAIL $s: no containers"; rc=1; continue; }
+    for id in $ids; do
+      n=$(docker inspect -f '{{.Name}}' "$id"); n=${n#/}
+      w=$(printf '%s\n' "$want" | awk -v n="$n" '$1 == n')
+      sha=$(docker inspect -f '{{index .Config.Labels "cd.doco.deployment.target.sha"}}' "$id")
+      if [ "$n" = calibre-web-automated ]; then
+        user=$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$id" | sed -n 's/^PUID=//p')
+      else
+        user=$(docker inspect -f '{{.Config.User}}' "$id")
+      fi
+      mounts=$(docker inspect -f '{{range .Mounts}}{{if eq .Type "bind"}}{{println .Source .Destination .RW}}{{end}}{{end}}' "$id" |
+        awk -v m="$M" '$1 == m { print "WHOLE-DATASET:" $2 ":" $3; next }
+          index($1, m "/") == 1 { print substr($1, length(m) + 2) ":" $2 ":" ($3 == "true" ? "rw" : "ro") }' | words)
+      if [ -n "$w" ]; then
+        exp=$(printf '%s\n' "$w" | cut -d' ' -f3- | words)
+        [ "$sha" = "$SHA" ] || { echo "FAIL $s/$n: deployed revision '$sha'"; rc=1; }
+        [ "$user" = "$(printf '%s\n' "$w" | cut -d' ' -f2)" ] || { echo "FAIL $s/$n: user '$user'"; rc=1; }
+        [ "$mounts" = "$exp" ] || { echo "FAIL $s/$n: mounts '$mounts'"; rc=1; }
+      else
+        [ -z "$mounts" ] || { echo "FAIL $s/$n: mounts '$mounts'"; rc=1; }
+      fi
+    done
+  done
+  return $rc
+}
+i=0
+until out=$(gate); do
+  i=$((i + 1))
+  if [ $i -ge 30 ]; then
+    printf '%s\n' "$out"
+    for s in $(printf '%s\n' "$out" | awk '{ sub(/[\/:].*/, "", $2); print $2 }' | sort -u); do
+      ids=$(docker ps -aq --filter "label=com.docker.compose.project=$s")
+      [ -z "$ids" ] || { echo "REMOVING $s"; docker rm -f $ids; }
+    done
+    echo "GATE FAILED"; exit 1
+  fi
+  sleep 30
 done
-docker ps --format '{{.Names}} {{.Status}}' | grep -E 'plex|emby|sonarr|radarr|sabnzbd|qbittorrent|autobrr|shelfmark|audiobookshelf|calibre|navidrome|nextpvr|ownfoil'
+echo "GATE PASSED"
+docker ps -a --format '{{.Names}} {{.Status}}' | grep -E 'plex|emby|sonarr|radarr|sabnzbd|qbittorrent|autobrr|shelfmark|audiobookshelf|calibre|nextpvr|ownfoil'
 EOF
 ```
 
-Then resume SABnzbd.
+**If the gate passes,** every changed Stack runs the merged compose. Start Navidrome, the one media
+Stack the PR doesn't change (doco-cd doesn't redeploy it), after checking it still has its own
+narrow mount:
+
+```sh
+hostsh <<'EOF'
+got=$(docker inspect -f '{{.Config.User}}{{range .Mounts}}{{if eq .Type "bind"}} {{.Source}}:{{.Destination}}:{{.RW}}{{end}}{{end}}' navidrome)
+if [ "$got" = "4004:1002 $M/music/FLAC:/music:false" ]; then docker start navidrome
+else echo "navidrome: unexpected config '$got', not started"; fi
+EOF
+```
+
+Then resume SABnzbd's queue and re-enable autobrr's filters.
+
+**If the gate fails,** the Stacks it names are removed; the others run. For each removed Stack, fix
+the cause from doco-cd's log (a missing folder: create it as in step 6; a failed pull: retry), then
+have doco-cd recreate it from the merged revision with its REST API ([README](../../README.md#how-changes-reach-the-host)),
+once per Service of the Stack. `KEY` is the value of `tn/doco-cd/api_secret.sops.txt` (`sops -d`):
+
+```sh
+sudo -n docker exec prometheus wget -qO- --post-data '' --header "x-api-key: $KEY" \
+  "http://doco-cd/v1/api/project/<stack>/recreate?service=<service>"
+```
+
+Then rerun the gate. Don't create the containers any other way. If a Stack can't be fixed, leave it
+down (it has no containers to start by mistake) or [roll back](#rollback).
 
 ## Verify
 
@@ -597,6 +767,13 @@ sudo -n docker exec sonarr sh -c 'mv /data/tv/usenet/.543-handoff /data/tv/libra
 
 Expect owner 4003 (sabnzbd), group 1002 (media), mode `660`.
 
+**SABnzbd handoff cost.** SABnzbd unpacks each job straight into its category's folder
+(`/data/tv/usenet`), which is a different mount from `/data/nzbdl/incomplete`. Extracted files are
+written there directly; only files the job didn't pack in an archive cross the mounts as a copy
+instead of a rename. Measure it rather than assume it: after the first real TV grab, read the job's
+History entry and record its *Unpack* and *Moving* (or *Post-processing*) times and size in #543.
+If a typical job's moving time is large, revisit the mounts there.
+
 **Real imports.** Grab one small TV episode and one movie through Sonarr and Radarr, and one
 audiobook by torrent through Shelfmark. Before and after the audiobook:
 
@@ -653,8 +830,10 @@ After the Deploy, in the TrueNAS UI (Shares → SMB):
    Manual Import (mode Move) the file in Sonarr from `/data/tv/ingest`, or delete it.
 5. A file dropped into `books-ingest` is picked up by CWA automatically.
 
-`dronescan`, `music_videos` and `ebooks` were only reachable through the `media` share and have no
-share afterwards.
+`music_videos` and `ebooks` were only reachable through the `media` share and have no share
+afterwards, as decided. `dronescan/` is gone (step 6): drop TV into `tv-ingest` and movies into
+`movies-ingest` instead. A single shared drop folder would have to be mounted by both Sonarr and
+Radarr, which breaks isolation.
 
 ## Finish
 
@@ -669,10 +848,15 @@ share afterwards.
 Roll back if the window fails part-way, or if the Deploy shows a problem that can't be fixed
 forward. Everything stays stopped until the last step.
 
-1. **Stop** doco-cd and every media Stack (step 1). If they ran after step 10, they may have
-   downloaded new files, which `zfs rollback` would discard. In that case use route 3b.
+1. **Drain, then stop.** If the Stacks ran after step 10, first run the [drain gate](#before-the-window)
+   again (item 3): stop intake and let Sonarr, Radarr and Shelfmark import everything finished, so
+   that no finished-but-unimported job is left in a `usenet/` or `torrents/` folder whose path the
+   old compose doesn't have. Then stop doco-cd and every media Stack (step 1). Stacks that ran
+   after step 10 may have downloaded new files, which `zfs rollback` would discard; in that case
+   use route 3b.
 2. **Revert the code.** If the PR was merged, revert its merge commit on `main` (the GitHub
    *Revert* button, or `git revert -m 1 <merge-sha>`). doco-cd is stopped, so nothing deploys yet.
+   Set `export SHA=<revert-sha>` (the new head of `main`) for step 6's gate.
 3. **Restore the media dataset**, one of:
    - a. **Snapshot**, if nothing needs keeping from after step 2:
      `zfs rollback <pool>/<media-dataset>@pre-543` (inside `hostsh`). This reverts the moves,
@@ -685,14 +869,14 @@ forward. Everything stays stopped until the last step.
      set -eu
      back() { find "$M/$1" -mindepth 1 -maxdepth 1 -exec mv -v -t "$M/$2" -- {} +; }
      mv -v -T "$M/books/ingest" "$M/cwa-book-ingest"
+     # Dronescan entries go back from the Ingest Folders; one already imported is reported.
+     mkdir -p "$M/dronescan"
+     if [ -f "$B/dronescan.moves" ]; then
+       xargs -0 -n 1 sh -c 'if [ -e "$M/$1" ]; then mv -v -t "$M/dronescan" -- "$M/$1";
+         else echo "not in ingest any more (imported?): $1"; fi' sh < "$B/dronescan.moves"
+     fi
      mkdir -p "$M/nzbdl/completed/Series" "$M/nzbdl/completed/Movies" "$M/nzbdl/completed/Books" \
               "$M/nzbdl/completed/Audiobooks" "$M/tordl/cwd-books" "$M/tordl/cwd-audiobooks"
-     back tv/usenet nzbdl/completed/Series
-     back movies/usenet nzbdl/completed/Movies
-     back books/usenet nzbdl/completed/Books
-     back audiobooks/usenet nzbdl/completed/Audiobooks
-     back books/torrents tordl/cwd-books
-     back audiobooks/torrents tordl/cwd-audiobooks
      for t in tv movies books audiobooks; do
        for d in usenet torrents ingest; do
          if [ -d "$M/$t/$d" ]; then rmdir "$M/$t/$d"; fi   # fails, and stops, if not empty
@@ -704,17 +888,69 @@ forward. Everything stays stopped until the last step.
      EOF
      ```
 
-     A file someone dropped into `tv/ingest` or `movies/ingest` stops the script at `rmdir`: move
-     it into the tree's top folder and rerun from there. `setfacl --restore` resets the owner,
-     group, mode and ACL of every path in the backup, so it runs after the moves are undone. Files
-     created since keep their default-ACL modes, which grant the `media` group access as before.
+     After the drain gate the `usenet/` and `torrents/` folders are empty. A file left in one, or
+     dropped into `tv/ingest` or `movies/ingest`, stops the script at `rmdir`: import it, or move it
+     where the old layout keeps it (the matching `nzbdl/completed/` or `tordl/cwd-` folder, or the
+     tree's top folder), and rerun from there. `setfacl --restore` resets the owner, group, mode and
+     ACL of every path in the backup, so it runs after the moves are undone; it reports, and skips,
+     paths that are gone since (an imported dronescan entry). Files created since keep their
+     default-ACL modes, which grant the `media` group access as before.
 4. **Restore the volumes' owners:** inside `hostsh`, run `cd / && setfacl --restore=<file>` for
    each `$B/volume-*.acl.txt` and for `$B/ownfoil-games.acl.txt`.
 5. **Restore the app configs** from `$B/media_{sonarr,radarr,sabnzbd,qbittorrent}_config/`: copy
    back `sonarr.db*`, `radarr.db*`, `sabnzbd.ini` and `qBittorrent/categories.json`, keeping their
    owners (`cp -a`).
-6. **Start doco-cd** (step 10), which deploys the reverted compose; then start the remaining media
-   containers, resume SABnzbd, and restore the `media` SMB share if it was removed.
+6. **Start doco-cd, then gate.** Only now, with the dataset, volumes and configs restored, start
+   doco-cd (the first block of step 10). It deploys the revert to the same 12 Stacks. Start nothing
+   by hand: the new containers have the narrow mounts, which point at folders the restore removed.
+   Gate on the reverted revision with this block, which waits up to 15 minutes for every container
+   of those Stacks to carry `$SHA` (the revert) and to mount none of the new folders, and removes
+   the Stacks that don't:
+
+   ```sh
+   hostsh <<'EOF'
+   stacks='plex emby sonarr radarr sabnzbd qbittorrent autobrr shelfmark audiobookshelf calibre-web-automated nextpvr ownfoil'
+   [ -n "$SHA" ] || { echo "SHA is not set"; exit 1; }
+   gate() {
+     rc=0
+     for s in $stacks; do
+       ids=$(docker ps -aq --filter "label=com.docker.compose.project=$s")
+       [ -n "$ids" ] || { echo "FAIL $s: no containers"; rc=1; continue; }
+       for id in $ids; do
+         n=$(docker inspect -f '{{.Name}}' "$id"); n=${n#/}
+         sha=$(docker inspect -f '{{index .Config.Labels "cd.doco.deployment.target.sha"}}' "$id")
+         new=$(docker inspect -f '{{range .Mounts}}{{println .Source}}{{end}}' "$id" |
+           grep -cE "^$M/(tv|movies|books|audiobooks)/(library|usenet|torrents|ingest)(/|$)" || true)
+         [ "$new" = 0 ] || { echo "FAIL $s/$n: mounts a new folder"; rc=1; }
+         m=$(docker inspect -f '{{range .Mounts}}{{println .Source}}{{end}}' "$id" | grep -c "^$M\(/\|$\)" || true)
+         [ "$m" = 0 ] || [ "$sha" = "$SHA" ] || { echo "FAIL $s/$n: deployed revision '$sha'"; rc=1; }
+       done
+     done
+     return $rc
+   }
+   i=0
+   until out=$(gate); do
+     i=$((i + 1))
+     if [ $i -ge 30 ]; then
+       printf '%s\n' "$out"
+       for s in $(printf '%s\n' "$out" | awk '{ sub(/[\/:].*/, "", $2); print $2 }' | sort -u); do
+         ids=$(docker ps -aq --filter "label=com.docker.compose.project=$s")
+         [ -z "$ids" ] || { echo "REMOVING $s"; docker rm -f $ids; }
+       done
+       echo "GATE FAILED"; exit 1
+     fi
+     sleep 30
+   done
+   echo "GATE PASSED"
+   EOF
+   ```
+
+   If the PR was never merged, skip the revert and this gate: the stopped containers are still the
+   old compose's, so once steps 3–5 are done, start them per Stack (`docker start`), and doco-cd.
+
+   A removed Stack is recreated through doco-cd's REST API, as in step 10. Once the gate passes,
+   start Navidrome (`docker start navidrome`; its compose is the same in both revisions), resume
+   SABnzbd, re-enable autobrr's filters, and restore the `media` SMB share if it was removed.
 
 The identity changes can stay. The new users own nothing once the volumes are restored, `cwa` keeps
 UID 4008, the deleted groups owned nothing, and the old compose runs Sonarr, Radarr, SABnzbd,
