@@ -294,7 +294,7 @@ groups:
         labels:
           tier: warning
         annotations:
-          summary: "arr-queue-exporter cannot read {{ $labels.app }}'s queue"
+          summary: "{{ $labels.container }} cannot read {{ $labels.app }}'s queue"
           description: "{{ $labels.app }}'s queue API has not answered for 10 minutes; ArrImportStuck is blind."
 
   - name: host

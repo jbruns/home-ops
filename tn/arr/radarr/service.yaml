@@ -89,6 +89,43 @@ services:
       - default
       - metrics
 
+  radarr-queue-exporter:
+    # Stuck Radarr queue items (failed imports) for Prometheus: arr_queue_* with app="radarr".
+    # https://github.com/jbruns/homelab-components/tree/main/components/arr-queue-exporter
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: ghcr.io/jbruns/arr-queue-exporter:1.0.0@sha256:9846d925a879f020205b87379ca44f4d4e5d8e1db08a7cebdfcf0ec88dba9df9
+    container_name: radarr-queue-exporter
+    user: ${MEDIA_UID}:${MEDIA_GID}
+    deploy:
+      resources:
+        limits:
+          # No 30-day peak yet; the script watching both apps peaked at 17M. Re-measure and resize.
+          memory: 64M
+    read_only: true
+    depends_on:
+      radarr:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/usr/bin/python3", "-m", "arr_queue_exporter", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+      start_interval: 2s
+    environment:
+      - ARR_URL=http://radarr:7878
+      - ARR_API_KEY=${RADARR_API_KEY}
+      - ARR_APP=radarr
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: info
+      startup-order: "3"
+    networks:
+      - default
+      - metrics
+
 volumes:
   radarr_config:
     name: media_radarr_config
