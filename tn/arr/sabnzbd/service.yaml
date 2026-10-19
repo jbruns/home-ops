@@ -92,28 +92,29 @@ services:
       - metrics
 
   sabnzbd-status-exporter:
-    # Usenet provider (server) health for Prometheus; see sabnzbd_status_exporter.py.
-    # https://hub.docker.com/_/python
+    # Usenet provider (server) health for Prometheus; a Custom Component (ADR 0008).
+    # https://github.com/jbruns/homelab-components/tree/main/components/sabnzbd-status-exporter
     extends:
       file: ../../_baseline.yaml
       service: baseline
-    image: python:3.14.8-alpine3.24@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+    image: ghcr.io/jbruns/sabnzbd-status-exporter:1.0.0@sha256:51789e8903602f34f262cb64d37f6003dd7dfa72df29ea6140a6e2e7bb8b3c84
     container_name: sabnzbd-status-exporter
     user: ${MEDIA_UID}:${MEDIA_GID}
     deploy:
       resources:
         limits:
-          # 30-day peak 17M working set
+          # 30-day peak 17M working set, measured on the bind-mounted script before the image
           memory: 64M
     read_only: true
     depends_on:
       sabnzbd:
         condition: service_healthy
-    command: ["python3", "-u", "/app/sabnzbd_status_exporter.py"]
+    # Probes the exporter's own /healthz, never SABnzbd: SABnzbd being down shows as
+    # sabnzbd_status_up 0 (SabnzbdStatusDown), not as this container going unhealthy.
     healthcheck:
-      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:9712/metrics"]
+      test: ["CMD", "/usr/bin/python3", "-m", "sabnzbd_status_exporter", "healthcheck"]
       interval: 60s
-      timeout: 15s
+      timeout: 5s
       retries: 3
       start_period: 10s
       start_interval: 2s
@@ -124,8 +125,6 @@ services:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: info
       startup-order: "3"
-    volumes:
-      - ./sabnzbd_status_exporter.py:/app/sabnzbd_status_exporter.py:ro
     networks:
       - default
       - metrics
