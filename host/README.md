@@ -1,10 +1,64 @@
 # host
 
-Scripts that run on the TrueNAS Host itself. doco-cd does not deploy them; copy or run them by hand.
+What runs on the TrueNAS Host itself. doco-cd does not deploy any of it; install or run it by hand.
 
-- `startup-order.sh`: Init/Shutdown Scripts that start and stop Stacks in order. See the main
-  [README](../README.md#startup-order).
+- `startup-order.pin`: the pinned release of the startup-order Custom Component, which starts and
+  stops Stacks in order from TrueNAS Init/Shutdown Scripts (runbook below; see also the main
+  [README](../README.md#startup-order)).
 - `create_usersgroups.sh` + `identities.tsv`: the users and groups the Stacks run as (runbook below).
+
+## Runbook: install or upgrade startup-order
+
+The startup-order Custom Component lives in
+[`jbruns/homelab-components`](https://github.com/jbruns/homelab-components/tree/main/components/startup-order)
+(configuration, exit status and logs are in its README). The Host runs the release pinned in
+[`startup-order.pin`](startup-order.pin), installed at `/mnt/luna/homeops/bin/startup-order.sh`: on a pool
+dataset, so a TrueNAS update keeps it, and apart from its state and logs in `/mnt/luna/homeops/startup/`.
+Every step is safe to re-run.
+
+1. Copy `startup-order.pin` to the Host. As root, in that directory, download the pinned release and
+   install it only if its sha256 matches:
+
+   ```sh
+   . ./startup-order.pin
+   dest=/mnt/luna/homeops/bin/startup-order.sh
+   mkdir -p /mnt/luna/homeops/bin
+   curl -fsSL -o "$dest.new" \
+     "https://github.com/jbruns/homelab-components/releases/download/$STARTUP_ORDER_TAG/startup-order.sh"
+   echo "$STARTUP_ORDER_SHA256  $dest.new" | sha256sum -c - &&
+     chmod 0755 "$dest.new" && mv "$dest.new" "$dest" || rm -f "$dest.new"
+   ```
+
+   `sha256sum` prints `OK` on a match. On a mismatch it prints `FAILED`, the download is deleted and the
+   installed script is unchanged.
+2. Check that `flock` resolves: `sh -c 'command -v flock'` prints `/usr/bin/flock` (util-linux, part of
+   TrueNAS SCALE). The script needs it for every command and exits 2 without it. Init/Shutdown commands
+   run as `sh -c` with middlewared's `PATH`, the same one that finds `/usr/bin/docker`.
+3. Under System → Advanced → Init/Shutdown Scripts, have exactly these two entries:
+
+   | Type | When | Command | Timeout |
+   |---|---|---|---|
+   | Command | Post Init (`POSTINIT`) | `STARTUP_ORDER_DIR=/mnt/luna/homeops/startup sh /mnt/luna/homeops/bin/startup-order.sh start` | 60 |
+   | Command | Shutdown (`SHUTDOWN`) | `STARTUP_ORDER_DIR=/mnt/luna/homeops/startup sh /mnt/luna/homeops/bin/startup-order.sh stop` | 300 |
+
+   `start` returns at once and leaves `run` in the background, so 60 s is plenty. `stop` may wait 30 s
+   (`STARTUP_ORDER_STOP_WAIT`) for a boot run to give up, then runs one `docker stop` per level, each
+   bounded by the longest stop grace period at that level: 10 s at levels 3, 2 and 0, 60 s at level 1
+   (`mariadb`, `vaultwarden-db`). That is 120 s at worst; 300 s leaves headroom (keep it at least 180 s). Raise it if a Service
+   gets a longer `stop_grace_period`.
+4. Remove the lock directory the old in-repo script used, once no old run is left:
+   `pgrep -f startup-order.sh || rmdir /mnt/luna/homeops/startup/lock 2>/dev/null; true`.
+   The new script locks with `flock` on `run.lock`, which is never removed.
+5. Check what the next boot would do; this changes nothing:
+
+   ```sh
+   STARTUP_ORDER_DIR=/mnt/luna/homeops/startup sh /mnt/luna/homeops/bin/startup-order.sh plan
+   ```
+
+After a reboot, `shutdown.log` and `last.log` in `/mnt/luna/homeops/startup/` show what it did.
+
+To upgrade, merge the Renovate PR that bumps `startup-order.pin` (the new tag and its sha256), then run
+step 1 again. Renovate never automerges it, because the Host does not pick up the new release on its own.
 
 ## Runbook: create users and groups
 
