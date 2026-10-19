@@ -73,18 +73,43 @@ Do these in the days before; none of them changes storage.
      requests.
    - Let running downloads and post-processing finish, and let Sonarr, Radarr and Shelfmark import
      everything finished.
-   - Check that nothing is waiting. Sonarr's and Radarr's Activity → Queue show no item that is
-     completed, importing, import pending, import blocked or failed; or by API:
+   - Check that nothing is waiting. Sonarr's and Radarr's Activity → Queue must show no item that
+     is completed, importing, import pending, import blocked or failed. Check it by API too, from
+     the Host's admin shell: `curl` runs inside each app's container (the images have `curl`, not
+     `wget`), and the Host's own `python3` parses the JSON:
 
      ```sh
-     for a in sonarr:8989 radarr:7878; do n=${a%:*}
-       sudo -n docker exec "$n" sh -c "k=\$(sed -n 's:.*<ApiKey>\(.*\)</ApiKey>.*:\1:p' /config/config.xml);
-         wget -qO- --header \"X-Api-Key: \$k\" 'http://127.0.0.1:${a#*:}/api/v3/queue?pageSize=500&includeUnknownSeriesItems=true&includeUnknownMovieItems=true'" \
-         | grep -o '"trackedDownloadState":"[a-zA-Z]*"' | sort | uniq -c | sed "s/^/$n /"
-     done
+     drained() {   # drained <container> <port>: prints QUEUE EMPTY or NOT DRAINED; fails on any error
+       json=$(sudo -n docker exec "$1" sh -c '
+         k=$(sed -n "s:.*<ApiKey>\(.*\)</ApiKey>.*:\1:p" /config/config.xml)
+         curl -fsS -H "X-Api-Key: $k" "http://127.0.0.1:$0/api/v3/queue?page=1&pageSize=1000&includeUnknownSeriesItems=true&includeUnknownMovieItems=true"
+       ' "$2") || { echo "$1: CHECK FAILED (request)"; return 1; }
+       printf '%s' "$json" | python3 -c '
+     import json, sys
+     n = sys.argv[1]
+     try:
+         q = json.load(sys.stdin)
+         recs, total = q["records"], q["totalRecords"]
+     except Exception as e:
+         sys.exit(f"{n}: CHECK FAILED (bad JSON: {e})")
+     if total != len(recs):
+         sys.exit(f"{n}: CHECK FAILED (totalRecords {total}, got {len(recs)}: raise pageSize)")
+     states = {}
+     for r in recs:
+         s = r.get("trackedDownloadState", "<none>")
+         states[s] = states.get(s, 0) + 1
+     waiting = {s: c for s, c in states.items() if s != "downloading"}
+     if waiting:
+         sys.exit(f"{n}: NOT DRAINED {waiting}")
+     print(f"{n}: QUEUE EMPTY" + (f" of finished items ({total} still downloading, paused)" if total else ""))
+     ' "$1"
+     }
+     drained sonarr 8989 && drained radarr 7878
      ```
 
-     Expect only `downloading` (paused in SABnzbd), or nothing at all.
+     Every record that isn't `downloading` (`importPending`, `importBlocked`, `importing`,
+     `imported`, `failedPending`, …) fails the check, and so does an HTTP error, bad JSON or a
+     truncated page. Continue only if both lines say `QUEUE EMPTY`.
    - Shelfmark's queue shows nothing completed and not yet processed.
    - SABnzbd's History: every job in `series`, `movies`, `books` or `audiobooks` was either
      imported (its Organizer removes it) or is deleted now.
@@ -602,16 +627,19 @@ missing; an image pull can fail too) leaves that Stack's old, stopped containers
 retries it with a forced recreate.
 
 An old container still has the whole-dataset mount and, after the ACL reset, nothing keeps it out of
-the other Libraries. So **start nothing by hand.** Run the gate. It waits up to 15 minutes for every
-container of every changed Stack to match the merged compose: the `cd.doco.deployment.target.sha`
-label doco-cd sets is `$SHA`; the user is the Service's UID and `media` (Calibre-Web-Automated:
-`PUID`); and its mounts under `$M` are exactly the table's, with no mount of `$M` itself. A
-container not in the table (an exporter) must mount nothing under `$M`. When time runs out, the gate
+the other Libraries. So **start nothing by hand.** Run the gate. It waits up to 15 minutes for each
+changed Stack's application container (named like the Stack) to exist, be running (not
+restarting) and match the merged compose: the `cd.doco.deployment.target.sha` label doco-cd sets
+is `$SHA`; the user is the Service's UID and `media` (Calibre-Web-Automated: `PUID`); and its
+mounts under `$M` are exactly the table's, with no mount of `$M` itself. Any other container of the
+Stack (an exporter) must mount nothing under `$M`, and never counts as the Stack being up. A failed
+`docker inspect` is a failure too. When time runs out, the gate
 removes every container of each Stack that still fails (`docker rm -f`), so nothing old can be
 started again.
 
 ```sh
 hostsh <<'EOF'
+# <container (= Stack)> <user, CWA: PUID> <binds under $M: source relative to $M ("." = $M itself):target:rw|ro>
 want='sonarr 4001:1002 tv:/data/tv:rw
 radarr 4002:1002 movies:/data/movies:rw
 sabnzbd 4003:1002 nzbdl:/data/nzbdl:rw tv/usenet:/data/tv/usenet:rw movies/usenet:/data/movies/usenet:rw books/usenet:/data/books/usenet:rw audiobooks/usenet:/data/audiobooks/usenet:rw
@@ -624,31 +652,33 @@ calibre-web-automated 4008 books/ingest:/cwa-book-ingest:rw books/library:/calib
 nextpvr 4011:1002 nextpvr_recordings:/recordings:rw
 ownfoil 4012:1002
 autobrr 4013:1002'
-stacks='plex emby sonarr radarr sabnzbd qbittorrent autobrr shelfmark audiobookshelf calibre-web-automated nextpvr ownfoil'
-[ -n "$SHA" ] || { echo "SHA is not set (step 9)"; exit 1; }
+[ -n "$SHA" ] || { echo "SHA is not set"; exit 1; }
 words() { tr ' ' '\n' | sed '/^$/d' | sort | tr '\n' ' '; }
-gate() {   # prints one FAIL line per problem; returns 1 if there was one
+# gate: one FAIL line per problem, "FAIL <stack>[/<container>]: ..."; returns 1 if there was one.
+# Each Stack's application container has the Stack's name; it must exist, run and match $want.
+# Any other container of the Stack (an exporter) must mount nothing under $M.
+gate() {
   rc=0
-  for s in $stacks; do
-    ids=$(docker ps -aq --filter "label=com.docker.compose.project=$s")
-    [ -n "$ids" ] || { echo "FAIL $s: no containers"; rc=1; continue; }
-    for id in $ids; do
-      n=$(docker inspect -f '{{.Name}}' "$id"); n=${n#/}
-      w=$(printf '%s\n' "$want" | awk -v n="$n" '$1 == n')
-      sha=$(docker inspect -f '{{index .Config.Labels "cd.doco.deployment.target.sha"}}' "$id")
-      if [ "$n" = calibre-web-automated ]; then
-        user=$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$id" | sed -n 's/^PUID=//p')
-      else
-        user=$(docker inspect -f '{{.Config.User}}' "$id")
-      fi
-      mounts=$(docker inspect -f '{{range .Mounts}}{{if eq .Type "bind"}}{{println .Source .Destination .RW}}{{end}}{{end}}' "$id" |
-        awk -v m="$M" '$1 == m { print "WHOLE-DATASET:" $2 ":" $3; next }
-          index($1, m "/") == 1 { print substr($1, length(m) + 2) ":" $2 ":" ($3 == "true" ? "rw" : "ro") }' | words)
-      if [ -n "$w" ]; then
-        exp=$(printf '%s\n' "$w" | cut -d' ' -f3- | words)
+  for s in $(printf '%s\n' "$want" | cut -d' ' -f1); do
+    w=$(printf '%s\n' "$want" | awk -v n="$s" '$1 == n')
+    st=$(docker inspect -f '{{.State.Running}} {{.State.Restarting}} {{index .Config.Labels "com.docker.compose.project"}}' "$s" 2>/dev/null) ||
+      { echo "FAIL $s: no container named $s"; rc=1; continue; }
+    [ "$st" = "true false $s" ] || { echo "FAIL $s/$s: running, restarting, project: $st"; rc=1; }
+    for id in $(docker ps -aq --filter "label=com.docker.compose.project=$s"); do
+      meta=$(docker inspect -f '{{.Name}} {{index .Config.Labels "cd.doco.deployment.target.sha"}}' "$id") &&
+        user=$(docker inspect -f '{{.Config.User}}' "$id") &&
+        puid=$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$id" | sed -n 's/^PUID=//p') &&
+        binds=$(docker inspect -f '{{range .Mounts}}{{if eq .Type "bind"}}{{println .Source .Destination .RW}}{{end}}{{end}}' "$id") ||
+        { echo "FAIL $s: inspect $id failed"; rc=1; continue; }
+      n=${meta%% *}; n=${n#/}; sha=${meta#* }
+      [ "$n" = calibre-web-automated ] && user=$puid
+      mounts=$(printf '%s\n' "$binds" | awk -v m="$M" '
+        $1 == m { print ".:" $2 ":" ($3 == "true" ? "rw" : "ro"); next }
+        index($1, m "/") == 1 { print substr($1, length(m) + 2) ":" $2 ":" ($3 == "true" ? "rw" : "ro") }' | words)
+      if [ "$n" = "$s" ]; then
         [ "$sha" = "$SHA" ] || { echo "FAIL $s/$n: deployed revision '$sha'"; rc=1; }
         [ "$user" = "$(printf '%s\n' "$w" | cut -d' ' -f2)" ] || { echo "FAIL $s/$n: user '$user'"; rc=1; }
-        [ "$mounts" = "$exp" ] || { echo "FAIL $s/$n: mounts '$mounts'"; rc=1; }
+        [ "$mounts" = "$(printf '%s\n' "$w" | cut -d' ' -f3- | words)" ] || { echo "FAIL $s/$n: mounts '$mounts'"; rc=1; }
       else
         [ -z "$mounts" ] || { echo "FAIL $s/$n: mounts '$mounts'"; rc=1; }
       fi
@@ -903,27 +933,56 @@ forward. Everything stays stopped until the last step.
 6. **Start doco-cd, then gate.** Only now, with the dataset, volumes and configs restored, start
    doco-cd (the first block of step 10). It deploys the revert to the same 12 Stacks. Start nothing
    by hand: the new containers have the narrow mounts, which point at folders the restore removed.
-   Gate on the reverted revision with this block, which waits up to 15 minutes for every container
-   of those Stacks to carry `$SHA` (the revert) and to mount none of the new folders, and removes
-   the Stacks that don't:
+   Gate on the reverted revision. This is step 10's gate with the reverted compose's table: every
+   application container must exist, run, carry `$SHA` (the revert) and have its old user and its
+   old mounts under `$M`, Ownfoil and autobrr included; after 15 minutes, the Stacks that don't are
+   removed:
 
    ```sh
    hostsh <<'EOF'
-   stacks='plex emby sonarr radarr sabnzbd qbittorrent autobrr shelfmark audiobookshelf calibre-web-automated nextpvr ownfoil'
+   # The reverted compose: <container (= Stack)> <user, CWA: PUID> <binds under $M ("." = $M itself)>
+   want='sonarr 4001:1002 .:/data:rw
+   radarr 4002:1002 .:/data:rw
+   sabnzbd 4003:1002 nzbdl:/data/nzbdl:rw
+   qbittorrent 4007:1002 tordl:/data/tordl:rw
+   plex 4005:1002 .:/data:ro plex_recordings:/recordings:rw
+   emby 4006:1002 tv:/data/tv:ro movies:/data/movies:ro emby_recordings:/recordings:rw
+   shelfmark 4008:1002 cwa-book-ingest:/cwa-book-ingest:rw audiobooks:/audiobooks:rw tordl/cwd-books:/data/tordl/cwd-books:rw tordl/cwd-audiobooks:/data/tordl/cwd-audiobooks:rw nzbdl/completed/Books:/data/nzbdl/completed/Books:rw nzbdl/completed/Audiobooks:/data/nzbdl/completed/Audiobooks:rw
+   audiobookshelf 4008:1002 audiobooks:/audiobooks:ro podcasts:/podcasts:rw
+   calibre-web-automated 4008 cwa-book-ingest:/cwa-book-ingest:rw books:/calibre-library:rw
+   nextpvr 568:1002 nextpvr_recordings:/recordings:rw
+   ownfoil 568:1002
+   autobrr 568:1002'
    [ -n "$SHA" ] || { echo "SHA is not set"; exit 1; }
+   words() { tr ' ' '\n' | sed '/^$/d' | sort | tr '\n' ' '; }
+   # gate: one FAIL line per problem, "FAIL <stack>[/<container>]: ..."; returns 1 if there was one.
+   # Each Stack's application container has the Stack's name; it must exist, run and match $want.
+   # Any other container of the Stack (an exporter) must mount nothing under $M.
    gate() {
      rc=0
-     for s in $stacks; do
-       ids=$(docker ps -aq --filter "label=com.docker.compose.project=$s")
-       [ -n "$ids" ] || { echo "FAIL $s: no containers"; rc=1; continue; }
-       for id in $ids; do
-         n=$(docker inspect -f '{{.Name}}' "$id"); n=${n#/}
-         sha=$(docker inspect -f '{{index .Config.Labels "cd.doco.deployment.target.sha"}}' "$id")
-         new=$(docker inspect -f '{{range .Mounts}}{{println .Source}}{{end}}' "$id" |
-           grep -cE "^$M/(tv|movies|books|audiobooks)/(library|usenet|torrents|ingest)(/|$)" || true)
-         [ "$new" = 0 ] || { echo "FAIL $s/$n: mounts a new folder"; rc=1; }
-         m=$(docker inspect -f '{{range .Mounts}}{{println .Source}}{{end}}' "$id" | grep -c "^$M\(/\|$\)" || true)
-         [ "$m" = 0 ] || [ "$sha" = "$SHA" ] || { echo "FAIL $s/$n: deployed revision '$sha'"; rc=1; }
+     for s in $(printf '%s\n' "$want" | cut -d' ' -f1); do
+       w=$(printf '%s\n' "$want" | awk -v n="$s" '$1 == n')
+       st=$(docker inspect -f '{{.State.Running}} {{.State.Restarting}} {{index .Config.Labels "com.docker.compose.project"}}' "$s" 2>/dev/null) ||
+         { echo "FAIL $s: no container named $s"; rc=1; continue; }
+       [ "$st" = "true false $s" ] || { echo "FAIL $s/$s: running, restarting, project: $st"; rc=1; }
+       for id in $(docker ps -aq --filter "label=com.docker.compose.project=$s"); do
+         meta=$(docker inspect -f '{{.Name}} {{index .Config.Labels "cd.doco.deployment.target.sha"}}' "$id") &&
+           user=$(docker inspect -f '{{.Config.User}}' "$id") &&
+           puid=$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$id" | sed -n 's/^PUID=//p') &&
+           binds=$(docker inspect -f '{{range .Mounts}}{{if eq .Type "bind"}}{{println .Source .Destination .RW}}{{end}}{{end}}' "$id") ||
+           { echo "FAIL $s: inspect $id failed"; rc=1; continue; }
+         n=${meta%% *}; n=${n#/}; sha=${meta#* }
+         [ "$n" = calibre-web-automated ] && user=$puid
+         mounts=$(printf '%s\n' "$binds" | awk -v m="$M" '
+           $1 == m { print ".:" $2 ":" ($3 == "true" ? "rw" : "ro"); next }
+           index($1, m "/") == 1 { print substr($1, length(m) + 2) ":" $2 ":" ($3 == "true" ? "rw" : "ro") }' | words)
+         if [ "$n" = "$s" ]; then
+           [ "$sha" = "$SHA" ] || { echo "FAIL $s/$n: deployed revision '$sha'"; rc=1; }
+           [ "$user" = "$(printf '%s\n' "$w" | cut -d' ' -f2)" ] || { echo "FAIL $s/$n: user '$user'"; rc=1; }
+           [ "$mounts" = "$(printf '%s\n' "$w" | cut -d' ' -f3- | words)" ] || { echo "FAIL $s/$n: mounts '$mounts'"; rc=1; }
+         else
+           [ -z "$mounts" ] || { echo "FAIL $s/$n: mounts '$mounts'"; rc=1; }
+         fi
        done
      done
      return $rc
@@ -949,7 +1008,7 @@ forward. Everything stays stopped until the last step.
    old compose's, so once steps 3–5 are done, start them per Stack (`docker start`), and doco-cd.
 
    A removed Stack is recreated through doco-cd's REST API, as in step 10. Once the gate passes,
-   start Navidrome (`docker start navidrome`; its compose is the same in both revisions), resume
+   start Navidrome with step 10's checked block (its compose is the same in both revisions), resume
    SABnzbd, re-enable autobrr's filters, and restore the `media` SMB share if it was removed.
 
 The identity changes can stay. The new users own nothing once the volumes are restored, `cwa` keeps
