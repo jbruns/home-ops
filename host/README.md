@@ -38,13 +38,13 @@ Every step is safe to re-run.
 
    | Type | When | Command | Timeout |
    |---|---|---|---|
-   | Command | Post Init (`POSTINIT`) | `STARTUP_ORDER_DIR=/mnt/luna/homeops/startup sh /mnt/luna/homeops/bin/startup-order.sh start` | 30 |
-   | Command | Shutdown (`SHUTDOWN`) | `STARTUP_ORDER_DIR=/mnt/luna/homeops/startup sh /mnt/luna/homeops/bin/startup-order.sh stop` | 180 |
+   | Command | Post Init (`POSTINIT`) | `STARTUP_ORDER_DIR=/mnt/luna/homeops/startup sh /mnt/luna/homeops/bin/startup-order.sh start` | 60 |
+   | Command | Shutdown (`SHUTDOWN`) | `STARTUP_ORDER_DIR=/mnt/luna/homeops/startup sh /mnt/luna/homeops/bin/startup-order.sh stop` | 300 |
 
-   `start` returns at once and leaves `run` in the background, so 30 s is plenty. `stop` may wait 30 s
+   `start` returns at once and leaves `run` in the background, so 60 s is plenty. `stop` may wait 30 s
    (`STARTUP_ORDER_STOP_WAIT`) for a boot run to give up, then runs one `docker stop` per level, each
    bounded by the longest stop grace period at that level: 10 s at levels 3, 2 and 0, 60 s at level 1
-   (`mariadb`, `vaultwarden-db`). That is 120 s at worst, so 180 s leaves headroom. Raise it if a Service
+   (`mariadb`, `vaultwarden-db`). That is 120 s at worst; 300 s leaves headroom (keep it at least 180 s). Raise it if a Service
    gets a longer `stop_grace_period`.
 4. Remove the lock directory the old in-repo script used, once no old run is left:
    `pgrep -f startup-order.sh || rmdir /mnt/luna/homeops/startup/lock 2>/dev/null; true`.
