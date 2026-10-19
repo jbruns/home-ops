@@ -58,7 +58,7 @@ A Service that takes over a Downloader's finished file, directly or through an I
 _Avoid_: arr, *arr, manager
 
 **Ingest Folder**:
-A folder outside a Library through which its Organizer takes over finished files that the Requester, not the Downloader, passes on (Calibre-Web-Automated's, which Shelfmark fills with Books).
+A folder outside a Library through which its Organizer takes over finished files that the Requester, not the Downloader, passes on (Calibre-Web-Automated's, which Shelfmark fills with Books; the `tv-ingest`, `movies-ingest` and `books-ingest` SMB shares, which people fill).
 _Avoid_: Drop folder, watch folder, import folder
 
 **Media Server**:

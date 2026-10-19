@@ -52,7 +52,14 @@ services:
       traefik.http.services.sonarr.loadbalancer.server.port: 8989
     volumes:
       - sonarr_config:/config
-      - ${ZFS_POOL_ROOT_HDD}/media:/data
+      # Media mounts never create their source (ADR 0009): a missing folder fails the Deploy
+      # instead of becoming a root-owned empty folder.
+      # TV Organizer: the whole TV tree as one mount, so imports into library/ are renames.
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/media/tv
+        target: /data/tv
+        bind:
+          create_host_path: false
     networks:
       - default
       - downloads

@@ -62,9 +62,16 @@ step 1 again. Renovate never automerges it, because the Host does not pick up th
 
 ## Runbook: create users and groups
 
-The identities are listed in [`identities.tsv`](identities.tsv): the `media` group (gid 1002) and
-one user and group per Service that needs a fixed id (sonarr, radarr, sabnzbd, navidrome, plex,
-emby: 4001-4006), each user also in `media`. To change the set, edit only that file.
+The identities are listed in [`identities.tsv`](identities.tsv): the `media` group (gid 1002), one
+user per media app Service (4001-4013) with `media` as its primary group and no other groups, and
+the no-login `media` user (1001) that owns files added over SMB before #543. There are no
+per-Service groups: access inside a Library tree comes from `media` (see
+[0552](../docs/research/0552-unix-identities.md)). To change the set, edit only that file.
+
+The script only creates what is missing. It never renames, re-groups or deletes, so those are done
+by hand in the TrueNAS UI (Credentials), for example renaming `books` to `cwa` before a run, moving
+an existing user's primary group, deleting an unused group or turning off a user's SMB access. The
+#543 cutover lists each one in its [runbook](../docs/runbooks/0543-library-isolation.md).
 
 1. Copy `create_usersgroups.sh` and `identities.tsv` to the Host, side by side.
 2. As root, preview what would change:

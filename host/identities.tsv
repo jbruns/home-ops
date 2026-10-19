@@ -7,17 +7,23 @@
 # Users get no password, home or login shell, and no SMB access.
 # Names use letters, digits, '_', '.' and '-'; they are passed to cli as quoted strings.
 
-group  media      1002  true
-group  sonarr     4001  false
-group  radarr     4002  false
-group  sabnzbd    4003  false
-group  navidrome  4004  false
-group  plex       4005  false
-group  emby       4006  false
+# One group, media, is every media Service user's primary group; access inside a Library tree
+# comes from it (docs/research/0552-unix-identities.md). One user per media app Service, for
+# attribution. Rename books (4008) to cwa in the TrueNAS UI before running the script.
+group  media           1002  false
 
-user   sonarr     4001  sonarr     media
-user   radarr     4002  radarr     media
-user   sabnzbd    4003  sabnzbd    media
-user   navidrome  4004  navidrome  media
-user   plex       4005  plex       media
-user   emby       4006  emby       media
+user   sonarr          4001  media  -
+user   radarr          4002  media  -
+user   sabnzbd         4003  media  -
+user   navidrome       4004  media  -
+user   plex            4005  media  -
+user   emby            4006  media  -
+user   qbittor         4007  media  -
+user   cwa             4008  media  -
+user   shelfmark       4009  media  -
+user   audiobookshelf  4010  media  -
+user   nextpvr         4011  media  -
+user   ownfoil         4012  media  -
+user   autobrr         4013  media  -
+# The no-login owner of files people added over SMB before #543; no Service runs as it.
+user   media           1001  media  -

@@ -10,9 +10,9 @@ services:
     container_name: shelfmark
     # Started as the data's owner, the entrypoint takes its non-root path (no chown, no gosu), so
     # no caps. That path needs a writable TMP_DIR and no entrypoint log under /var/log.
-    user: ${BOOKS_UID}:${MEDIA_SHARED_GID}
+    user: ${SHELFMARK_UID}:${MEDIA_SHARED_GID}
     tmpfs:
-      - /tmp/shelfmark:uid=${BOOKS_UID},gid=${MEDIA_SHARED_GID},mode=0700
+      - /tmp/shelfmark:uid=${SHELFMARK_UID},gid=${MEDIA_SHARED_GID},mode=0700
     healthcheck:
       test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8084/api/health"]
       interval: 30s
@@ -41,10 +41,13 @@ services:
       # Organizer for Audiobooks (ADR 0009): a folder per book, as Audiobookshelf needs outside the
       # Library root; {Author}/{Title} alone merges an author's books into one item.
       # Environment values override (and lock) the in-app settings.
-      - DESTINATION_AUDIOBOOK=/audiobooks
+      - DESTINATION_AUDIOBOOK=/data/audiobooks/library
       - FILE_ORGANIZATION_AUDIOBOOK=organize
       - TEMPLATE_AUDIOBOOK_ORGANIZE={Author}/{Title}/{Title}
-      - HARDLINK_TORRENTS_AUDIOBOOK=true
+      # Copy, never hardlink, from torrents/: a hardlink would leave the seeding Downloader a writable
+      # link to the Library file; on ZFS the copy should be a block clone. Books never hardlink into the Ingest Folder.
+      - HARDLINK_TORRENTS_AUDIOBOOK=false
+      - HARDLINK_TORRENTS=false
     env_file: ./shelfmark.sops.env
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
@@ -77,15 +80,31 @@ services:
       traefik.http.services.shelfmark.loadbalancer.server.port: 8084
     volumes:
       - cwa-downloader_config:/config
-      # Books: Shelfmark passes each file into CWA's Ingest Folder; CWA organizes the Books Library.
-      - ${ZFS_POOL_ROOT_HDD}/media/cwa-book-ingest:/cwa-book-ingest
-      # Audiobooks: separate mounts, so hardlinks become copies and moves copy-then-delete until the
-      # one-tree layout (ADR 0009, #543).
-      - ${ZFS_POOL_ROOT_HDD}/media/audiobooks:/audiobooks
-      - ${ZFS_POOL_ROOT_HDD}/media/tordl/cwd-books:/data/tordl/cwd-books
-      - ${ZFS_POOL_ROOT_HDD}/media/tordl/cwd-audiobooks:/data/tordl/cwd-audiobooks
-      - ${ZFS_POOL_ROOT_HDD}/media/nzbdl/completed/Books:/data/nzbdl/completed/Books
-      - ${ZFS_POOL_ROOT_HDD}/media/nzbdl/completed/Audiobooks:/data/nzbdl/completed/Audiobooks
+      # Media mounts never create their source (ADR 0009): a missing folder fails the Deploy
+      # instead of becoming a root-owned empty folder.
+      # Audiobooks Organizer: the whole Audiobooks tree as one mount, so imports from usenet/ are
+      # renames. Paths match the Downloaders' (/data/audiobooks/{usenet,torrents}): no path mapping.
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/media/audiobooks
+        target: /data/audiobooks
+        bind:
+          create_host_path: false
+      # Books Requester: the Downloaders' books folders and CWA's Ingest Folder, never the Books Library.
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/media/books/ingest
+        target: /cwa-book-ingest
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/media/books/usenet
+        target: /data/books/usenet
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/media/books/torrents
+        target: /data/books/torrents
+        bind:
+          create_host_path: false
     networks:
       - default
       - proxy

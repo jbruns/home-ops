@@ -62,8 +62,27 @@ services:
     volumes:
       - plex_config:/config
       - plex_transcode:/transcode
-      - ${ZFS_POOL_ROOT_HDD}/media:/data:ro
-      - ${ZFS_POOL_ROOT_HDD}/media/plex_recordings:/recordings
+      # Media mounts never create their source (ADR 0009): a missing folder fails the Deploy
+      # instead of becoming a root-owned empty folder.
+      # Media Server: reads the Libraries it presents at the same container paths as before (no
+      # rescan) and organizes only its recordings Library.
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/media/tv/library
+        target: /data/tv
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/media/movies/library
+        target: /data/movies
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/media/plex_recordings
+        target: /recordings
+        bind:
+          create_host_path: false
     networks:
       - default
       - proxy

@@ -23,7 +23,7 @@ services:
           # 30-day peak 293M
           memory: 512M
     environment:
-      - PUID=${BOOKS_UID}
+      - PUID=${CWA_UID}
       - PGID=${MEDIA_SHARED_GID}
       - TZ=${TZ}
     labels:
@@ -71,8 +71,20 @@ services:
       traefik.http.services.calibre-web-automated.loadbalancer.server.port: 8083
     volumes:
       - calibre-web-automated_config:/config
-      - ${ZFS_POOL_ROOT_HDD}/media/cwa-book-ingest:/cwa-book-ingest
-      - ${ZFS_POOL_ROOT_HDD}/media/books:/calibre-library
+      # Media mounts never create their source (ADR 0009): a missing folder fails the Deploy
+      # instead of becoming a root-owned empty folder.
+      # Books Organizer: its Ingest Folder and the Books Library. calibre imports by copying, so the
+      # two separate mounts cost nothing (ADR 0009).
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/media/books/ingest
+        target: /cwa-book-ingest
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/media/books/library
+        target: /calibre-library
+        bind:
+          create_host_path: false
     networks:
       - default
       - proxy

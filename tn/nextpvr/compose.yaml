@@ -7,7 +7,7 @@ services:
       service: baseline
     image: nextpvr/nextpvr_amd64:stable@sha256:79841be624d5719153ac7d2303c55fe671aa7d6feed3eaeb4020d5e418f00546
     container_name: nextpvr
-    user: ${MEDIA_UID}:${MEDIA_SHARED_GID}
+    user: ${NEXTPVR_UID}:${MEDIA_SHARED_GID}
     deploy:
       resources:
         limits:
@@ -50,7 +50,14 @@ services:
     volumes:
       - nextpvr_config:/config
       - nextpvr_buffer:/buffer
-      - ${ZFS_POOL_ROOT_HDD}/media/nextpvr_recordings:/recordings
+      # Media mounts never create their source (ADR 0009): a missing folder fails the Deploy
+      # instead of becoming a root-owned empty folder.
+      # Organizes only its recordings Library.
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/media/nextpvr_recordings
+        target: /recordings
+        bind:
+          create_host_path: false
     networks:
       - default
       - proxy
