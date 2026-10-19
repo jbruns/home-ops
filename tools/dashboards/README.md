@@ -18,7 +18,7 @@ Standard library only.
 
 - `--out DIR`: the dashboards folder to write or check (default `tn/monitoring/grafana/dashboards`).
 
-Datasources are referenced by the fixed uids in `tn/monitoring/grafana/provisioning/datasources.sops.yml`.
+Datasources are referenced by fixed uids; see Grafana in the [root README](../../README.md).
 
 ## Test
 

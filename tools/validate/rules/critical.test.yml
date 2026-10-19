@@ -1,0 +1,264 @@
+rule_files:
+  - /etc/prometheus/recording-rules.yml
+  - /etc/prometheus/alerting-rules.yml
+evaluation_interval: 1m
+# Alerts read recording rules from other groups; evaluate those first so timings are deterministic.
+group_eval_order: [prometheus_node_exporter_rules, traefik_services, availability]
+tests:
+  - name: TargetDown preserves the Service Tier and Stack and excludes Probe scrape failures
+    interval: 1m
+    input_series:
+      - series: up{job="traefik",tier="critical",stack="edge"}
+        values: 0+0x5 1+0x2
+      - series: up{job="probe",tier="critical",stack="edge"}
+        values: 0+0x8
+      - series: up{job="dependency",tier="warning",stack="external"}
+        values: 0+0x8
+    promql_expr_test:
+      - expr: &target sum by (alertname, tier, stack, job) (ALERTS{alertname="TargetDown",alertstate="firing"})
+        eval_time: 4m
+        exp_samples: []
+      - expr: *target
+        eval_time: 5m
+        exp_samples:
+          - labels: '{alertname="TargetDown",tier="critical",stack="edge",job="traefik"}'
+            value: 1
+      - expr: *target
+        eval_time: 6m
+        exp_samples: []
+
+  - name: ProbeFailed covers HTTP TCP and IdP Probes with routing and inhibition labels
+    interval: 1m
+    input_series:
+      - series: probe_success{job="probe",container="vaultwarden",tier="critical",stack="vaultwarden"}
+        values: 0+0x3 1+0x2
+      - series: probe_success{job="probe-tcp",container="plex",tier="warning",stack="plex"}
+        values: 0+0x3 1+0x2
+      - series: probe_success{job="probe-idp",auth="forward",container="sonarr",tier="warning",stack="sonarr"}
+        values: 0+0x3 1+0x2
+      - series: probe_success{job="internet",tier="warning",stack="monitoring"}
+        values: 0+0x6
+    promql_expr_test:
+      - expr: &probe sum by (alertname, tier, stack, container, job, auth) (ALERTS{alertname="ProbeFailed",alertstate="firing"})
+        eval_time: 2m
+        exp_samples: []
+      - expr: *probe
+        eval_time: 3m
+        exp_samples:
+          - labels: '{alertname="ProbeFailed",tier="critical",stack="vaultwarden",container="vaultwarden",job="probe"}'
+            value: 1
+          - labels: '{alertname="ProbeFailed",tier="warning",stack="plex",container="plex",job="probe-tcp"}'
+            value: 1
+          - labels: '{alertname="ProbeFailed",tier="warning",stack="sonarr",container="sonarr",job="probe-idp",auth="forward"}'
+            value: 1
+      - expr: *probe
+        eval_time: 4m
+        exp_samples: []
+
+  - name: DependencyDown requires every dependent to fail and preserves inhibition labels
+    interval: 1m
+    input_series:
+      - series: probe_success{job="dependency",from="app-a",to="database",kind="internal",container="database",tier="critical",stack="app"}
+        values: 0+0x6
+      - series: probe_success{job="dependency",from="app-b",to="database",kind="internal",container="database",tier="critical",stack="app"}
+        values: 0+0x5 1+0x2
+    promql_expr_test:
+      - expr: &dependency sum by (alertname, tier, stack, to, kind, container) (ALERTS{alertname="DependencyDown",alertstate="firing"})
+        eval_time: 4m
+        exp_samples: []
+      - expr: *dependency
+        eval_time: 5m
+        exp_samples:
+          - labels: '{alertname="DependencyDown",tier="critical",stack="app",to="database",kind="internal",container="database"}'
+            value: 1
+      - expr: *dependency
+        eval_time: 6m
+        exp_samples: []
+
+  - name: ContainerDown waits past last-seen threshold and restores routing labels
+    interval: 1m
+    input_series:
+      - series: container_last_seen{name="vaultwarden",container_label_tier="critical",container_label_com_docker_compose_project="vaultwarden",container_label_com_docker_compose_service="vaultwarden"}
+        values: 0+60x1 60+0x3 360+60x2
+    promql_expr_test:
+      - expr: &container sum by (alertname, tier, stack, name) (ALERTS{alertname="ContainerDown",alertstate="firing"})
+        eval_time: 4m
+        exp_samples: []
+      - expr: *container
+        eval_time: 5m
+        exp_samples:
+          - labels: '{alertname="ContainerDown",tier="critical",stack="vaultwarden",name="vaultwarden"}'
+            value: 1
+      - expr: *container
+        eval_time: 6m
+        exp_samples: []
+
+  - name: ContainerDown uses the newest container across a recreate
+    interval: 1m
+    input_series:
+      - series: container_last_seen{name="old",container_label_tier="critical",container_label_com_docker_compose_project="app",container_label_com_docker_compose_service="web"}
+        values: 0 stale
+      - series: container_last_seen{name="new",container_label_tier="critical",container_label_com_docker_compose_project="app",container_label_com_docker_compose_service="web"}
+        values: _ _ 120+60x5
+    promql_expr_test:
+      - expr: *container
+        eval_time: 5m
+        exp_samples: []
+
+  - name: ContainerRestarting needs more than two changes and retains the Critical Tier
+    interval: 1m
+    input_series:
+      - series: container_start_time_seconds{name="vaultwarden",container_label_tier="critical",container_label_com_docker_compose_project="vaultwarden"}
+        values: 0 60 120 180+0x20
+      - series: container_start_time_seconds{name="exporter",container_label_tier="info",container_label_com_docker_compose_project="monitoring"}
+        values: 0+60x23
+    promql_expr_test:
+      - expr: &restarting sum by (alertname, tier, stack, name) (ALERTS{alertname="ContainerRestarting",alertstate="firing"})
+        eval_time: 2m
+        exp_samples: []
+      - expr: *restarting
+        eval_time: 3m
+        exp_samples:
+          - labels: '{alertname="ContainerRestarting",tier="critical",stack="vaultwarden",name="vaultwarden"}'
+            value: 1
+      - expr: *restarting
+        eval_time: 17m
+        exp_samples: []
+
+  - name: ContainerOOMKilled reacts to an event and clears when it leaves the window
+    interval: 1m
+    input_series:
+      - series: container_oom_events_total{name="vaultwarden",container_label_tier="critical",container_label_com_docker_compose_project="vaultwarden"}
+        values: 0 1+0x20
+      - series: container_oom_events_total{name="exporter",container_label_tier="info",container_label_com_docker_compose_project="monitoring"}
+        values: 0 1+0x20
+    promql_expr_test:
+      - expr: &oom sum by (alertname, tier, stack, name) (ALERTS{alertname="ContainerOOMKilled",alertstate="firing"})
+        eval_time: 0m
+        exp_samples: []
+      - expr: *oom
+        eval_time: 1m
+        exp_samples:
+          - labels: '{alertname="ContainerOOMKilled",tier="critical",stack="vaultwarden",name="vaultwarden"}'
+            value: 1
+      - expr: *oom
+        eval_time: 16m
+        exp_samples: []
+
+  - name: IdpOutpostDisconnected preserves the IdP Dependency inhibition labels
+    interval: 1m
+    input_series:
+      - series: authentik_outpost_connection{container="idp-outpost",tier="critical",stack="edge"}
+        values: 0+0x5 1+0x2
+    promql_expr_test:
+      - expr: &outpost sum by (alertname, tier, stack, container) (ALERTS{alertname="IdpOutpostDisconnected",alertstate="firing"})
+        eval_time: 4m
+        exp_samples: []
+      - expr: *outpost
+        eval_time: 5m
+        exp_samples:
+          - labels: '{alertname="IdpOutpostDisconnected",tier="critical",stack="edge",container="idp-outpost"}'
+            value: 1
+      - expr: *outpost
+        eval_time: 6m
+        exp_samples: []
+
+  - name: IdpForwardAuthFailing requires every forward-auth Probe and ignores native OIDC
+    interval: 1m
+    input_series:
+      - series: probe_success{job="probe-idp",auth="forward",container="sonarr"}
+        values: 0+0x5
+      - series: probe_success{job="probe-idp",auth="forward",container="radarr"}
+        values: 0+0x3 1+0x3
+      - series: probe_success{job="probe-idp",auth="oidc",container="nextcloud"}
+        values: 0+0x7
+    promql_expr_test:
+      - expr: &forward sum by (alertname, tier, stack, container) (ALERTS{alertname="IdpForwardAuthFailing",alertstate="firing"})
+        eval_time: 2m
+        exp_samples: []
+      - expr: *forward
+        eval_time: 3m
+        exp_samples:
+          - labels: '{alertname="IdpForwardAuthFailing",tier="critical",stack="edge",container="idp-outpost"}'
+            value: 1
+      - expr: *forward
+        eval_time: 4m
+        exp_samples: []
+
+  - name: DatastoreDown promotes exporter Info to Critical and carries the container name
+    interval: 1m
+    input_series:
+      - series: mysql_up{datastore="mariadb",container="mariadb-exporter",tier="info",stack="nextcloud"}
+        values: 0+0x2 1+0x2
+    promql_expr_test:
+      - expr: &datastore sum by (alertname, tier, stack, name) (ALERTS{alertname="DatastoreDown",alertstate="firing"})
+        eval_time: 1m
+        exp_samples: []
+      - expr: *datastore
+        eval_time: 2m
+        exp_samples:
+          - labels: '{alertname="DatastoreDown",tier="critical",stack="nextcloud",name="mariadb"}'
+            value: 1
+      - expr: *datastore
+        eval_time: 3m
+        exp_samples: []
+
+  - name: ZpoolNotOnline ignores healthy pools and recovers when the degraded state clears
+    interval: 1m
+    input_series:
+      - series: node_zfs_zpool_state{zpool="tank",state="degraded"}
+        values: 1+0x1 0+0x2
+      - series: node_zfs_zpool_state{zpool="healthy",state="online"}
+        values: 1+0x4
+    promql_expr_test:
+      - expr: &pool sum by (alertname, tier, stack) (ALERTS{alertname="ZpoolNotOnline",alertstate="firing"})
+        eval_time: 0m
+        exp_samples: []
+      - expr: *pool
+        eval_time: 1m
+        exp_samples:
+          - labels: '{alertname="ZpoolNotOnline",tier="critical",stack="host"}'
+            value: 1
+      - expr: *pool
+        eval_time: 2m
+        exp_samples: []
+
+  - name: BackupStale uses the newest snapshot per kind and the strict 26-hour boundary
+    interval: 1m
+    input_series:
+      - series: restic_backup_timestamp{snapshot_paths="/volumes/app"}
+        values: 0+0x1561 93720+60x3
+      - series: restic_backup_timestamp{snapshot_paths="/volumes/retired"}
+        values: -100000+0x1565
+      - series: restic_backup_timestamp{snapshot_paths="/databases/app"}
+        values: 0+60x1565
+    promql_expr_test:
+      - expr: &stale sum by (alertname, tier, stack, kind) (ALERTS{alertname="BackupStale",alertstate="firing"})
+        eval_time: 26h
+        exp_samples: []
+      - expr: *stale
+        eval_time: 26h1m
+        exp_samples:
+          - labels: '{alertname="BackupStale",tier="critical",stack="ops",kind="volumes"}'
+            value: 1
+      - expr: *stale
+        eval_time: 26h2m
+        exp_samples: []
+
+  - name: BackupMetricsMissing waits three hours and resolves when snapshots return
+    interval: 1m
+    input_series:
+      - series: restic_backup_timestamp{snapshot_paths="/volumes/app"}
+        values: _x181 10860+60x3
+    promql_expr_test:
+      - expr: &missing sum by (alertname, tier, stack) (ALERTS{alertname="BackupMetricsMissing",alertstate="firing"})
+        eval_time: 179m
+        exp_samples: []
+      - expr: *missing
+        eval_time: 180m
+        exp_samples:
+          - labels: '{alertname="BackupMetricsMissing",tier="critical",stack="ops"}'
+            value: 1
+      - expr: *missing
+        eval_time: 181m
+        exp_samples: []

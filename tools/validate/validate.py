@@ -14,8 +14,8 @@ Subcommands:
               tn/_baseline.yaml meets the Baseline or carries a baseline.exempt.<item> reason, and its
               routers follow ADR 0006 (names, health and Client Paths, Protected Probes)
   isolation   tn/doco-cd and tn/_baseline.yaml changes ship in their own PR
-  monitoring  promtool / amtool / loki / alloy checks, using the image versions the Stacks deploy;
-              Grafana dashboards JSON matches its generator (tools/dashboards/dashboards.py)
+  monitoring  full config checks and behavioral rule tests with the images the Stacks deploy;
+              Grafana provisioning boots, dashboard generator parity and PromQL/LogQL checks
   cloudflare  the Cloudflare ranges Traefik trusts are valid and identical everywhere they appear
 
 Usage: validate.py [--root DIR] [--path NAME=PATH ...] [check ...]   (no check: run them all)
@@ -23,6 +23,7 @@ Usage: validate.py [--root DIR] [--path NAME=PATH ...] [check ...]   (no check: 
   --path  override one of PATHS below, relative to --root or absolute
 """
 import argparse
+import base64
 import os
 import re
 import shutil
@@ -30,6 +31,14 @@ import json
 import subprocess
 import sys
 import tempfile
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from collections.abc import Callable
+from contextlib import contextmanager
+from dataclasses import dataclass
+from string import Template
 from pathlib import Path
 
 import yaml
@@ -47,6 +56,8 @@ PATHS = {
     "blackbox": "tn/monitoring/blackbox-exporter/blackbox.yml",
     "dashboards": "tools/dashboards/dashboards.py",
     "dashboards-json": "tn/monitoring/grafana/dashboards",
+    "grafana": "tn/monitoring/grafana",
+    "rule-tests": "tools/validate/rules",
     "traefik": "tn/edge/traefik/service.yaml",
 }
 # ${VAR} but not $${VAR} (Compose's escape for a literal "$")
@@ -450,13 +461,434 @@ def docker_run(image: str, mounts: dict[Path, str], entrypoint: str, *args: str)
         print(f"ok: {label}")
 
 
+class MonitoringError(Exception):
+    """A failed external check, reported as a validation failure."""
+
+
+def base_ref() -> str:
+    """The ref changes are compared against: CI sets VALIDATE_BASE to the PR base."""
+    return os.environ.get("VALIDATE_BASE") or "origin/main"
+
+
+def base_files(*paths: Path, pattern: str = "") -> dict[str, str]:
+    """Tracked files under paths at base_ref() whose repo-relative name matches pattern."""
+    base = base_ref()
+    listed = subprocess.run(["git", "ls-tree", "-r", "--name-only", base, "--", *map(_rel, paths)],
+                            cwd=ROOT, capture_output=True, text=True)
+    if listed.returncode:
+        raise MonitoringError(f"cannot read {base}: {listed.stderr.strip()}")
+    return {name: subprocess.check_output(["git", "show", f"{base}:{name}"], cwd=ROOT, text=True)
+            for name in listed.stdout.splitlines() if re.search(pattern, name)}
+
+
+def render_dummy(text: str) -> tuple[str, set[str]]:
+    """Substitute every $VAR with a dummy value; return the text and the names it used."""
+    template = Template(text)
+    names = set(template.get_identifiers())
+    return template.substitute({
+        name: "http://example.invalid" if name.endswith("_URL") else "ci-dummy" for name in names
+    }), names
+
+
+def docker_output(*args: str, stderr: bool = False) -> str:
+    result = subprocess.run(["docker", *args], capture_output=True, text=True)
+    if result.returncode:
+        raise MonitoringError(f"docker {' '.join(args)} failed:\n{result.stdout}{result.stderr}")
+    return (result.stdout + (result.stderr if stderr else "")).strip()
+
+
+def container_logs(container: str) -> str:
+    return docker_output("logs", container, stderr=True)
+
+
+def http_get(url: str, *, auth: tuple[str, str] | None = None) -> bytes:
+    headers = {"Authorization": "Basic " + base64.b64encode(":".join(auth).encode()).decode()} if auth else {}
+    request = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return response.read()
+    except urllib.error.HTTPError as exc:
+        raise MonitoringError(f"HTTP {exc.code}: {exc.read().decode(errors='replace')}") from exc
+
+
+@contextmanager
+def monitoring_service(image: str, mounts: dict[Path, str], port: int, ready: str, *args: str,
+                       healthy: Callable[[bytes], bool] = lambda body: True,
+                       env: dict[str, str] | None = None, user: str = "0:0"):
+    """An isolated, disposable instance; publish only a random loopback port."""
+    cmd = ["create", "--label", "startup-order=skip", "--user", user,
+           "--publish", f"127.0.0.1::{port}"]
+    for src, dst in mounts.items():
+        cmd += ["--volume", f"{src}:{dst}"]
+    for key, value in (env or {}).items():
+        cmd += ["--env", f"{key}={value}"]
+    container = docker_output(*cmd, image, *args)
+    try:
+        docker_output("start", container)
+        address = docker_output("port", container, f"{port}/tcp")
+        base = f"http://127.0.0.1:{address.rsplit(':', 1)[1]}"
+        deadline = time.monotonic() + 120
+        while True:
+            try:
+                if healthy(http_get(base + ready)):
+                    break
+            except (urllib.error.URLError, ConnectionError, TimeoutError, MonitoringError):
+                pass  # Connection refused / 503 is expected during startup.
+            if docker_output("inspect", "--format", "{{.State.Running}}", container) == "false":
+                raise MonitoringError(f"{image} exited before becoming healthy")
+            if time.monotonic() >= deadline:
+                raise MonitoringError(f"{image} did not become healthy:\n{container_logs(container)}")
+            time.sleep(0.25)
+        yield base, container
+    except MonitoringError as exc:
+        raise MonitoringError(f"{exc}\n{image} logs:\n{container_logs(container)}") from exc
+    finally:
+        docker_output("rm", "--force", "--volumes", container)
+
+
+GRAFANA_MACROS = {
+    "__rate_interval": "5m", "__interval": "1m", "__auto": "5m", "__range": "1h",
+    "__interval_ms": "60000", "__range_s": "3600", "__range_ms": "3600000",
+}
+GRAFANA_VAR = re.compile(r"\$(?:\{([A-Za-z_]\w*)(?::(\w+))?\}|([A-Za-z_]\w*))")
+
+
+def interpolate_query(expr: str, variables: dict[str, dict]) -> str:
+    def replace(match: re.Match) -> str:
+        name = match[1] or match[3]
+        if name in GRAFANA_MACROS:
+            return GRAFANA_MACROS[name]
+        if name not in variables:
+            raise MonitoringError(f"undeclared Grafana variable {match[0]}")
+        if match[2] not in (None, "regex", "raw", "csv", "pipe"):
+            raise MonitoringError(f"unsupported Grafana variable format {match[0]}")
+        return "5m" if variables[name]["type"] == "interval" else "ci_value"
+    return GRAFANA_VAR.sub(replace, expr)
+
+
+def variable_expression(expr: str) -> str:
+    """Translate Grafana's classic variable wrappers to an equivalent parseable expression."""
+    if expr.startswith("query_result(") and expr.endswith(")"):
+        return expr[len("query_result("):-1]
+    if expr.startswith("label_values(") and expr.endswith(")"):
+        args = expr[len("label_values("):-1].rsplit(",", 1)
+        if not re.fullmatch(r"\s*[a-zA-Z_]\w*\s*", args[-1]):
+            raise MonitoringError(f"invalid label_values label: {args[-1]}")
+        return args[0] if len(args) == 2 else '{__name__=~".+"}'
+    if expr.startswith("label_names(") and expr.endswith(")"):
+        return expr[len("label_names("):-1] or '{__name__=~".+"}'
+    return expr
+
+
+@dataclass(frozen=True)
+class DashboardQuery:
+    file: Path
+    dashboard: str
+    location: str
+    kind: str  # the datasource type: prometheus or loki
+    expr: str  # Grafana variables and macros replaced, ready to parse
+    original: str
+
+
+def dashboard_queries(dashboard: dict, sources: list[dict], file: Path) -> list[DashboardQuery]:
+    """Check all datasource references and collect panel, variable and annotation queries."""
+    variables = {v["name"]: v for v in dashboard.get("templating", {}).get("list", [])}
+    by_uid = {s["uid"]: s for s in sources}
+    default = next((s["uid"] for s in sources if s.get("isDefault")), None)
+    queries = []
+
+    def source_type(ref):
+        uid = ref.get("uid") if isinstance(ref, dict) else ref
+        uid = uid or default
+        if uid in ("-- Grafana --", "-- Mixed --", "__expr__"):
+            return None
+        if uid and uid.startswith("$"):
+            name = uid.removeprefix("${").removesuffix("}") if uid.startswith("${") else uid[1:]
+            variable = variables.get(name, {})
+            if variable.get("type") != "datasource":
+                raise MonitoringError(f"unresolved datasource uid {uid}")
+            kind = variable["query"]
+            regex = variable.get("regex", "").strip("/")
+            matches = [s for s in sources if s["type"] == kind and
+                       (not regex or re.search(regex, s["name"]))]
+            if not matches:
+                raise MonitoringError(f"datasource variable {uid} matches no provisioned datasource")
+            return kind
+        if uid not in by_uid:
+            raise MonitoringError(f"unknown datasource uid {uid!r}")
+        kind = by_uid[uid]["type"]
+        if isinstance(ref, dict) and ref.get("type") not in (None, kind):
+            raise MonitoringError(f"datasource {uid} has type {kind}, not {ref['type']}")
+        return kind
+
+    def collect(item, location, inherited=None, variable=False):
+        ref = item.get("datasource", inherited)
+        expr = item.get("expr")
+        if variable:
+            expr = item.get("query")
+            if isinstance(expr, dict):
+                expr = expr.get("query")
+        try:
+            kind = source_type(ref) if ref is not None or expr or variable else None
+            if expr:
+                if kind not in ("prometheus", "loki"):
+                    raise MonitoringError(f"query has unsupported datasource {kind!r}")
+                parsed = interpolate_query(expr, variables)
+                if variable and kind == "prometheus":
+                    parsed = variable_expression(parsed)
+                queries.append(DashboardQuery(file, dashboard["title"], location, kind, parsed, expr))
+        except (MonitoringError, re.error) as exc:
+            detail = f"; query {expr!r}" if expr else ""
+            fail(f"{dashboard['title']} / {location}: {exc}{detail}", file)
+        for target in item.get("targets", []):
+            collect(target, f"{location} / {target.get('refId', '?')}", ref)
+        for panel in item.get("panels", []):
+            collect(panel, f"{location} / {panel.get('title', '?')}", ref)
+
+    for variable in variables.values():
+        if variable["type"] == "query":
+            collect(variable, f"variable {variable['name']}", variable=True)
+    for annotation in dashboard.get("annotations", {}).get("list", []):
+        collect(annotation, f"annotation {annotation.get('name', '?')}")
+    for panel in dashboard.get("panels", []):
+        collect(panel, f"panel {panel.get('title', '?')}")
+    return queries
+
+
+def check_dashboard_queries(prom_image: str, loki_image: str, sources: list[dict]) -> None:
+    queries = [query for file in sorted(path("dashboards-json").glob("*.json"))
+               for query in dashboard_queries(json.loads(file.read_text()), sources, file)]
+    if not queries:
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        config = Path(tmp) / "empty-prometheus.yml"
+        config.write_text("global: {}\nscrape_configs: []\n")
+        with monitoring_service(prom_image, {config: "/etc/prometheus/prometheus.yml:ro"},
+                                9090, "/-/ready", "--config.file=/etc/prometheus/prometheus.yml",
+                                "--storage.tsdb.path=/tmp/prometheus") as (prom_url, _):
+            with monitoring_service(loki_image, {path("loki") / "loki.yaml": "/etc/loki/loki.yaml:ro"},
+                                    3100, "/ready", "-config.file=/etc/loki/loki.yaml") as (loki_url, _):
+                for query in queries:
+                    endpoint = (prom_url + "/api/v1/query" if query.kind == "prometheus" else
+                                loki_url + "/loki/api/v1/format_query")
+                    try:
+                        result = json.loads(http_get(endpoint + "?" + urllib.parse.urlencode({"query": query.expr})))
+                        if result.get("status") != "success":
+                            raise MonitoringError(f"unexpected query response: {result}")
+                    except (MonitoringError, urllib.error.URLError, ConnectionError, TimeoutError) as exc:
+                        fail(f"{query.dashboard} / {query.location}: {query.kind} query {query.original!r} failed: {exc}",
+                             query.file)
+    print(f"checked {len(queries)} Grafana queries with deployed Prometheus and Loki")
+
+
+def provisioning_sources(document: object) -> list[dict]:
+    if not isinstance(document, dict) or not isinstance(document.get("datasources"), list):
+        raise MonitoringError("Grafana provisioning: expected a datasources list")
+    sources = []
+    for source in document["datasources"]:
+        if not isinstance(source, dict) or any(
+                not isinstance(source.get(key), str) or not source[key] for key in ("uid", "name", "type")):
+            raise MonitoringError("Grafana provisioning: every datasource needs a uid, name and type")
+        sources.append(source)
+    return sources
+
+
+def datasource_document(text: str) -> tuple[dict, set[str]]:
+    """Render like Grafana: substitute $VAR in YAML values only, never in comments."""
+    rendered, names = render_dummy(yaml.safe_dump(yaml.safe_load(text)))
+    document = yaml.safe_load(rendered)
+    provisioning_sources(document)
+    return document, names
+
+
+def grafana_provisions() -> list[dict]:
+    """Datasource provisioning to boot in turn: the base ref's (or the current one again), then the
+    current one. The current template's placeholders must all be set in datasources.sops.env."""
+    grafana = path("grafana")
+    provisioning = grafana / "provisioning/datasources.yml"
+    current, names = datasource_document(provisioning.read_text())
+    if missing := names - env_keys(grafana / "datasources.sops.env"):
+        raise MonitoringError(f"Grafana datasource environment is missing {', '.join(sorted(missing))}")
+    if not provisioning.is_relative_to(ROOT):
+        warn("Grafana upgrade check cannot read external --path provisioning from the Git base")
+        return [current, current]
+    previous = base_files(provisioning).get(_rel(provisioning))
+    return [datasource_document(previous)[0] if previous else current, current]
+
+
+GRAFANA_ADMIN = ("ci-admin", "ci-password")
+GRAFANA_ERROR = re.compile(r"level=(error|fatal|critical)|\"level\":\"(error|fatal|critical)\"")
+
+
+def boot_grafana(provisions: list[dict]) -> None:
+    """Boot the deployed Grafana once per provisioning on one database, so a uid/name migration
+    collision fails as it would on the Host, not just clean-install errors."""
+    grafana = path("grafana")
+    image = deployed_image(grafana / INCLUDED_NAME, "grafana")
+    expected = {json.loads(f.read_text())["uid"] for f in path("dashboards-json").glob("*.json")}
+    env = {
+        "GF_SECURITY_ADMIN_USER": GRAFANA_ADMIN[0], "GF_SECURITY_ADMIN_PASSWORD": GRAFANA_ADMIN[1],
+        "GF_LOG_LEVEL": "info", "GF_ANALYTICS_REPORTING_ENABLED": "false",
+        "GF_ANALYTICS_CHECK_FOR_UPDATES": "false", "GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES": "false",
+        "GF_PLUGINS_PREINSTALL_DISABLED": "true",
+        "GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH": "/etc/grafana/dashboards/overview.json",
+    }
+    with tempfile.TemporaryDirectory() as tmp:
+        datasources = Path(tmp) / "datasources.yml"
+        data = Path(tmp) / "data"
+        data.mkdir()
+        mounts = {
+            datasources: "/etc/grafana/provisioning/datasources/home-ops.yaml:ro",
+            grafana / "provisioning/dashboards.yml": "/etc/grafana/provisioning/dashboards/home-ops.yaml:ro",
+            path("dashboards-json"): "/etc/grafana/dashboards:ro",
+            data: "/var/lib/grafana",
+        }
+        for provision in provisions:
+            datasources.write_text(yaml.safe_dump(provision))
+            with monitoring_service(image, mounts, 3000, "/api/health", env=env,
+                                    healthy=lambda body: json.loads(body).get("database") == "ok",
+                                    user=f"{os.getuid()}:{os.getgid()}") as (url, container):
+                actual = json.loads(http_get(url + "/api/datasources", auth=GRAFANA_ADMIN))
+                if {s["uid"] for s in actual} != {s["uid"] for s in provisioning_sources(provision)}:
+                    raise MonitoringError("Grafana did not provision the expected datasource uids")
+                dashboards = json.loads(http_get(url + "/api/search?type=dash-db&limit=5000", auth=GRAFANA_ADMIN))
+                if {d["uid"] for d in dashboards} != expected:
+                    raise MonitoringError("Grafana did not provision every dashboard")
+                for line in container_logs(container).splitlines():
+                    if "provision" in line.lower() and GRAFANA_ERROR.search(line):
+                        raise MonitoringError(f"Grafana provisioning error: {line}")
+    print("ok: Grafana provisioning (clean database and upgrade/repeat boot)")
+
+
+def check_grafana(prom_image: str, loki_image: str) -> None:
+    provisions = grafana_provisions()
+    boot_grafana(provisions)
+    check_dashboard_queries(prom_image, loki_image, provisioning_sources(provisions[-1]))
+
+
+def rule_definitions(documents: list[dict]) -> dict[str, dict]:
+    return {
+        rule.get("alert") or rule["record"]: {"rule": rule, "interval": group.get("interval")}
+        for document in documents for group in document.get("groups", []) for rule in group["rules"]
+    }
+
+
+def rule_cases(documents: list[dict], name: str, alert: bool) -> list[dict]:
+    """The test groups exercising one rule, cut down to its assertions and without the group name."""
+    pattern = re.compile(r'alertname\s*=\s*"' + re.escape(name) + '"')
+    cases = []
+    for document in documents:
+        for case in document.get("tests", []):
+            expressions = [test for test in case.get("promql_expr_test", [])
+                           if (pattern.search(test["expr"]) if alert else test["expr"] == name)]
+            alerts = [test for test in case.get("alert_rule_test", []) if test["alertname"] == name]
+            if expressions or alerts:
+                cases.append({
+                    **{key: value for key, value in case.items()
+                       if key not in ("name", "promql_expr_test", "alert_rule_test")},
+                    "promql_expr_test": expressions, "alert_rule_test": alerts,
+                    "evaluation_interval": document.get("evaluation_interval"),
+                    "group_eval_order": document.get("group_eval_order"),
+                })
+    return cases
+
+
+DURATION_UNITS = {"ms": 0.001, "s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800, "y": 31536000}
+# Every alert carries these; Alertmanager routes and inhibits on them (alerting-rules.yml).
+ROUTING_LABELS = {"tier", "stack"}
+
+
+def duration_seconds(text: object) -> float:
+    return sum(int(n) * DURATION_UNITS[unit] for n, unit in re.findall(r"(\d+)(ms|s|m|h|d|w|y)", str(text)))
+
+
+def label_names(labels: str) -> set[str]:
+    return set(re.findall(r"([A-Za-z_]\w*)\s*=", re.sub(r'"(?:[^"\\]|\\.)*"', '""', labels)))
+
+
+def alert_evaluations(case: dict) -> list[tuple[float, list[set[str]]]]:
+    """Each evaluation of a rule_cases() case: its time and the label names of each firing alert."""
+    return [(duration_seconds(test["eval_time"]), [label_names(s["labels"]) for s in test.get("exp_samples") or []])
+            for test in case["promql_expr_test"]] + [
+           (duration_seconds(test["eval_time"]), [set(a.get("exp_labels") or {}) for a in test.get("exp_alerts") or []])
+            for test in case["alert_rule_test"]]
+
+
+def alert_test_problems(name: str, rule: dict, cases: list[dict]) -> list[str]:
+    groups = [alert_evaluations(case) for case in cases]
+    evaluations = [e for group in groups for e in group]
+    problems = []
+    if not any(alerts for _, alerts in evaluations) or (
+            name != "Watchdog" and all(alerts for _, alerts in evaluations)):
+        problems.append("add firing and nonfiring promtool test cases")
+    if any(not ROUTING_LABELS <= labels for _, alerts in evaluations for labels in alerts):
+        problems.append(f"assert {' and '.join(sorted(ROUTING_LABELS))} in every firing expectation")
+    # Firing at t2 means active since t2 - for; nonfiring at t1 >= t2 - for proves the pending period.
+    hold = duration_seconds(rule.get("for", ""))
+    if hold and not any(not quiet and alerts and 0 < t2 - t1 <= hold
+                        for group in groups for t1, quiet in group for t2, alerts in group):
+        problems.append(f"pin the for: {rule['for']} boundary with a nonfiring evaluation "
+                        "at most that long before a firing one")
+    return problems
+
+
+def check_rule_tests(image: str, rule_files: list[Path], mounts: dict[Path, str]) -> None:
+    rules = rule_definitions([yaml.safe_load(f.read_text()) or {} for f in rule_files])
+    if not rules:
+        return
+    suites = sorted(path("rule-tests").glob("*.test.yml"))
+    documents = [yaml.safe_load(f.read_text()) for f in suites]
+    for name, definition in rules.items():
+        alert = "alert" in definition["rule"]
+        cases = rule_cases(documents, name, alert)
+        if alert:
+            for problem in alert_test_problems(name, definition["rule"], cases):
+                fail(f"{name}: {problem}", path("rule-tests"))
+        elif not cases:
+            fail(f"{name}: add a recording-rule assertion to a promtool suite", path("rule-tests"))
+
+    # Require the relevant behavioral case to change whenever a rule changes, not just any test file.
+    if all(f.is_relative_to(ROOT) for f in [*rule_files, path("rule-tests")]):
+        try:
+            previous = base_files(path("prometheus"), path("rule-tests"), pattern=r"rules.*\.yml$")
+        except MonitoringError as exc:
+            fail(f"rule test freshness: {exc}")
+        else:
+            old_suites = [yaml.safe_load(t) or {} for n, t in previous.items() if n.endswith(".test.yml")]
+            old_rules = rule_definitions([yaml.safe_load(t) or {} for n, t in previous.items()
+                                          if not n.endswith(".test.yml")])
+            for name, definition in rules.items():
+                alert = "alert" in definition["rule"]
+                if (definition != old_rules.get(name) and
+                        rule_cases(documents, name, alert) == rule_cases(old_suites, name, alert)):
+                    fail(f"{name}: rule changed since {base_ref()}; update its promtool behavioral case",
+                         path("rule-tests"))
+    else:
+        warn("rule test freshness cannot compare external --path inputs to the Git base")
+    if suites:
+        docker_run(image, {**mounts, path("rule-tests"): "/tests"}, "promtool", "test", "rules",
+                   *[f"/tests/{f.name}" for f in suites])
+
+
 def check_monitoring() -> None:
     prom = path("prometheus")
     prom_image = deployed_image(prom / INCLUDED_NAME, "prometheus")
     rule_files = sorted(prom.glob("*rules*.yml"))
     prom_mounts = {f: f"/etc/prometheus/{f.name}" for f in [prom / "prometheus.yml", *rule_files]}
-    docker_run(prom_image, prom_mounts, "promtool", "check", "config", "--syntax-only", "/etc/prometheus/prometheus.yml")
+    with tempfile.TemporaryDirectory() as tmp:
+        dummy = Path(tmp)
+        config_mounts = dict(prom_mounts)
+        rendered = dummy / "dependencies.yml"
+        rendered.write_text(render_dummy((prom / "dependencies.yml").read_text())[0])
+        config_mounts[rendered] = "/etc/prometheus/sd/dependencies.yml"
+        compose = yaml.safe_load((prom / INCLUDED_NAME).read_text())
+        for name in compose.get("secrets", {}):
+            secret = dummy / name
+            secret.write_text("ci-dummy-secret\n")
+            config_mounts[secret] = f"/run/secrets/{name}"
+        docker_run(prom_image, config_mounts, "promtool", "check", "config", "/etc/prometheus/prometheus.yml")
     docker_run(prom_image, prom_mounts, "promtool", "check", "rules", *[f"/etc/prometheus/{f.name}" for f in rule_files])
+    check_rule_tests(prom_image, rule_files, {f: f"/etc/prometheus/{f.name}" for f in rule_files})
 
     am = path("alertmanager")
     if (am / "config.yml") in tracked_files():
@@ -480,6 +912,10 @@ def check_monitoring() -> None:
         fail(result.stdout.strip() or result.stderr.strip(), generator)
     else:
         print(f"ok: grafana dashboards match {generator.name}")
+    try:
+        check_grafana(prom_image, loki_image)
+    except (MonitoringError, urllib.error.URLError, ConnectionError, TimeoutError) as exc:
+        fail(f"monitoring: {exc}")
 
 
 def check_cloudflare() -> None:
@@ -499,7 +935,7 @@ def check_isolation() -> None:
     Stacks in the same commit deploy across the handover. A change to the Baseline ships without
     Stack changes: it recreates every Service that extends it, so its Deploy should be about it
     alone (ADR 0007). Compares against VALIDATE_BASE (CI sets the PR base) or origin/main."""
-    base = os.environ.get("VALIDATE_BASE") or "origin/main"
+    base = base_ref()
     r = subprocess.run(["git", "diff", "--name-only", f"{base}...HEAD"], cwd=ROOT, capture_output=True, text=True)
     if r.returncode != 0:
         fail(f"isolation: cannot diff against {base}: {r.stderr.strip()}")
