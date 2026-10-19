@@ -132,6 +132,19 @@ groups:
           summary: "{{ $labels.container }} kept a temporary Compose name"
           description: "{{ $labels.container }} ({{ $labels.stack }}/{{ $labels.service }}) has been running under Compose's temporary name for 10 minutes; recreate {{ $labels.service }}."
 
+      # The exporter answers but the Docker API behind docker-socket-proxy does not (proxy down, or
+      # rejecting its /v1.44 calls). The exporter being down is TargetDown's job; the proxy being
+      # down is ContainerDown's, which inhibits this (alertmanager).
+      - alert: ContainerHealthExporterBlind
+        expr: container_health_up == 0
+        for: 5m
+        labels:
+          tier: warning
+          name: docker-socket-proxy
+        annotations:
+          summary: container-health-exporter cannot read the Docker API
+          description: "container-health-exporter has not read the Docker API through docker-socket-proxy for 5 minutes; Uptime of Services that are not Exposed Services and ContainerLeftoverName are blind."
+
       - alert: ContainerRestarting
         expr: |
           sum by (name, container_label_tier, container_label_com_docker_compose_project) (
