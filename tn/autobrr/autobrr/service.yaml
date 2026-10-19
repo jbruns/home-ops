@@ -54,6 +54,7 @@ services:
       - autobrr_config:/config
     networks:
       - default
+      - downloads
       - proxy
 
 volumes:

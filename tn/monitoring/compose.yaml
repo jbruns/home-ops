@@ -14,6 +14,11 @@ networks:
   proxy:
     name: proxy
     external: true
+  # Requesters, Downloaders and Organizers; owned by the edge Stack. blackbox-exporter joins
+  # it to probe a Downloader the way an Organizer reaches it (ADR-0002).
+  downloads:
+    name: downloads
+    external: true
 
 include:
   - ./alertmanager/service.yaml

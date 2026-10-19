@@ -52,15 +52,6 @@
       "groupName": "prometheus"
     },
     {
-      "description": "home-operations arr images",
-      "matchPackageNames": [
-        "ghcr.io/home-operations/radarr",
-        "ghcr.io/home-operations/sonarr",
-        "ghcr.io/home-operations/sabnzbd"
-      ],
-      "groupName": "arr"
-    },
-    {
       "description": "Automerge patch updates",
       "matchUpdateTypes": [
         "patch"

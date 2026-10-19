@@ -1,7 +1,8 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json
 services:
   # Probes (GLOSSARY.md): outside-in checks of each Exposed Service, the way a user reaches it.
-  # Targets come from `probe.url` / `probe.tcp` labels via Prometheus docker_sd (prometheus.yml).
+  # Targets come from `probe.url` / `probe.tcp` labels via Prometheus docker_sd (prometheus.yml),
+  # and Dependency Probes from prometheus/dependencies.yml.
   blackbox-exporter:
     # https://github.com/prometheus/blackbox_exporter
     extends:
@@ -31,6 +32,8 @@ services:
       startup-order: "3"
     volumes:
       - ./blackbox.yml:/etc/blackbox_exporter/blackbox.yml:ro
-    # Probes take the public path out through the Stack's default network.
+    # Probes take the public path out through the Stack's default network. Dependency Probes of a
+    # Downloader go over downloads, the network its Organizers use (prometheus/dependencies.yml).
     networks:
       - default
+      - downloads

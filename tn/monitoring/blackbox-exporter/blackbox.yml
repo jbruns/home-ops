@@ -1,4 +1,5 @@
-# Modules a Service picks with its `probe.module` label (default http_2xx).
+# Modules a Service picks with its `probe.module` label (default http_2xx), and that a
+# Dependency Probe names in `module` (prometheus/dependencies.yml).
 modules:
   http_2xx:
     prober: http
@@ -28,3 +29,21 @@ modules:
   tcp_connect:
     prober: tcp
     timeout: 8s
+
+  # SABnzbd `api?mode=version`: unauthenticated, answers {"version": ...}.
+  sabnzbd:
+    prober: http
+    timeout: 8s
+    http:
+      preferred_ip_protocol: ip4
+      fail_if_body_not_matches_regexp: ['"version"']
+
+  # A newznab search as the dependent sends it. nzbhydra2 reports failures as an <error> body
+  # with HTTP 200, and `t=caps` kept answering through the 2026-10-17 H2 outage.
+  newznab:
+    prober: http
+    timeout: 25s
+    http:
+      preferred_ip_protocol: ip4
+      fail_if_body_matches_regexp: ['<error ']
+      fail_if_body_not_matches_regexp: ['<channel>']

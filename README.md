@@ -38,12 +38,14 @@ pin updates, selection overrides, and recovery.
 | `edge` | Traefik, CrowdSec, nginx (catch-all) |
 | `ops` | stack-back (backups), Portainer (viewer here; still deploys asotbz/ops Stacks) |
 | `doco-cd` | doco-cd (self-updating), Apprise for deploy notifications |
-| `monitoring` | Prometheus, Alertmanager, Grafana, Loki, Alloy, blackbox-exporter (Probes), docker-socket-proxy, cAdvisor, node-exporter, dcgm-exporter, restic-exporter, backup-coverage, container-health-exporter |
+| `monitoring` | Prometheus, Alertmanager, Grafana, Loki, Alloy, blackbox-exporter (Probes, Dependency Probes), docker-socket-proxy, cAdvisor, node-exporter, dcgm-exporter, restic-exporter, backup-coverage, container-health-exporter |
 | `nextcloud` | Nextcloud (+ cron), MariaDB (+ mysqld_exporter), Valkey (+ redis_exporter) |
 | `vaultwarden` | Vaultwarden, its own MariaDB (+ mysqld_exporter) |
 | `open-webui` | Open WebUI, Ollama |
 | `syncthing` | Syncthing |
-| `arr` | Sonarr, Radarr (+ queue exporter), SABnzbd (+ Usenet server status exporter), qBittorrent, autobrr, dependency-probe (Dependency Probes) |
+| `sonarr`, `radarr` | One Organizer each (+ exportarr, queue exporter) |
+| `sabnzbd` | SABnzbd (+ exportarr, Usenet server status exporter) |
+| `qbittorrent`, `autobrr` | One Service each |
 | `plex`, `emby`, `nextpvr`, `navidrome`, `tracearr` | One media Service each |
 
 ### Shared networks
@@ -54,6 +56,7 @@ Each Stack keeps its Datastores on its own `default` network. Only these network
 |---|---|---|
 | `proxy` (172.30.0.0/24; dynamic .128/25) | `edge` | Traefik and every Exposed Service |
 | `metrics` (172.29.0.0/24) | `monitoring` | Prometheus and the exporters it scrapes |
+| `downloads` | `edge` | sonarr, radarr, sabnzbd, qbittorrent, autobrr, and blackbox-exporter for Dependency Probes |
 | `backup` | `ops` | stack-back and the databases it dumps |
 
 Other Stacks declare these networks `external: true`, so `edge`, `monitoring` and `ops` must come up first on a fresh Host. Before that, other Stacks' deploys fail and doco-cd retries them.

@@ -10,9 +10,12 @@
 #   from/to  dependent and Dependency Service names
 #   kind     internal (a Service on the Host) | external
 #   tier     the highest Tier among the Dependency's dependents; the same on every edge to it
-#   stack    where the alert is grouped: the dependents' Stack
-#   prober   blackbox in the dependents' Stack, on its default network + metrics
-#   module   a module in that prober's blackbox.yml
+#   stack    where the alert is grouped; the same on every edge to it, so DependencyDown fires once:
+#            an internal Dependency's own Stack; an external one's dependents' Stack, or `external`
+#            when they span several
+#   prober   monitoring's blackbox-exporter, on the network that gives it the dependent's path:
+#            its default network for an external URL, downloads for a Downloader (ADR-0002)
+#   module   a module in blackbox-exporter/blackbox.yml
 #   container  internal only: the Dependency's container, so its own ProbeFailed inhibits DependencyDown
 
 # nzbhydra2: a real search in the dependent's own categories (t=caps survived the 2026-10-17
@@ -20,9 +23,9 @@
 # Probe spends no meaningful share of a tight allowance; cachetime=15 bounds it to 4 searches/h per edge.
 # Per-indexer health is nzbhydra2's own concern (its host's Prometheus).
 - targets: ['${NZBHYDRA_URL}/api?t=tvsearch&cat=5030,5040&limit=1&indexers=NZBGeek,nzbplanet,omgwtfnzbs&cachetime=15&apikey=${NZBHYDRA_API_KEY}']
-  labels: {from: sonarr, to: nzbhydra2, kind: external, tier: warning, stack: arr, prober: 'dependency-probe-arr:9115', module: newznab}
+  labels: {from: sonarr, to: nzbhydra2, kind: external, tier: warning, stack: external, prober: 'blackbox-exporter:9115', module: newznab}
 - targets: ['${NZBHYDRA_URL}/api?t=movie&cat=2000&limit=1&indexers=NZBGeek,nzbplanet,omgwtfnzbs&cachetime=15&apikey=${NZBHYDRA_API_KEY}']
-  labels: {from: radarr, to: nzbhydra2, kind: external, tier: warning, stack: arr, prober: 'dependency-probe-arr:9115', module: newznab}
+  labels: {from: radarr, to: nzbhydra2, kind: external, tier: warning, stack: external, prober: 'blackbox-exporter:9115', module: newznab}
 
 # The IdP, off this Host. Warning although its dependent is Critical: with the IdP down, signed-in
 # sessions keep working and only new sign-ins to Protected Services fail. A broken outpost is the
@@ -32,6 +35,6 @@
   labels: {from: idp-outpost, to: idp, kind: external, tier: warning, stack: edge, prober: 'blackbox-exporter:9115', module: http_2xx}
 
 - targets: ['http://sabnzbd:8080/api?mode=version']
-  labels: {from: sonarr, to: sabnzbd, kind: internal, container: sabnzbd, tier: warning, stack: arr, prober: 'dependency-probe-arr:9115', module: sabnzbd}
+  labels: {from: sonarr, to: sabnzbd, kind: internal, container: sabnzbd, tier: warning, stack: sabnzbd, prober: 'blackbox-exporter:9115', module: sabnzbd}
 - targets: ['http://sabnzbd:8080/api?mode=version']
-  labels: {from: radarr, to: sabnzbd, kind: internal, container: sabnzbd, tier: warning, stack: arr, prober: 'dependency-probe-arr:9115', module: sabnzbd}
+  labels: {from: radarr, to: sabnzbd, kind: internal, container: sabnzbd, tier: warning, stack: sabnzbd, prober: 'blackbox-exporter:9115', module: sabnzbd}
