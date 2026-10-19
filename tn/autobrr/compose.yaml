@@ -1,0 +1,15 @@
+# AUTOBRR STACK (deployed by doco-cd)
+# autobrr, a Requester that hands announces to qBittorrent and the Organizers over downloads.
+
+networks:
+  # Traefik and the Exposed Services it routes to; owned by the edge Stack.
+  proxy:
+    name: proxy
+    external: true
+  # Requesters, Downloaders and Organizers talking to each other; owned by the edge Stack (ADR-0002).
+  downloads:
+    name: downloads
+    external: true
+
+include:
+  - ./autobrr/service.yaml

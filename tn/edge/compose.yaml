@@ -13,6 +13,13 @@ networks:
           # Dynamic addresses come from the upper half only, so Traefik's static
           # 172.30.0.10 can never be handed to another container.
           ip_range: 172.30.0.128/25
+  # Requesters, Downloaders and Organizers talking to each other, plus monitoring's
+  # blackbox-exporter for their Dependency Probes; owned here so no app Stack must come up
+  # before another (ADR-0002). No edge Service joins it: doco-cd creates every network a
+  # Stack declares (the `docker compose` CLI skips unused ones).
+  downloads:
+    name: downloads
+    driver: bridge
   # Prometheus and exporters; owned by the monitoring Stack.
   metrics:
     name: metrics

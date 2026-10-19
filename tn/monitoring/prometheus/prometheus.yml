@@ -39,7 +39,7 @@ scrape_configs:
       - targets: ['idp-outpost:9300']
         labels: {container: idp-outpost, stack: edge, tier: critical}
 
-  # MEDIA STACK
+  # MEDIA STACKS
   - job_name: plex
     static_configs:
       - targets: ['plex-exporter:9000']
@@ -48,30 +48,30 @@ scrape_configs:
   - job_name: sabnzbd
     static_configs:
       - targets: ['sabnzbd-exporter:9711']
-        labels: {container: sabnzbd-exporter, stack: arr, tier: info}
+        labels: {container: sabnzbd-exporter, stack: sabnzbd, tier: info}
 
   - job_name: sabnzbd-status
     static_configs:
       - targets: ['sabnzbd-status-exporter:9712']
-        labels: {container: sabnzbd-status-exporter, stack: arr, tier: info}
+        labels: {container: sabnzbd-status-exporter, stack: sabnzbd, tier: info}
 
   - job_name: sonarr
     static_configs:
       - targets: ['sonarr-exporter:9707']
-        labels: {container: sonarr-exporter, stack: arr, tier: info}
+        labels: {container: sonarr-exporter, stack: sonarr, tier: info}
 
   - job_name: radarr
     static_configs:
       - targets: ['radarr-exporter:9708']
-        labels: {container: radarr-exporter, stack: arr, tier: info}
+        labels: {container: radarr-exporter, stack: radarr, tier: info}
 
   # One arr-queue-exporter per Organizer; the `app` label (not instance) tells them apart.
   - job_name: arr-queue
     static_configs:
       - targets: ['sonarr-queue-exporter:9713']
-        labels: {container: sonarr-queue-exporter, stack: arr, tier: info}
+        labels: {container: sonarr-queue-exporter, stack: sonarr, tier: info}
       - targets: ['radarr-queue-exporter:9713']
-        labels: {container: radarr-queue-exporter, stack: arr, tier: info}
+        labels: {container: radarr-queue-exporter, stack: radarr, tier: info}
 
   # NEXTCLOUD STACK (Valkey; redis_exporter speaks the same protocol)
   - job_name: redis
@@ -272,7 +272,7 @@ scrape_configs:
         replacement: blackbox-exporter:9115
 
   # DEPENDENCY PROBES (GLOSSARY.md): one per edge, from dependencies.yml (rendered by
-  # dependencies-render, so URLs and keys come from .sops.env). Each runs on the blackbox in the dependents' Stack (`prober`).
+  # dependencies-render, so URLs and keys come from .sops.env). Each runs on the blackbox named by `prober`.
   # `instance` becomes from->to so a URL with a key never lands in a series.
   - job_name: dependency
     scrape_interval: 60s
@@ -292,11 +292,6 @@ scrape_configs:
         target_label: __address__
       - regex: prober
         action: labeldrop
-
-  - job_name: dependency-probe
-    static_configs:
-      - targets: ['dependency-probe-arr:9115']
-        labels: {container: dependency-probe-arr, stack: arr, tier: warning}
 
   # DOCO-CD STACK
   - job_name: doco-cd

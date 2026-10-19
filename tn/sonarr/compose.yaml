@@ -1,0 +1,19 @@
+# SONARR STACK (deployed by doco-cd)
+# Sonarr, the TV Organizer, with its exporters. It reaches the Downloaders over downloads.
+
+networks:
+  # Traefik and the Exposed Services it routes to; owned by the edge Stack.
+  proxy:
+    name: proxy
+    external: true
+  # Prometheus and exporters; owned by the monitoring Stack (ADR-0002).
+  metrics:
+    name: metrics
+    external: true
+  # Requesters, Downloaders and Organizers talking to each other; owned by the edge Stack (ADR-0002).
+  downloads:
+    name: downloads
+    external: true
+
+include:
+  - ./sonarr/service.yaml

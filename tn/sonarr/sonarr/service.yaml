@@ -55,6 +55,7 @@ services:
       - ${ZFS_POOL_ROOT_HDD}/media:/data
     networks:
       - default
+      - downloads
       - proxy
 
   sonarr-exporter:

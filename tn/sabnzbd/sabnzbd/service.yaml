@@ -57,6 +57,7 @@ services:
       - ./abr_mover.py:/config/scripts/abr_mover.py:ro
     networks:
       - default
+      - downloads
       - proxy
 
   sabnzbd-exporter:
