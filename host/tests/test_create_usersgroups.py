@@ -8,16 +8,16 @@ import pytest
 HOST_DIR = Path(__file__).resolve().parents[1]
 SCRIPT = HOST_DIR / "create_usersgroups.sh"
 
-# The commands the original one-shot script ran, in order: the identity set the data file must keep.
-# Names are now quoted as midcli strings ("media"), which midcli parses to the same values.
+# The commands a fresh Host gets from identities.tsv, in order: the identity set the data file must keep
+# (docs/research/0552-unix-identities.md). Names are quoted as midcli strings ("media").
+SERVICE_USERS = [("sonarr", 4001), ("radarr", 4002), ("sabnzbd", 4003), ("navidrome", 4004), ("plex", 4005),
+                 ("emby", 4006), ("qbittor", 4007), ("cwa", 4008), ("shelfmark", 4009), ("audiobookshelf", 4010),
+                 ("nextpvr", 4011), ("ownfoil", 4012), ("autobrr", 4013), ("media", 1001)]
 ALL_COMMANDS = [
-    'account group create gid=1002 name="media" smb=true',
-    *[f'account group create gid={gid} name="{name}" smb=false' for name, gid in [
-        ("sonarr", 4001), ("radarr", 4002), ("sabnzbd", 4003), ("navidrome", 4004), ("plex", 4005), ("emby", 4006)]],
+    'account group create gid=1002 name="media" smb=false',
     *[f'account user create username="{name}" full_name="{name}" uid={uid} group_create=false home_create=false '
-      f'password_disabled=true home=/var/empty group="{name}" groups="media" smb=false shell=/usr/sbin/nologin'
-      for name, uid in [("sonarr", 4001), ("radarr", 4002), ("sabnzbd", 4003), ("navidrome", 4004), ("plex", 4005),
-                        ("emby", 4006)]],
+      f'password_disabled=true home=/var/empty group="media" smb=false shell=/usr/sbin/nologin'
+      for name, uid in SERVICE_USERS],
 ]
 
 CLI_STUB = """#!/bin/sh
@@ -82,11 +82,10 @@ def test_dry_run_prints_commands_and_changes_nothing(host):
 
 def test_rerun_skips_what_exists(host):
     host.has_group("media", 1002)
-    host.has_group("sonarr", 4001)
     host.has_user("sonarr", 4001)
     r = host.run()
     assert r.returncode == 0, r.stderr
-    assert host.calls == [c for c in ALL_COMMANDS if 'name="media"' not in c and "sonarr" not in c]
+    assert host.calls == [c for c in ALL_COMMANDS if ' name="media" ' not in c and "sonarr" not in c]
     assert "# skip: group media exists (gid 1002)" in r.stdout
     assert "# skip: user sonarr exists (uid 4001)" in r.stdout
 
@@ -105,29 +104,32 @@ def test_second_run_is_a_no_op(host):
 
 
 def test_id_conflicts_fail_but_the_rest_is_created(host):
-    host.has_group("media", 1999)       # right name, wrong gid
-    host.has_group("other", 4002)       # radarr's gid taken by another group
+    host.has_group("media", 1002)
     host.has_user("plex", 999)          # right name, wrong uid
     host.has_user("someone", 4001)      # sonarr's uid taken by another user
     r = host.run()
     assert r.returncode == 1
-    assert "group media exists with gid 1999, expected 1002" in r.stderr
-    assert "gid 4002 for group radarr is taken by other" in r.stderr
     assert "user plex exists with uid 999, expected 4005" in r.stderr
     assert "uid 4001 for user sonarr is taken by someone" in r.stderr
-    assert "user radarr not created: missing group(s) radarr" in r.stderr
     assert host.calls == [c for c in ALL_COMMANDS
-                          if ' name="media" ' not in c and ' name="radarr" ' not in c
-                          and 'username="radarr" ' not in c and 'username="plex" ' not in c
+                          if ' name="media" ' not in c and 'username="plex" ' not in c
                           and 'username="sonarr" ' not in c]
 
 
-def test_cli_failure_is_reported_and_the_run_continues(host):
-    r = host.run(CLI_FAIL='name="plex" ')
+def test_a_missing_primary_group_blocks_its_users(host):
+    host.has_group("other", 1002)       # media's gid taken by another group
+    r = host.run()
     assert r.returncode == 1
-    assert 'ERROR: cli failed: account group create gid=4005 name="plex" smb=false' in r.stderr
-    assert "user plex not created: missing group(s) plex" in r.stderr
-    assert host.calls == [c for c in ALL_COMMANDS if 'username="plex" ' not in c]
+    assert "gid 1002 for group media is taken by other" in r.stderr
+    assert "user radarr not created: missing group(s) media" in r.stderr
+    assert host.calls == []
+
+
+def test_cli_failure_is_reported_and_the_run_continues(host):
+    r = host.run(CLI_FAIL='username="plex" ')
+    assert r.returncode == 1
+    assert 'ERROR: cli failed: account user create username="plex"' in r.stderr
+    assert host.calls == ALL_COMMANDS
 
 
 def test_file_option_and_supplementary_groups(host, tmp_path):

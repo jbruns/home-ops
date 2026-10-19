@@ -52,7 +52,14 @@ services:
       traefik.http.services.radarr.loadbalancer.server.port: 7878
     volumes:
       - radarr_config:/config
-      - ${ZFS_POOL_ROOT_HDD}/media:/data
+      # Media mounts never create their source (ADR 0009): a missing folder fails the Deploy
+      # instead of becoming a root-owned empty folder.
+      # Movies Organizer: the whole Movies tree as one mount, so imports into library/ are renames.
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/media/movies
+        target: /data/movies
+        bind:
+          create_host_path: false
     networks:
       - default
       - downloads

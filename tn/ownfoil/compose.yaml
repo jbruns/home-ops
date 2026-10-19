@@ -10,10 +10,10 @@ services:
     container_name: ownfoil
     # run.sh only adds a user, chowns /app and sudo's to PUID; start the app as that user instead,
     # so no caps. /app/data (TitleDB, rebuilt at start) was chowned by run.sh; it is a tmpfs now.
-    user: ${MEDIA_UID}:${MEDIA_SHARED_GID}
+    user: ${OWNFOIL_UID}:${MEDIA_SHARED_GID}
     entrypoint: ["python", "/app/app.py"]
     tmpfs:
-      - /app/data:uid=${MEDIA_UID},gid=${MEDIA_SHARED_GID},mode=0755,size=384m
+      - /app/data:uid=${OWNFOIL_UID},gid=${MEDIA_SHARED_GID},mode=0755,size=384m
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8465/"]
       interval: 30s

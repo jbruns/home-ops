@@ -52,7 +52,35 @@ services:
       traefik.http.services.sabnzbd.loadbalancer.server.port: 8080
     volumes:
       - sabnzbd_config:/config
-      - ${ZFS_POOL_ROOT_HDD}/media/nzbdl:/data/nzbdl
+      # Media mounts never create their source (ADR 0009): a missing folder fails the Deploy
+      # instead of becoming a root-owned empty folder.
+      # Usenet Downloader: its own folder (incomplete jobs, categories with no Organizer) and each
+      # Library's usenet/ folder, which its Organizer takes over from. Never a Library.
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/media/nzbdl
+        target: /data/nzbdl
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/media/tv/usenet
+        target: /data/tv/usenet
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/media/movies/usenet
+        target: /data/movies/usenet
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/media/books/usenet
+        target: /data/books/usenet
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/media/audiobooks/usenet
+        target: /data/audiobooks/usenet
+        bind:
+          create_host_path: false
     networks:
       - default
       - downloads

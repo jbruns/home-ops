@@ -61,7 +61,27 @@ services:
       - 31728:31728/udp
     volumes:
       - qbittorrent_config:/config
-      - ${ZFS_POOL_ROOT_HDD}/media/tordl:/data/tordl
+      # Media mounts never create their source (ADR 0009): a missing folder fails the Deploy
+      # instead of becoming a root-owned empty folder.
+      # BitTorrent Downloader: its own folder (torrents for no Library) and the torrents/ folder of
+      # each Library whose Organizer has a torrent client (Shelfmark: Books, Audiobooks), which the
+      # Organizer copies from while seeding continues. Never a Library. TV and Movies get theirs
+      # when Sonarr or Radarr get a torrent client.
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/media/tordl
+        target: /data/tordl
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/media/books/torrents
+        target: /data/books/torrents
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/media/audiobooks/torrents
+        target: /data/audiobooks/torrents
+        bind:
+          create_host_path: false
     networks:
       - default
       - downloads
