@@ -221,8 +221,10 @@ scrape_configs:
       - target_label: __address__
         replacement: blackbox-exporter:9115
 
-  # Protected Services (ADR 0006) carry a second Probe, `probe.idp_url`: the outpost must redirect
-  # an anonymous request to the IdP. Each one creates an outpost session file (kept 24h), hence 60s.
+  # Protected Services (ADR 0006) carry a second Probe, `probe.idp_url`: the outpost (or, for native
+  # OIDC, the Service's login path) must redirect an anonymous request to the IdP. Each one creates an
+  # outpost session file (kept 24h), hence 60s. `auth` is forward unless the Service sets
+  # `probe.idp_auth: oidc`; only forward-auth Probes count towards IdpForwardAuthFailing.
   - job_name: probe-idp
     scrape_interval: 60s
     metrics_path: /probe
@@ -241,6 +243,11 @@ scrape_configs:
         target_label: instance
       - target_label: module
         replacement: http_idp_redirect
+      - target_label: auth
+        replacement: forward
+      - source_labels: [__meta_docker_container_label_probe_idp_auth]
+        regex: (.+)
+        target_label: auth
       - source_labels: [__meta_docker_container_name]
         regex: /?(.*)
         target_label: container

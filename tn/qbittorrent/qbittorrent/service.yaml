@@ -62,8 +62,6 @@ services:
     volumes:
       - qbittorrent_config:/config
       - ${ZFS_POOL_ROOT_HDD}/media/tordl:/data/tordl
-      - ${ZFS_POOL_ROOT_HDD}/media/audiobooks:/data/audiobooks
-      - ./copy_complete.py:/config/scripts/copy_complete.py:ro
     networks:
       - default
       - downloads

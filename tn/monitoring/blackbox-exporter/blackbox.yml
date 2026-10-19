@@ -14,8 +14,9 @@ modules:
     http:
       valid_status_codes: [401]
 
-  # A Protected Service (`probe.idp_url`, job probe-idp): the IdP outpost answers an anonymous request
-  # by redirecting to the IdP's authorize endpoint. Not followed, so the IdP is never touched.
+  # A Protected Service (`probe.idp_url`, job probe-idp): the IdP outpost, or a native-OIDC Service's
+  # login path, answers an anonymous request by redirecting to the IdP's authorize endpoint. Not
+  # followed, so the IdP is never touched.
   http_idp_redirect:
     prober: http
     timeout: 8s
