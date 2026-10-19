@@ -65,10 +65,13 @@ scrape_configs:
       - targets: ['radarr-exporter:9708']
         labels: {container: radarr-exporter, stack: arr, tier: info}
 
+  # One arr-queue-exporter per Organizer; the `app` label (not instance) tells them apart.
   - job_name: arr-queue
     static_configs:
-      - targets: ['arr-queue-exporter:9713']
-        labels: {container: arr-queue-exporter, stack: arr, tier: info}
+      - targets: ['sonarr-queue-exporter:9713']
+        labels: {container: sonarr-queue-exporter, stack: arr, tier: info}
+      - targets: ['radarr-queue-exporter:9713']
+        labels: {container: radarr-queue-exporter, stack: arr, tier: info}
 
   # NEXTCLOUD STACK (Valkey; redis_exporter speaks the same protocol)
   - job_name: redis

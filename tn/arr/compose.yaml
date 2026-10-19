@@ -13,7 +13,6 @@ networks:
     external: true
 
 include:
-  - ./arr-queue-exporter/service.yaml
   - ./autobrr/service.yaml
   - ./dependency-probe/service.yaml
   - ./qbittorrent/service.yaml
