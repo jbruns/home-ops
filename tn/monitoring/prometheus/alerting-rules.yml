@@ -438,3 +438,17 @@ groups:
         annotations:
           summary: Backup coverage is unknown
           description: backup-coverage has not completed a check for 3 hours, so BackupVolumeMissing and BackupDatabaseStale cannot fire.
+
+      # The exporter answers but its last check failed: the Docker API behind docker-socket-proxy
+      # or the restic repository did not answer. Checks run hourly, so 90m is two failed checks in
+      # a row. The proxy being down is ContainerDown's job, which inhibits this; this inhibits
+      # BackupCoverageUnknown, the same cause seen later (alertmanager).
+      - alert: BackupCoverageBlind
+        expr: backup_coverage_up == 0
+        for: 90m
+        labels:
+          tier: warning
+          stack: monitoring
+        annotations:
+          summary: backup-coverage cannot read Docker or restic
+          description: "backup-coverage's last two checks could not read the Docker API through docker-socket-proxy or the restic repository (its log names which); BackupVolumeMissing and BackupDatabaseStale are blind."
