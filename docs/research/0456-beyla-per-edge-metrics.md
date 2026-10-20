@@ -11,12 +11,12 @@ Researched 2026-10-20 against the Host:
 
 **No-go.** Beyla runs on this Host without OS changes and sees real edges, but what it adds doesn't justify what it costs:
 
-- **The edge we lack stays dark.** The main gap is calls to External Dependencies over HTTPS, such as Sonarr → nzbhydra2. Beyla does capture those calls, but labels the peer `outgoing` instead of naming it. So the edge can't be attributed ([E4](#e4-features-env-15-min)).
-- **The edges it does name are already covered.** Internal HTTP edges like `sonarr → sabnzbd:8080` come out cleanly, with Compose service names. But the Dependency Probes in `tn/monitoring/prometheus/dependencies.yml` and exportarr already cover those edges.
+- **The edge we most wanted stays unattributed.** The prize was real-traffic RED metrics for External Dependency calls over HTTPS, such as Sonarr → nzbhydra2. Beyla does see Sonarr's outbound HTTPS, but labels the peer `outgoing` instead of naming it. Sonarr has two HTTPS Dependencies (nzbhydra2 and the IdP), so the series can't even be assigned to one of them ([E4](#e4-features-env-15-min)).
+- **The edges it does name add only real-traffic rates over what we have.** Internal HTTP edges like `sonarr → sabnzbd:8080` come out cleanly, with Compose service names. The Dependency Probes in `tn/monitoring/prometheus/dependencies.yml` already watch those edges and Sonarr/Radarr → nzbhydra2, and exportarr covers the apps. Probes are synthetic: they give up/down and latency, not the dependent's actual request rate and errors. #421 already accepted that trade-off, and Beyla's extra detail doesn't justify the costs below.
 - **There is no service graph.** `traces_service_graph_*` stayed at zero series in every configuration, both in Alloy and in standalone Beyla ([E4, E5](#e5-standalone-beyla)).
-- **It needs Baseline Exemptions on most axes.** That means root, `SYS_ADMIN` and six other caps, host PID, and Docker API access ([privileges](#privileges-and-the-baseline)). That runs against #422.
-- **Teardown blocks for minutes.** Stopping Beyla left a zombie container for 2–9.5 minutes while the kernel removed uprobes ([teardown](#teardown-blocks-for-minutes)). Every doco-cd recreate and every Host shutdown would wait on that.
-- **The cost is large for what it adds.** 15–20k series, 0.2–0.5 of a core, and 0.65–1.3 GiB, compared with Alloy's current 384M limit ([cost](#cardinality-and-resources)).
+- **It needs privileges #422 is removing.** `SYS_ADMIN`, which is effectively root on the Host, and raw Docker API access, which #422 limits to a few Services. Root, the other caps and host PID meet the Baseline as written (ADR 0007: non-root is advisory, `cap_add` with a reason is allowed), but together they make Beyla the most privileged Service on the Host ([privileges](#privileges-and-the-baseline)).
+- **Teardown blocks for minutes.** Stopping Beyla left a zombie container for 2–9.5 minutes while the kernel removed uprobes ([teardown](#teardown-blocks-for-minutes)). Every doco-cd recreate would wait on that, and the upper end is longer than the 300 s Shutdown script timeout.
+- **The cost is large for what it adds.** 5–20k series depending on attributes and run length (about 15k in a realistic config), 0.13–0.5 of a core, and 0.65–1.3 GiB, compared with Alloy's current 384M limit ([cost](#cardinality-and-resources)).
 - **There are correctness bugs.** Go clients report garbage `server_port` values, and blackbox-exporter reports bogus IPv6 `server_address` values ([accuracy](#accuracy)).
 
 **Reopen if** all of the following hold:
@@ -41,7 +41,7 @@ The remaining update risk is the usual one: a TrueNAS kernel bump could change B
 
 | Need | Why | Without it |
 |---|---|---|
-| `BPF`, `PERFMON`, `NET_ADMIN`, `NET_RAW` | load probes and socket filters | won't start |
+| `BPF`, `PERFMON`, `NET_ADMIN`, `NET_RAW` | load eBPF programs and socket filters | won't start |
 | `DAC_READ_SEARCH`, `SYS_PTRACE`, `CHECKPOINT_RESTORE` | read other processes' binaries and `/proc` | no attachment |
 | `SYS_ADMIN` | Go and TLS uprobes; joining a target netns | no HTTPS, no Go clients, "join target netns: operation not permitted" (E1, E2) |
 | `--pid=host` | see other containers' processes | sees only itself |
@@ -55,16 +55,18 @@ Results under Baseline settings (E6):
 
 **Docker API through the proxy.** Beyla only needs the read-only Docker API routes listed in the table. The docker-socket-proxy planned in #422 could therefore serve them with `INFO`, `CONTAINERS` and `EVENTS` enabled, through `DOCKER_HOST`. This was not tested.
 
-**Net Exemptions:** non-root user, `cap_drop: ALL` with no adds, and the default PID namespace. `SYS_ADMIN` is effectively root on the Host.
+**Against the Baseline and #422** (ADR 0007):
+- Root, `cap_drop: ALL` plus seven `cap_add`s with reasons, host PID and `no-new-privileges` all meet the Baseline as written. Non-root is advisory, and PID namespace isn't a Baseline item.
+- The real conflicts are with #422's goals. `SYS_ADMIN` is effectively root on the Host. Raw Docker API access is something #422 restricts to a few Services, though the proxy route above would avoid it.
 
 ### Which edges are visible
 
 | Edge kind | Example | Seen? |
 |---|---|---|
-| Internal HTTP on Docker bridges | `sonarr → sabnzbd:8080`, `radarr → sabnzbd:8080`, exporters → apps, Prometheus scrapes | yes, named by Compose service (E2–E6) |
+| Internal HTTP on Docker bridges | `sonarr → sabnzbd:8080`, `radarr → sabnzbd:8080`, exporters → Services, Prometheus scrapes | yes, named by Compose service (E2–E6) |
 | Traefik → backend | `traefik → 172.30.0.150:8989` (= Sonarr) | yes, but **named by IP** |
 | External HTTPS to a known host | `idp-outpost → idp.asot.bz:443`, `doco-cd → github.com`, `alertmanager → discord.com`, `crowdsec → api.crowdsec.net`, `plex → plex.direct` | yes, needs `SYS_ADMIN` (E3) |
-| External HTTPS from Sonarr/Radarr (.NET) | Sonarr → nzbhydra2 | **captured but peer = `outgoing`** (E4) |
+| External HTTPS from Sonarr/Radarr (.NET) | Sonarr → nzbhydra2 or the IdP | **captured but peer = `outgoing`**, so it can't be told apart (E4) |
 | Network flows (`network` feature) | any TCP | IPs only outside Kubernetes; NAT shows each external flow twice (container IP and Host IP) (E2) |
 
 ### Accuracy
@@ -93,27 +95,30 @@ The root cause wasn't found. The OBI source gates the graph on per-Service featu
 | E2 | Docker API, `dst.port` in flows, 11 h | 9.8k (5.7k flows) | ~35% | 1.26 GiB |
 | E3 | + `SYS_ADMIN`, 5 min | ~20k (~40% body-size histograms) | ~49% | ~900 MiB |
 | E4 | E3 + env features, 15 min | 15.3k | ~22% | 650 MiB |
+| E5 | standalone, application + service graph | 1,755 | — | — |
 | E6 | standalone, application only, NNP + bridge, 2.5 min | 15.0k | — | — |
+
+The gap between E5 and E6 wasn't explained: E5 didn't record how long it had been running, and both used the same discovery config. Read E5 as a lower bound from early in attachment.
 
 - **Stability:** E2 ran 11 hours unattended with no restarts and no OOM.
 - **Cardinality controls:**
   - `dst.port` in flows picks up ephemeral ports and drives most of the flow cardinality.
   - In Alloy, an `attributes.select` `include` list *replaces* the defaults. Leaving `service_name` out of it drops it from every client series.
-- **Current monitoring stack, for comparison:** Alloy is capped at 384M today. Prometheus would take on 15–20k extra series.
+- **Current monitoring stack, for comparison:** Alloy is capped at 384M today. Prometheus would take on roughly 15k extra series in a realistic config (E4, E6), and up to 20k with default histograms (E3).
 
 ### Teardown blocks for minutes
 
 - **What happens:** when Beyla stops, the exiting thread sits in `D` state in `perf_uprobe_destroy ← perf_event_release_kernel ← do_exit`. The main thread is a zombie, and `docker stop`/`docker rm -f` fail with "PID is zombie and can not be killed".
-- **E5 (~45 instrumented processes):** this cleared after ~2 minutes.
-- **E6 (all containers):** this took ~9.5 minutes.
+- **E5:** this cleared about 2 minutes after the kill.
+- **E6 (all containers instrumented):** this took ~9.5 minutes.
 - **Impact:**
   - **doco-cd:** every recreate blocks for that long.
-  - **Host shutdown:** blocks for that long too.
-  - **Startup Order:** `host/startup-order.sh` would have to budget for it.
+  - **Host shutdown:** the startup-order Custom Component's Shutdown script has a 300 s timeout (`host/README.md`). E6's teardown is longer than that, so the timeout either fires first or Beyla is still exiting when TrueNAS stops dockerd.
+  - **Startup Order:** Beyla would have to stop first, or be excluded.
 
 ### Surviving TrueNAS updates (ADR 0003)
 
-Beyla is container-only: there's no kernel module, no sysctl change and no Host package. That fits ADR 0003. What could break is Beyla itself after a kernel update, and a probe failure takes no Service down with it.
+Beyla is container-only: there's no kernel module, no sysctl change and no Host package. That fits ADR 0003. What could break is Beyla itself after a kernel update; an eBPF attachment failure takes no Service down with it. The one update-path cost is the reboot: see the Shutdown timeout under [teardown](#teardown-blocks-for-minutes).
 
 ## Appendix: experiments
 
@@ -172,7 +177,7 @@ beyla.ebpf "spike" {
 
 - **Setup:** E3 plus `OTEL_EBPF_METRICS_FEATURES=application,application_service_graph,network`.
 - **Service graph:** still zero series.
-- **Sonarr:** after 15 minutes, the client series included `sonarr → outgoing:443` with 5 requests. Sonarr's `NZBHYDRA_URL` and `IDP_URL` are both HTTPS, so this is the unattributed nzbhydra2 edge.
+- **Sonarr:** after 15 minutes, the client series included `sonarr → outgoing:443` with 5 requests. Sonarr's `NZBHYDRA_URL` and `IDP_URL` are both HTTPS, so these requests are nzbhydra2 or IdP calls, and the series can't say which.
 
 ### E5: standalone Beyla
 
