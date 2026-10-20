@@ -7,7 +7,7 @@
 
 Edit this file, never the JSON. Vocabulary follows GLOSSARY.md: Service, Stack, Tier, Probe,
 Uptime, Availability, Dependency. Datasources are referenced by the uids set in
-tn/monitoring/grafana/provisioning/datasources.sops.yml.
+tn/monitoring/grafana/provisioning/datasources.yml.
 """
 import argparse
 import json

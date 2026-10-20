@@ -1,0 +1,470 @@
+rule_files:
+  - /etc/prometheus/recording-rules.yml
+  - /etc/prometheus/alerting-rules.yml
+evaluation_interval: 1m
+# Alerts read recording rules from other groups; evaluate those first so timings are deterministic.
+group_eval_order: [prometheus_node_exporter_rules, traefik_services, availability]
+tests:
+  - name: Watchdog is continuously firing
+    promql_expr_test:
+      - expr: sum by (alertname, tier, stack) (ALERTS{alertname="Watchdog",alertstate="firing"})
+        eval_time: 0m
+        exp_samples:
+          - labels: '{alertname="Watchdog",tier="heartbeat",stack="monitoring"}'
+            value: 1
+
+  - name: InternetDown requires every Internet Probe to fail
+    interval: 1m
+    input_series:
+      - series: probe_success{job="internet",instance="one"}
+        values: 1+0x2 0+0x2 1+0x3
+      - series: probe_success{job="internet",instance="two"}
+        values: 0+0x9
+    promql_expr_test:
+      - expr: &internet sum by (alertname, tier, stack) (ALERTS{alertname="InternetDown",alertstate="firing"})
+        eval_time: 4m
+        exp_samples: []
+      - expr: *internet
+        eval_time: 5m
+        exp_samples:
+          - labels: '{alertname="InternetDown",tier="warning",stack="monitoring"}'
+            value: 1
+      - expr: *internet
+        eval_time: 6m
+        exp_samples: []
+
+  - name: Missing Probe alerts wait ten minutes and recover when discovery returns
+    interval: 1m
+    input_series:
+      - series: probe_success{job="probe"}
+        values: _x11 1+0x3
+      - series: probe_success{job="dependency"}
+        values: _x11 1+0x3
+    promql_expr_test:
+      - expr: &probes sum by (alertname, tier, stack) (ALERTS{alertname="ProbesMissing",alertstate="firing"})
+        eval_time: 9m
+        exp_samples: []
+      - expr: *probes
+        eval_time: 10m
+        exp_samples:
+          - labels: '{alertname="ProbesMissing",tier="warning",stack="monitoring"}'
+            value: 1
+      - expr: *probes
+        eval_time: 11m
+        exp_samples: []
+      - expr: &dependencies sum by (alertname, tier, stack) (ALERTS{alertname="DependencyProbesMissing",alertstate="firing"})
+        eval_time: 9m
+        exp_samples: []
+      - expr: *dependencies
+        eval_time: 10m
+        exp_samples:
+          - labels: '{alertname="DependencyProbesMissing",tier="warning",stack="monitoring"}'
+            value: 1
+      - expr: *dependencies
+        eval_time: 11m
+        exp_samples: []
+
+  - name: Http5xxRatio evaluates its recording rules and routes even Critical errors to the Digest
+    interval: 1m
+    input_series:
+      - series: traefik_service_requests_total{service="vaultwarden@docker",code="200"}
+        values: 0+9x40
+      - series: traefik_service_requests_total{service="vaultwarden@docker",code="503"}
+        values: 0+1x30 30+0x10
+      - series: container_last_seen{name="vaultwarden",container_label_com_docker_compose_project="vaultwarden",container_label_tier="critical"}
+        values: 0+60x41
+      - series: traefik_service_requests_total{service="orphan@file",code="200"}
+        values: 0+9x40
+      - series: traefik_service_requests_total{service="orphan@file",code="503"}
+        values: 0+1x30 30+0x10
+      - series: traefik_service_requests_total{service="ignored@docker",code="501"}
+        values: 0+100x41
+      - series: traefik_service_requests_total{service="tiny@docker",code="503"}
+        values: 0 1+0x40
+    promql_expr_test:
+      - expr: &http sum by (alertname, tier, stack, container) (ALERTS{alertname="Http5xxRatio",alertstate="firing"})
+        eval_time: 15m
+        exp_samples: []
+      - expr: *http
+        eval_time: 16m
+        exp_samples:
+          - labels: '{alertname="Http5xxRatio",tier="warning",stack="vaultwarden",container="vaultwarden"}'
+            value: 1
+          - labels: '{alertname="Http5xxRatio",tier="warning",stack="edge",container="orphan"}'
+            value: 1
+      - expr: *http
+        eval_time: 40m
+        exp_samples: []
+
+  - name: Container diagnostics retain the labels used by inhibition and wait their for durations
+    interval: 1m
+    input_series:
+      - series: container_leftover_name{container="temporary_web",stack="app",service="web"}
+        values: 1+0x10 0+0x7
+      - series: container_health_up{stack="monitoring"}
+        values: 0+0x5 1+0x12
+      - series: container_memory_working_set_bytes{name="web",container_label_com_docker_compose_project="app",container_label_tier="critical"}
+        values: 91+0x15 90+0x2
+      - series: container_spec_memory_limit_bytes{name="web",container_label_com_docker_compose_project="app",container_label_tier="critical"}
+        values: 100+0x18
+      - series: container_memory_working_set_bytes{name="unlimited",container_label_com_docker_compose_project="app",container_label_tier="warning"}
+        values: 100+0x18
+      - series: container_spec_memory_limit_bytes{name="unlimited",container_label_com_docker_compose_project="app",container_label_tier="warning"}
+        values: 0+0x18
+    promql_expr_test:
+      - expr: &leftover sum by (alertname, tier, stack, container) (ALERTS{alertname="ContainerLeftoverName",alertstate="firing"})
+        eval_time: 9m
+        exp_samples: []
+      - expr: *leftover
+        eval_time: 10m
+        exp_samples:
+          - labels: '{alertname="ContainerLeftoverName",tier="warning",stack="app",container="temporary_web"}'
+            value: 1
+      - expr: *leftover
+        eval_time: 11m
+        exp_samples: []
+      - expr: &blind sum by (alertname, tier, stack, name) (ALERTS{alertname="ContainerHealthExporterBlind",alertstate="firing"})
+        eval_time: 4m
+        exp_samples: []
+      - expr: *blind
+        eval_time: 5m
+        exp_samples:
+          - labels: '{alertname="ContainerHealthExporterBlind",tier="warning",stack="monitoring",name="docker-socket-proxy"}'
+            value: 1
+      - expr: *blind
+        eval_time: 6m
+        exp_samples: []
+      - expr: &memory sum by (alertname, tier, stack) (ALERTS{alertname="ContainerMemoryNearLimit",alertstate="firing"})
+        eval_time: 14m
+        exp_samples: []
+      - expr: *memory
+        eval_time: 15m
+        exp_samples:
+          - labels: '{alertname="ContainerMemoryNearLimit",tier="warning",stack="app"}'
+            value: 1
+      - expr: *memory
+        eval_time: 16m
+        exp_samples: []
+
+  - name: IdpOutpostSlow requires sustained high p95 latency and meaningful request volume
+    interval: 1m
+    input_series:
+      - series: authentik_outpost_proxy_request_duration_seconds_bucket{le="2",container="idp-outpost",stack="edge",tier="critical"}
+        values: 0+54x18
+      - series: authentik_outpost_proxy_request_duration_seconds_bucket{le="4",container="idp-outpost",stack="edge",tier="critical"}
+        values: 0+60x18
+      - series: authentik_outpost_proxy_request_duration_seconds_bucket{le="+Inf",container="idp-outpost",stack="edge",tier="critical"}
+        values: 0+60x18
+      - series: authentik_outpost_proxy_request_duration_seconds_count{container="idp-outpost",stack="edge",tier="critical"}
+        values: 0+60x18
+      - series: authentik_outpost_proxy_request_duration_seconds_bucket{le="2",container="quiet",stack="edge",tier="critical"}
+        values: 0+0.9x18
+      - series: authentik_outpost_proxy_request_duration_seconds_bucket{le="4",container="quiet",stack="edge",tier="critical"}
+        values: 0+1x18
+      - series: authentik_outpost_proxy_request_duration_seconds_bucket{le="+Inf",container="quiet",stack="edge",tier="critical"}
+        values: 0+1x18
+      - series: authentik_outpost_proxy_request_duration_seconds_count{container="quiet",stack="edge",tier="critical"}
+        values: 0+1x18
+    promql_expr_test:
+      - expr: &slow sum by (alertname, tier, stack, container) (ALERTS{alertname="IdpOutpostSlow",alertstate="firing"})
+        eval_time: 15m
+        exp_samples: []
+      - expr: *slow
+        eval_time: 16m
+        exp_samples:
+          - labels: '{alertname="IdpOutpostSlow",tier="critical",stack="edge",container="idp-outpost"}'
+            value: 1
+
+  - name: Usenet errors ignore disabled providers and wait for their respective durations
+    interval: 1m
+    input_series:
+      - series: sabnzbd_usenet_server_error{server="active",stack="sabnzbd"}
+        values: 1+0x15 0+0x46
+      - series: sabnzbd_usenet_server_warning{server="active",stack="sabnzbd"}
+        values: 1+0x60 0+0x2
+      - series: sabnzbd_usenet_server_active{server="active",stack="sabnzbd"}
+        values: 1+0x63
+      - series: sabnzbd_usenet_server_error{server="disabled",stack="sabnzbd"}
+        values: 1+0x63
+      - series: sabnzbd_usenet_server_warning{server="disabled",stack="sabnzbd"}
+        values: 1+0x63
+      - series: sabnzbd_usenet_server_active{server="disabled",stack="sabnzbd"}
+        values: 0+0x63
+      - series: sabnzbd_status_up{container="sabnzbd-status-exporter",stack="sabnzbd"}
+        values: 0+0x10 1+0x52
+    promql_expr_test:
+      - expr: &useneterror sum by (alertname, tier, stack) (ALERTS{alertname="UsenetServerError",alertstate="firing"})
+        eval_time: 14m
+        exp_samples: []
+      - expr: *useneterror
+        eval_time: 15m
+        exp_samples:
+          - labels: '{alertname="UsenetServerError",tier="warning",stack="sabnzbd"}'
+            value: 1
+      - expr: *useneterror
+        eval_time: 16m
+        exp_samples: []
+      - expr: &usenetwarning sum by (alertname, tier, stack) (ALERTS{alertname="UsenetServerWarning",alertstate="firing"})
+        eval_time: 59m
+        exp_samples: []
+      - expr: *usenetwarning
+        eval_time: 60m
+        exp_samples:
+          - labels: '{alertname="UsenetServerWarning",tier="warning",stack="sabnzbd"}'
+            value: 1
+      - expr: *usenetwarning
+        eval_time: 61m
+        exp_samples: []
+      - expr: &sab sum by (alertname, tier, stack) (ALERTS{alertname="SabnzbdStatusDown",alertstate="firing"})
+        eval_time: 9m
+        exp_samples: []
+      - expr: *sab
+        eval_time: 10m
+        exp_samples:
+          - labels: '{alertname="SabnzbdStatusDown",tier="warning",stack="sabnzbd"}'
+            value: 1
+      - expr: *sab
+        eval_time: 11m
+        exp_samples: []
+
+  - name: Organizer alerts map health issues to Dependencies and wait two hours for stuck imports
+    interval: 1m
+    input_series:
+      - series: sonarr_system_health_issues{source="IndexerStatusCheck",stack="sonarr",url="one",wikiurl="docs"}
+        values: 1+0x30 0+0x92
+      - series: sonarr_system_health_issues{source="IndexerStatusCheck",stack="sonarr",url="two",wikiurl="docs"}
+        values: 1+0x30 0+0x92
+      - series: radarr_system_health_issues{source="DownloadClientCheck",stack="radarr"}
+        values: 1+0x30 0+0x92
+      - series: sonarr_system_health_issues{source="UpdateCheck",stack="sonarr"}
+        values: 1+0x124
+      - series: arr_queue_item_stuck{app="sonarr",stack="sonarr",queue_id="1"}
+        values: 1+0x120 0+0x2
+      - series: arr_queue_up{app="sonarr",stack="sonarr"}
+        values: 0+0x10 1+0x112
+    promql_expr_test:
+      - expr: &arrhealth sum by (alertname, tier, stack, to) (ALERTS{alertname="ArrHealthIssue",alertstate="firing"})
+        eval_time: 29m
+        exp_samples: []
+      - expr: *arrhealth
+        eval_time: 30m
+        exp_samples:
+          - labels: '{alertname="ArrHealthIssue",tier="warning",stack="sonarr",to="nzbhydra2"}'
+            value: 1
+          - labels: '{alertname="ArrHealthIssue",tier="warning",stack="radarr",to="sabnzbd"}'
+            value: 1
+      - expr: *arrhealth
+        eval_time: 31m
+        exp_samples: []
+      - expr: &import sum by (alertname, tier, stack) (ALERTS{alertname="ArrImportStuck",alertstate="firing"})
+        eval_time: 119m
+        exp_samples: []
+      - expr: *import
+        eval_time: 120m
+        exp_samples:
+          - labels: '{alertname="ArrImportStuck",tier="warning",stack="sonarr"}'
+            value: 1
+      - expr: *import
+        eval_time: 121m
+        exp_samples: []
+      - expr: &queue sum by (alertname, tier, stack) (ALERTS{alertname="ArrQueueDown",alertstate="firing"})
+        eval_time: 9m
+        exp_samples: []
+      - expr: *queue
+        eval_time: 10m
+        exp_samples:
+          - labels: '{alertname="ArrQueueDown",tier="warning",stack="sonarr"}'
+            value: 1
+      - expr: *queue
+        eval_time: 11m
+        exp_samples: []
+
+  - name: Host warnings check strict thresholds and sustained clock failure
+    interval: 1m
+    input_series:
+      - series: node_memory_MemAvailable_bytes{job="node-exporter"}
+        values: 4+0x5 5+0x6
+      - series: node_memory_MemTotal_bytes{job="node-exporter"}
+        values: 100+0x12
+      - series: node_nf_conntrack_entries{job="node-exporter"}
+        values: 76+0x5 75+0x6
+      - series: node_nf_conntrack_entries_limit{job="node-exporter"}
+        values: 100+0x12
+      - series: node_timex_sync_status{job="node-exporter"}
+        values: 0+0x12
+      - series: node_timex_maxerror_seconds{job="node-exporter"}
+        values: 16+0x10 15+0x2
+    promql_expr_test:
+      - expr: &hostmem sum by (alertname, tier, stack) (ALERTS{alertname="HostOutOfMemory",alertstate="firing"})
+        eval_time: 4m
+        exp_samples: []
+      - expr: *hostmem
+        eval_time: 5m
+        exp_samples:
+          - labels: '{alertname="HostOutOfMemory",tier="warning",stack="host"}'
+            value: 1
+      - expr: *hostmem
+        eval_time: 6m
+        exp_samples: []
+      - expr: &conntrack sum by (alertname, tier, stack) (ALERTS{alertname="HostConntrackNearLimit",alertstate="firing"})
+        eval_time: 4m
+        exp_samples: []
+      - expr: *conntrack
+        eval_time: 5m
+        exp_samples:
+          - labels: '{alertname="HostConntrackNearLimit",tier="warning",stack="host"}'
+            value: 1
+      - expr: *conntrack
+        eval_time: 6m
+        exp_samples: []
+      - expr: &clock sum by (alertname, tier, stack) (ALERTS{alertname="HostClockNotSynchronising",alertstate="firing"})
+        eval_time: 9m
+        exp_samples: []
+      - expr: *clock
+        eval_time: 10m
+        exp_samples:
+          - labels: '{alertname="HostClockNotSynchronising",tier="warning",stack="host"}'
+            value: 1
+      - expr: *clock
+        eval_time: 11m
+        exp_samples: []
+
+  - name: Deploy counters need repeated failures and recover when failures leave the window
+    interval: 1m
+    input_series:
+      - series: doco_cd_deployment_errors_total{deployment="nextcloud"}
+        values: 0 1 2+0x18
+      - series: doco_cd_poll_errors_total
+        values: 0 1 2 3+0x18
+    promql_expr_test:
+      - expr: &deploy sum by (alertname, tier, stack) (ALERTS{alertname="DeployFailing",alertstate="firing"})
+        eval_time: 1m
+        exp_samples: []
+      - expr: *deploy
+        eval_time: 2m
+        exp_samples:
+          - labels: '{alertname="DeployFailing",tier="warning",stack="nextcloud"}'
+            value: 1
+      - expr: *deploy
+        eval_time: 12m
+        exp_samples: []
+      - expr: &poll sum by (alertname, tier, stack) (ALERTS{alertname="DeployPollFailing",alertstate="firing"})
+        eval_time: 2m
+        exp_samples: []
+      - expr: *poll
+        eval_time: 3m
+        exp_samples:
+          - labels: '{alertname="DeployPollFailing",tier="warning",stack="doco-cd"}'
+            value: 1
+      - expr: *poll
+        eval_time: 18m
+        exp_samples: []
+
+  - name: BackupVolumeMissing ignores empty and not-yet-due volumes and resolves after backup
+    interval: 1m
+    input_series:
+      - series: backup_coverage_entries{path="/volumes/app/data",project="app",service="web"}
+        values: 0 1+0x2
+      - series: backup_coverage_due{path="/volumes/app/data"}
+        values: 1+0x4
+      - series: backup_coverage_volume_bytes{path="/volumes/app/data"}
+        values: 1024+0x4
+      - series: backup_coverage_entries{path="/volumes/app/empty",project="app",service="empty"}
+        values: 0+0x4
+      - series: backup_coverage_due{path="/volumes/app/empty"}
+        values: 1+0x4
+      - series: backup_coverage_volume_bytes{path="/volumes/app/empty"}
+        values: 0+0x4
+      - series: backup_coverage_entries{path="/volumes/app/new",project="app",service="new"}
+        values: 0+0x4
+      - series: backup_coverage_due{path="/volumes/app/new"}
+        values: 0+0x4
+      - series: backup_coverage_volume_bytes{path="/volumes/app/new"}
+        values: 1024+0x4
+    promql_expr_test:
+      - expr: &volume sum by (alertname, tier, stack) (ALERTS{alertname="BackupVolumeMissing",alertstate="firing"})
+        eval_time: 0m
+        exp_samples:
+          - labels: '{alertname="BackupVolumeMissing",tier="warning",stack="app"}'
+            value: 1
+      - expr: *volume
+        eval_time: 1m
+        exp_samples: []
+
+  - name: BackupDatabaseStale checks age only for due database snapshots
+    interval: 1m
+    input_series:
+      - series: backup_coverage_snapshot_timestamp{path="/databases/app/db",kind="database",project="app",service="db"}
+        values: 0+0x1561 93720+60x3
+      - series: backup_coverage_due{path="/databases/app/db"}
+        values: 1+0x1565
+      - series: backup_coverage_snapshot_timestamp{path="/databases/app/new",kind="database",project="app",service="new"}
+        values: 0+0x1565
+      - series: backup_coverage_due{path="/databases/app/new"}
+        values: 0+0x1565
+    promql_expr_test:
+      - expr: &dbbackup sum by (alertname, tier, stack) (ALERTS{alertname="BackupDatabaseStale",alertstate="firing"})
+        eval_time: 26h
+        exp_samples: []
+      - expr: *dbbackup
+        eval_time: 26h1m
+        exp_samples:
+          - labels: '{alertname="BackupDatabaseStale",tier="warning",stack="app"}'
+            value: 1
+      - expr: *dbbackup
+        eval_time: 26h2m
+        exp_samples: []
+
+  - name: BackupCoverageUnknown detects an absent exporter after three hours
+    interval: 1m
+    input_series:
+      - series: backup_coverage_last_success_timestamp
+        values: _x181 10860+60x3
+    promql_expr_test:
+      - expr: &unknown sum by (alertname, tier, stack) (ALERTS{alertname="BackupCoverageUnknown",alertstate="firing"})
+        eval_time: 179m
+        exp_samples: []
+      - expr: *unknown
+        eval_time: 180m
+        exp_samples:
+          - labels: '{alertname="BackupCoverageUnknown",tier="warning",stack="monitoring"}'
+            value: 1
+      - expr: *unknown
+        eval_time: 181m
+        exp_samples: []
+
+  - name: BackupCoverageUnknown waits for a stale check then its three-hour for duration
+    interval: 1m
+    input_series:
+      - series: backup_coverage_last_success_timestamp
+        values: 0+0x361 21720+60x3
+    promql_expr_test:
+      - expr: *unknown
+        eval_time: 360m
+        exp_samples: []
+      - expr: *unknown
+        eval_time: 361m
+        exp_samples:
+          - labels: '{alertname="BackupCoverageUnknown",tier="warning",stack="monitoring"}'
+            value: 1
+      - expr: *unknown
+        eval_time: 362m
+        exp_samples: []
+
+  - name: BackupCoverageBlind waits ninety minutes and resolves on a successful check
+    interval: 1m
+    input_series:
+      - series: backup_coverage_up
+        values: 0+0x90 1+0x2
+    promql_expr_test:
+      - expr: &coverageblind sum by (alertname, tier, stack) (ALERTS{alertname="BackupCoverageBlind",alertstate="firing"})
+        eval_time: 89m
+        exp_samples: []
+      - expr: *coverageblind
+        eval_time: 90m
+        exp_samples:
+          - labels: '{alertname="BackupCoverageBlind",tier="warning",stack="monitoring"}'
+            value: 1
+      - expr: *coverageblind
+        eval_time: 91m
+        exp_samples: []

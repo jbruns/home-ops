@@ -1,0 +1,61 @@
+# Shared by Grafana and CI. URLs and credentials come from datasources.sops.env.
+# Use $VAR, not ${VAR}: Grafana must not expand dollar signs inside secret values twice.
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    orgId: 1
+    url: $GRAFANA_DS_PROMETHEUS_URL
+    editable: false
+    isDefault: true
+    basicAuth: true
+    basicAuthUser: $GRAFANA_DS_PROMETHEUS_USER
+    secureJsonData:
+      basicAuthPassword: $GRAFANA_DS_PROMETHEUS_PASSWORD
+    uid: prometheus
+  - name: Alertmanager
+    type: alertmanager
+    url: $GRAFANA_DS_ALERTMANAGER_URL
+    access: proxy
+    editable: false
+    jsonData:
+      implementation: prometheus
+    basicAuth: true
+    basicAuthUser: $GRAFANA_DS_ALERTMANAGER_USER
+    secureJsonData:
+      basicAuthPassword: $GRAFANA_DS_ALERTMANAGER_PASSWORD
+    uid: alertmanager
+  - name: Loki
+    type: loki
+    access: proxy
+    url: $GRAFANA_DS_LOKI_URL
+    editable: false
+    isDefault: false
+    uid: loki
+  - name: Prometheus (nc8kg1101)
+    type: prometheus
+    access: proxy
+    url: $GRAFANA_DS_PROMETHEUS_REMOTE_URL
+    editable: false
+    isDefault: false
+    basicAuth: true
+    basicAuthUser: $GRAFANA_DS_PROMETHEUS_REMOTE_USER
+    jsonData:
+      httpMethod: POST
+      timeInterval: 15s
+      prometheusType: Prometheus
+    secureJsonData:
+      basicAuthPassword: $GRAFANA_DS_PROMETHEUS_REMOTE_PASSWORD
+    uid: prometheus-remote
+  - name: Loki (nc8kg1101)
+    type: loki
+    access: proxy
+    url: $GRAFANA_DS_LOKI_REMOTE_URL
+    editable: false
+    isDefault: false
+    basicAuth: true
+    basicAuthUser: $GRAFANA_DS_LOKI_REMOTE_USER
+    secureJsonData:
+      basicAuthPassword: $GRAFANA_DS_LOKI_REMOTE_PASSWORD
+    uid: loki-remote

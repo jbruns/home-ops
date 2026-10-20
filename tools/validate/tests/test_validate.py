@@ -48,6 +48,7 @@ def test_compose_files_follows_includes(validate, repo):
     files = validate.compose_files(repo / "tn/monitoring/compose.yaml")
     assert [f.relative_to(repo).as_posix() for f in files] == [
         "tn/monitoring/compose.yaml",
+        "tn/monitoring/grafana/service.yaml",
         "tn/monitoring/alloy/service.yaml",
         "tn/monitoring/loki/service.yaml",
         "tn/monitoring/alertmanager/service.yaml",
@@ -258,17 +259,37 @@ def test_cloudflare(validate, repo, capsys):
 
 # --- monitoring -------------------------------------------------------------------------------
 
-def test_monitoring_runs_each_tool_with_the_deployed_image(validate, repo, monkeypatch):
-    calls = []
-    monkeypatch.setattr(validate, "docker_run", lambda image, mounts, *args: calls.append((image, args, mounts)))
+def test_monitoring_checks_referenced_files_with_dummy_dependencies_and_secrets(validate, repo, runtime):
+    write(repo, {
+        "tn/monitoring/prometheus/service.yaml": """
+            services:
+              prometheus:
+                image: prom/prometheus:v1
+            secrets:
+              prometheus_password:
+                file: ./prometheus_password.sops.txt
+        """,
+    })
+    validate.check_monitoring()
+    assert not validate.failures
+    config = next(r for r in runtime.runs if r.args[1:3] == ["check", "config"])
+    assert "--syntax-only" not in config.args
+    assert "/etc/prometheus/alerting-rules.yml" in config.mounts
+    assert "${DEP_HOST}" not in config.mounts["/etc/prometheus/sd/dependencies.yml"]
+    assert config.mounts["/run/secrets/prometheus_password"].strip()
+
+
+def test_monitoring_runs_each_tool_with_the_deployed_image(validate, runtime):
     validate.check_monitoring()
     assert validate.failures == []
-    prom = repo / "tn/monitoring/prometheus"
-    assert calls[0] == ("prom/prometheus:v1",
-                        ("promtool", "check", "config", "--syntax-only", "/etc/prometheus/prometheus.yml"),
-                        {prom / "prometheus.yml": "/etc/prometheus/prometheus.yml",
-                         prom / "alerting-rules.yml": "/etc/prometheus/alerting-rules.yml"})
-    assert [(c[0], c[1][0]) for c in calls] == [
+    config = runtime.runs[0]
+    assert (config.image, config.args) == ("prom/prometheus:v1",
+                                           ["promtool", "check", "config", "/etc/prometheus/prometheus.yml"])
+    assert set(config.mounts) == {
+        "/etc/prometheus/prometheus.yml", "/etc/prometheus/alerting-rules.yml",
+        "/etc/prometheus/sd/dependencies.yml",
+    }
+    assert [(r.image, r.args[0]) for r in runtime.runs] == [
         ("prom/prometheus:v1", "promtool"),
         ("prom/prometheus:v1", "promtool"),
         ("prom/alertmanager:v2", "amtool"),
@@ -277,13 +298,11 @@ def test_monitoring_runs_each_tool_with_the_deployed_image(validate, repo, monke
     ]
 
 
-def test_monitoring_skips_untracked_alertmanager_config_and_reports_stale_dashboards(validate, repo, monkeypatch, capsys):
-    calls = []
-    monkeypatch.setattr(validate, "docker_run", lambda image, mounts, *args: calls.append(args[0]))
+def test_monitoring_skips_untracked_alertmanager_config_and_reports_stale_dashboards(validate, repo, capsys, runtime):
     subprocess.run(["git", "rm", "-q", "--cached", "tn/monitoring/alertmanager/config.yml"], cwd=repo, check=True)
     write(repo, {"tools/dashboards/dashboards.py": "print('overview.json: stale'); raise SystemExit(1)\n"})
     validate.check_monitoring()
-    assert "amtool" not in calls
+    assert "amtool" not in [r.args[0] for r in runtime.runs]
     assert "alertmanager config is encrypted-only" in capsys.readouterr().out
     assert messages(validate) == "overview.json: stale"
 
@@ -372,25 +391,26 @@ def test_cli_rejects_bad_path_override(arg):
     assert r.returncode == 2 and "--path takes NAME=PATH" in r.stderr
 
 
-def test_monitoring_paths_are_configurable(validate, repo, monkeypatch):
+def test_monitoring_paths_are_configurable(validate, repo, runtime):
     write(repo, {
         "mon/prom/service.yaml": "services:\n  prometheus:\n    image: prom/prometheus:v9\n",
         "mon/prom/prometheus.yml": "",
+        "mon/prom/dependencies.yml": "[]\n",
         "mon/prom/x-rules.yml": "",
     })
     commit(repo)
-    calls = []
-    monkeypatch.setattr(validate, "docker_run", lambda image, mounts, *args: calls.append((image, sorted(mounts))))
     validate.configure(repo, {"prometheus": "mon/prom"})
     validate.check_monitoring()
-    prom = repo / "mon/prom"
-    assert calls[0] == ("prom/prometheus:v9", [prom / "prometheus.yml", prom / "x-rules.yml"])
+    assert (runtime.runs[0].image, set(runtime.runs[0].mounts)) == ("prom/prometheus:v9", {
+        "/etc/prometheus/prometheus.yml", "/etc/prometheus/x-rules.yml",
+        "/etc/prometheus/sd/dependencies.yml",
+    })
 
 
-def test_monitoring_checks_dashboards_json_under_root(validate, repo, monkeypatch):
-    monkeypatch.setattr(validate, "docker_run", lambda *args: None)
+def test_monitoring_checks_dashboards_json_under_root(validate, repo, runtime):
     write(repo, {"tools/dashboards/dashboards.py": "import sys; print(*sys.argv[1:]); raise SystemExit(1)\n"})
     validate.configure(repo, {"dashboards-json": "json"})
+    write(repo, {"json/overview.json": '{"uid":"overview","title":"Overview","panels":[]}\n'})
     validate.check_monitoring()
     assert messages(validate) == f"--check --out {repo / 'json'}"
 

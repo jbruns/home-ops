@@ -1,0 +1,185 @@
+rule_files:
+  - /etc/prometheus/recording-rules.yml
+evaluation_interval: 1m
+fuzzy_compare: true
+tests:
+  - name: Host recording rules aggregate CPUs and interfaces and retain instance identity
+    interval: 15s
+    input_series:
+      - series: node_cpu_seconds_total{job="node-exporter",instance="host",cpu="0",mode="idle"}
+        values: 0+7.5x12
+      - series: node_cpu_seconds_total{job="node-exporter",instance="host",cpu="1",mode="idle"}
+        values: 0+7.5x12
+      - series: node_cpu_seconds_total{job="node-exporter",instance="host",cpu="0",mode="user"}
+        values: 0+7.5x12
+      - series: node_cpu_seconds_total{job="node-exporter",instance="host",cpu="1",mode="user"}
+        values: 0+7.5x12
+      - series: node_load1{job="node-exporter",instance="host"}
+        values: 1+0x12
+      - series: node_memory_MemAvailable_bytes{job="node-exporter",instance="host"}
+        values: 25+0x12
+      - series: node_memory_MemTotal_bytes{job="node-exporter",instance="host"}
+        values: 100+0x12
+      - series: node_vmstat_pgmajfault{job="node-exporter",instance="host"}
+        values: 0+0.5x12
+      - series: node_disk_io_time_seconds_total{job="node-exporter",instance="host",device="sda"}
+        values: 0+7.5x12
+      - series: node_disk_io_time_weighted_seconds_total{job="node-exporter",instance="host",device="sda"}
+        values: 0+15x12
+      - series: node_network_receive_bytes_total{job="node-exporter",instance="host",device="eth0"}
+        values: 0+25x12
+      - series: node_network_receive_bytes_total{job="node-exporter",instance="host",device="eth1"}
+        values: 0+50x12
+      - series: node_network_receive_bytes_total{job="node-exporter",instance="host",device="lo"}
+        values: 0+25000x12
+      - series: node_network_transmit_bytes_total{job="node-exporter",instance="host",device="eth0"}
+        values: 0+15x12
+      - series: node_network_transmit_bytes_total{job="node-exporter",instance="host",device="eth1"}
+        values: 0+30x12
+      - series: node_network_transmit_bytes_total{job="node-exporter",instance="host",device="lo"}
+        values: 0+25000x12
+      - series: node_network_receive_drop_total{job="node-exporter",instance="host",device="eth0"}
+        values: 0+15x12
+      - series: node_network_receive_drop_total{job="node-exporter",instance="host",device="eth1"}
+        values: 0+30x12
+      - series: node_network_transmit_drop_total{job="node-exporter",instance="host",device="eth0"}
+        values: 0+30x12
+      - series: node_network_transmit_drop_total{job="node-exporter",instance="host",device="eth1"}
+        values: 0+60x12
+    promql_expr_test:
+      - expr: instance:node_num_cpu:sum
+        eval_time: 2m
+        exp_samples:
+          - labels: 'instance:node_num_cpu:sum{job="node-exporter",instance="host"}'
+            value: 2
+      - expr: instance:node_cpu_utilisation:rate1m
+        eval_time: 2m
+        exp_samples:
+          - labels: 'instance:node_cpu_utilisation:rate1m{job="node-exporter",instance="host"}'
+            value: 0.5
+      - expr: instance:node_load1_per_cpu:ratio
+        eval_time: 2m
+        exp_samples:
+          - labels: 'instance:node_load1_per_cpu:ratio{job="node-exporter",instance="host"}'
+            value: 0.5
+      - expr: instance:node_memory_utilisation:ratio
+        eval_time: 2m
+        exp_samples:
+          - labels: 'instance:node_memory_utilisation:ratio{job="node-exporter",instance="host"}'
+            value: 0.75
+      - expr: instance:node_memory_utilisation:percentage
+        eval_time: 2m
+        exp_samples:
+          - labels: 'instance:node_memory_utilisation:percentage{job="node-exporter",instance="host"}'
+            value: 25
+      - expr: instance:node_vmstat_pgmajfault:rate1m
+        eval_time: 2m
+        exp_samples:
+          - labels: 'instance:node_vmstat_pgmajfault:rate1m{job="node-exporter",instance="host"}'
+            value: 0.03333333333333333
+      - expr: instance_device:node_disk_io_time_seconds:rate1m
+        eval_time: 2m
+        exp_samples:
+          - labels: 'instance_device:node_disk_io_time_seconds:rate1m{job="node-exporter",instance="host",device="sda"}'
+            value: 0.5
+      - expr: instance_device:node_disk_io_time_weighted_seconds:rate1m
+        eval_time: 2m
+        exp_samples:
+          - labels: 'instance_device:node_disk_io_time_weighted_seconds:rate1m{job="node-exporter",instance="host",device="sda"}'
+            value: 1
+      - expr: instance:node_network_receive_bytes_excluding_lo:rate1m
+        eval_time: 2m
+        exp_samples:
+          - labels: 'instance:node_network_receive_bytes_excluding_lo:rate1m{job="node-exporter",instance="host"}'
+            value: 5
+      - expr: instance:node_network_transmit_bytes_excluding_lo:rate1m
+        eval_time: 2m
+        exp_samples:
+          - labels: 'instance:node_network_transmit_bytes_excluding_lo:rate1m{job="node-exporter",instance="host"}'
+            value: 3
+      - expr: instance:node_network_receive_drop_excluding_lo:rate1m
+        eval_time: 2m
+        exp_samples:
+          - labels: 'instance:node_network_receive_drop_excluding_lo:rate1m{job="node-exporter",instance="host"}'
+            value: 3
+      - expr: instance:node_network_transmit_drop_excluding_lo:rate1m
+        eval_time: 2m
+        exp_samples:
+          - labels: 'instance:node_network_transmit_drop_excluding_lo:rate1m{job="node-exporter",instance="host"}'
+            value: 6
+
+  - name: Traefik recordings strip providers and exclude 501 while retaining zero-error Services
+    interval: 1m
+    input_series:
+      - series: traefik_service_requests_total{service="app@docker",code="200"}
+        values: 0+54x20
+      - series: traefik_service_requests_total{service="app@docker",code="503"}
+        values: 0+6x20
+      - series: traefik_service_requests_total{service="healthy@docker",code="200"}
+        values: 0+60x20
+      - series: traefik_service_requests_total{service="unsupported@file",code="501"}
+        values: 0+60x20
+    promql_expr_test:
+      - expr: container:traefik_service_requests:rate10m
+        eval_time: 10m
+        exp_samples:
+          - labels: 'container:traefik_service_requests:rate10m{container="app"}'
+            value: 1
+          - labels: 'container:traefik_service_requests:rate10m{container="healthy"}'
+            value: 1
+          - labels: 'container:traefik_service_requests:rate10m{container="unsupported"}'
+            value: 1
+      - expr: container:traefik_service_5xx:rate10m
+        eval_time: 10m
+        exp_samples:
+          - labels: 'container:traefik_service_5xx:rate10m{container="app"}'
+            value: 0.1
+          - labels: 'container:traefik_service_5xx:rate10m{container="healthy"}'
+            value: 0
+          - labels: 'container:traefik_service_5xx:rate10m{container="unsupported"}'
+            value: 0
+      - expr: container:traefik_service_5xx:ratio10m
+        eval_time: 10m
+        exp_samples:
+          - labels: 'container:traefik_service_5xx:ratio10m{container="app"}'
+            value: 0.1
+          - labels: 'container:traefik_service_5xx:ratio10m{container="healthy"}'
+            value: 0
+          - labels: 'container:traefik_service_5xx:ratio10m{container="unsupported"}'
+            value: 0
+
+  - name: Uptime needs every Exposed Service Probe and prefers Probes over container health
+    interval: 1m
+    input_series:
+      - series: probe_success{job="probe",container="web",tier="critical",stack="app"}
+        values: 1+0x3
+      - series: probe_success{job="probe-idp",container="web",tier="critical",stack="app"}
+        values: 0+0x3
+      - series: container_healthy{job="container-health",container="web",tier="critical",stack="app"}
+        values: 1+0x3
+      - series: container_healthy{job="container-health",container="db",tier="critical",stack="app"}
+        values: 1+0x3
+      - series: container_healthy{job="container-health",container="012345abcdef_web",tier="critical",stack="app"}
+        values: 1+0x3
+      - series: container_last_seen{name="unmonitored"}
+        values: 0+60x3
+    promql_expr_test:
+      - expr: service:uptime:ok
+        eval_time: 2m
+        exp_samples:
+          - labels: 'service:uptime:ok{container="web",tier="critical",stack="app"}'
+            value: 0
+          - labels: 'service:uptime:ok{container="db",tier="critical",stack="app"}'
+            value: 1
+
+  - name: Availability averages only the rolling day of Uptime
+    interval: 1m
+    input_series:
+      - series: probe_success{job="probe",container="web",tier="critical",stack="app"}
+        values: 1+0x720 0+0x720
+    promql_expr_test:
+      - expr: service:availability:ratio1d
+        eval_time: 24h
+        exp_samples:
+          - labels: 'service:availability:ratio1d{container="web",tier="critical",stack="app"}'
+            value: 0.5
