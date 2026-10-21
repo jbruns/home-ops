@@ -115,9 +115,9 @@ traefik.http.routers.ownfoil-client-switch.middlewares: crowdsec-bouncer,strip-i
 - **Probe:** `/site.webmanifest`, not `/login`. It is unauthenticated and carries no data. An exact `Path(/login)` health router would also publish `POST /login` without the IdP.
 - **Priority:** Traefik's default priority (rule length) would already favour the client rule. The explicit 100 keeps the intent visible. The health router may lose to the client router for a Basic-carrying request; either router serves it correctly.
 
-## Before switching the public router
+## Before merging the Compose change
 
-These follow [#498's shared contract](https://github.com/jbruns/home-ops/issues/498) (recorded in `docs/research/0498-protected-services.md`):
+doco-cd deploys on merge, so these come first. They follow [#498's shared contract](https://github.com/jbruns/home-ops/issues/498):
 
 1. Register `hnx` with the IdP and assign it to the edge outpost. Until then, the gated UI fails closed while the Client Path keeps working.
 2. Back up `ownfoil_config`. Recovery is Ownfoil's own admin login over the Client Path's Basic route or a direct container shell; no unauthenticated UI is published.
