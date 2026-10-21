@@ -24,11 +24,11 @@ _Avoid_: App, container
 A Service reachable by users through the reverse proxy.
 
 **Protected Service**:
-An Exposed Service whose web UI users sign in at the IdP, either through the reverse proxy or through the Service's own IdP support. Required clients that cannot sign in there reach it through a Client Path.
+An Exposed Service whose web UI users sign in at the IdP, either through the reverse proxy or through the Service's own IdP support. Its web UI sends users to the IdP by default. Required clients that cannot sign in there use the Service's own sign-in: through a Client Path when the reverse proxy enforces the IdP, or directly when the Service redirects to the IdP itself.
 _Avoid_: Authentik-protected, SSO app, behind Authentik
 
 **Client Path**:
-A route into a Protected Service that skips the IdP so a required non-browser client (e.g. an OPDS reader or Tinfoil) keeps working; the Service's own sign-in still applies.
+A route into a Protected Service that skips the reverse proxy's IdP check so a required non-browser client (e.g. an OPDS reader or Tinfoil) keeps working; the Service's own sign-in still applies.
 _Avoid_: Bypass, hole, auth exception
 
 **IdP**:
