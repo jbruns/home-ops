@@ -48,12 +48,14 @@ services:
       traefik.http.routers.app-https.middlewares: protected
 
       # The Probe's path, without forward auth: one exact Path(), nothing else.
+      # It and every Client Path use strip-idp-headers: without forward auth, a client could send the
+      # IdP identity headers itself.
       traefik.http.routers.app-health.rule: Host(`app.${DOMAIN}`) && Path(`/health`)
       traefik.http.routers.app-health.entrypoints: https
       traefik.http.routers.app-health.tls: true
       traefik.http.routers.app-health.tls.certresolver: ${CERT_RESOLVER}
       traefik.http.routers.app-health.service: app
-      traefik.http.routers.app-health.middlewares: crowdsec-bouncer
+      traefik.http.routers.app-health.middlewares: crowdsec-bouncer,strip-idp-headers
 
       # A Client Path (GLOSSARY.md): what a required app (OPDS reader, console, mobile app) uses
       # without the IdP, authenticated by the Service itself. Delete it if there is none. Only
@@ -63,7 +65,7 @@ services:
       traefik.http.routers.app-client-opds.tls: true
       traefik.http.routers.app-client-opds.tls.certresolver: ${CERT_RESOLVER}
       traefik.http.routers.app-client-opds.service: app
-      traefik.http.routers.app-client-opds.middlewares: crowdsec-bouncer,client-ratelimit
+      traefik.http.routers.app-client-opds.middlewares: crowdsec-bouncer,strip-idp-headers,client-ratelimit
 
       traefik.http.services.app.loadbalancer.server.port: 80
 
