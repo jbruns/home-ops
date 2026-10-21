@@ -27,7 +27,6 @@ services:
       start_interval: 5s
     env_file:
       - path: ./datasources.sops.env
-        format: raw
     environment:
       # https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana
       # GF_<SectionName>_<KeyName>

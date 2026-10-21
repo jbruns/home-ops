@@ -89,6 +89,7 @@ Renovate runs Friday mornings (America/Los_Angeles), pins digests, and waits 5 d
 - Files a Compose file mounts or loads (`env_file`, `secrets`) must be named `*.sops.*` and tracked. Plaintext `.env` and `*.txt` files under `tn/` are gitignored.
 - Home public addresses are whitelisted in CrowdSec by `tn/edge/crowdsec/home-whitelist.sops.yaml` (a parser, edited with `sops`). Only this Host carries it.
 - doco-cd writes decrypted files as root with mode 0600. A non-root Service must therefore read secrets through `env_file`, not Compose `secrets`.
+- doco-cd parses `env_file` with the default format only; `format: raw` fails the Deploy. Single-quote values that contain `$`.
 
 Validate locally before pushing (needs Docker and `pip install -r tools/validate/requirements.txt`):
 

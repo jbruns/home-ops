@@ -7,7 +7,7 @@ hook runs before each commit. Repo Tooling: it never runs on the Host.
 |---|---|
 | `secrets` | Sensitive files are tracked only SOPS-encrypted as `*.sops.*`; Stack layout (`tn/<stack>/compose.yaml`, `<service>/service.yaml`); `.doco-cd.yml` keeps `auto_discovery.depth: 1` |
 | `env` | Every `${VAR}` a Stack uses is in its `env.template` and `.sops.env`; `dependencies.yml` placeholders reach `dependencies-render` |
-| `compose` | `docker compose config` renders every Stack and template; startup-order, logging, restart, Probe and Baseline rules ([ADR-0007](../../docs/adr/0007-service-baseline-via-extends.md)) |
+| `compose` | `docker compose config` renders every Stack and template; startup-order, logging, restart, Probe and Baseline rules; no `env_file` `format` (doco-cd supports only the default) ([ADR-0007](../../docs/adr/0007-service-baseline-via-extends.md)) |
 | `monitoring` | Full Prometheus config and rule checks, behavioral rule suites, amtool/Loki/Alloy config checks, dashboard generation and query checks, and Grafana provisioning boots, using the deployed images |
 | `cloudflare` | Traefik's trusted Cloudflare ranges are valid and identical (see [cloudflare-ips](../cloudflare-ips/)) |
 | `isolation` | `tn/doco-cd` and `tn/_baseline.yaml` changes ship in their own PR |
