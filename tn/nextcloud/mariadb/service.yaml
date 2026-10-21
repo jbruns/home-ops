@@ -15,8 +15,8 @@ services:
           # 30-day peak 372M working set with the default 128M buffer pool; room for the 1G pool below
           memory: 1536M
     stop_grace_period: 60s
-    # Nextcloud's database setup check wants a buffer pool of at least 1 GB (occ db:info)
-    command: ["--innodb-buffer-pool-size=1G"]
+    # Nextcloud's database setup check wants a buffer pool of at least 1 GB and a redo log of at least 128 MB (occ setupchecks)
+    command: ["--innodb-buffer-pool-size=1G", "--innodb-log-file-size=256M"]
     # Exit 0 whenever the server answers, even "access denied"; no credentials needed.
     healthcheck:
       # The image's check, via its healthcheck user (.my-healthcheck.cnf in the datadir). mariadb-admin
