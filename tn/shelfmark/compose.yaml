@@ -1,5 +1,5 @@
 # SHELFMARK STACK (deployed by doco-cd). Moved from asotbz/ops tn/asot-media (#457).
-# Hostnames are under this Stack's own DOMAIN, not edge's.
+# Hostnames are under this Stack's own DOMAIN; DOWNLOADER_DOMAIN is the qbittorrent and sabnzbd Stacks'.
 services:
   shelfmark:
     # https://github.com/calibrain/shelfmark/releases
@@ -25,11 +25,15 @@ services:
         limits:
           # 30-day peak 796M
           memory: 1200M
+    # Admin settings are declared here: a setting set by environment is locked in the UI. Only values
+    # that differ from upstream's defaults are pinned; secrets (API keys, Downloader logins, the OIDC
+    # client) are in shelfmark.sops.env. Mirror lists and cache tunables stay upstream-maintained; path
+    # mappings and request rules can't be set by environment and stay in the UI.
+    # https://github.com/calibrain/shelfmark/blob/v1.4.0/docs/environment-variables.md
     environment:
       - ENABLE_LOGGING=false
       - TZ=${TZ}
-      - AA_DONATOR_KEY=${AA_DONATOR_KEY}
-      # Protected by native OIDC (ADR 0006): Shelfmark is a Requester for other users, so each needs
+      # Security. Protected by native OIDC (ADR 0006): Shelfmark is a Requester for other users, so each needs
       # their own identity. Admin comes from the IdP group; no local login, so no password to guess.
       # The discovery URL, client ID and secret are in shelfmark.sops.env. Locked out: deploy once
       # with AUTH_METHOD=none and the UI kept off the internet, fix, then revert.
@@ -38,9 +42,16 @@ services:
       - OIDC_ADMIN_GROUP=shelfmark-admins
       - OIDC_AUTO_REDIRECT=true
       - DISABLE_LOCAL_AUTH=true
+      # Search and metadata
+      - SEARCH_PAGE_TITLE=Book Search & Download
+      - METADATA_PROVIDER=hardcover
+      - HARDCOVER_ENABLED=true
+      - CALIBRE_WEB_URL=https://cwa.${DOMAIN}
+      - AUDIOBOOK_LIBRARY_URL=https://abs.${DOMAIN}
+      # Books Requester: into CWA's Ingest Folder (INGEST_DIR is the Destination setting's env name).
+      - INGEST_DIR=/cwa-book-ingest
       # Organizer for Audiobooks (ADR 0009): a folder per book, as Audiobookshelf needs outside the
       # Library root; {Author}/{Title} alone merges an author's books into one item.
-      # Environment values override (and lock) the in-app settings.
       - DESTINATION_AUDIOBOOK=/data/audiobooks/library
       - FILE_ORGANIZATION_AUDIOBOOK=organize
       - TEMPLATE_AUDIOBOOK_ORGANIZE={Author}/{Title}/{Title}
@@ -48,6 +59,18 @@ services:
       # link to the Library file; on ZFS the copy should be a block clone. Books never hardlink into the Ingest Folder.
       - HARDLINK_TORRENTS_AUDIOBOOK=false
       - HARDLINK_TORRENTS=false
+      # Requester sources: Anna's Archive direct download (donator key) and Prowlarr
+      - DIRECT_DOWNLOAD_ENABLED=true
+      - PROWLARR_ENABLED=true
+      - PROWLARR_URL=https://plr.${DOMAIN}
+      # Downloaders: their own Stacks' hostnames; categories keep Shelfmark's downloads apart from the *arrs'.
+      - PROWLARR_TORRENT_CLIENT=qbittorrent
+      - QBITTORRENT_URL=https://qbittorrent.${DOWNLOADER_DOMAIN}
+      - QBITTORRENT_CATEGORY=cwd-books
+      - QBITTORRENT_CATEGORY_AUDIOBOOK=cwd-audiobooks
+      - PROWLARR_USENET_CLIENT=sabnzbd
+      - SABNZBD_URL=https://sabnzbd.${DOWNLOADER_DOMAIN}
+      - SABNZBD_CATEGORY_AUDIOBOOK=audiobooks
     env_file: ./shelfmark.sops.env
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
