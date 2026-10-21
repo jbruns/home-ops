@@ -79,7 +79,7 @@ docker exec prometheus wget -qO- --post-data '' --header "x-api-key: $KEY" \
 
 Deleting a Stack folder removes the Stack from the Host but keeps its volumes. Volumes that predate the one-Stack-per-app split keep their old names (e.g. `home_vaultwarden_data`) through an explicit `name:`; don't rename them without a planned data move (ADR-0004).
 
-Renovate runs Friday mornings (America/Los_Angeles), pins digests, and waits 5 days after a release before proposing it.
+Renovate runs every morning (America/Los_Angeles) with no hourly PR limit, pins digests, and waits 5 days after a release before proposing it.
 
 ## Secrets
 

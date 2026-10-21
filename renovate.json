@@ -10,8 +10,9 @@
   "minimumReleaseAge": "5 days",
   "minimumReleaseAgeBehaviour": "timestamp-optional",
   "schedule": [
-    "* 10-13 * * 5"
+    "* 10-13 * * *"
   ],
+  "prHourlyLimit": 0,
   "timezone": "America/Los_Angeles",
   "packageRules": [
     {
@@ -33,6 +34,13 @@
         "portainer/portainer-ee"
       ],
       "enabled": false
+    },
+    {
+      "description": "Nextcloud can only upgrade one major at a time (the image refuses to skip one), so propose each major separately",
+      "matchPackageNames": [
+        "nextcloud"
+      ],
+      "separateMultipleMajor": true
     },
     {
       "description": "Grafana logging stack",
