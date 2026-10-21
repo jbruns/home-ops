@@ -5,7 +5,7 @@ services:
     extends:
       file: ../_baseline.yaml
       service: baseline
-    image: emby/embyserver:4.9.5.0@sha256:734a6f03c7c783a9e566b08d09a2b6376f41229ff29f032a7e00302e0be98f8a
+    image: emby/embyserver:4.10.1.0@sha256:734a6f03c7c783a9e566b08d09a2b6376f41229ff29f032a7e00302e0be98f8a
     container_name: emby
     # The image's s6 run script only chowns /config and s6-applyuidgid's to UID/GID, which needs
     # caps; start EmbyServer as that user instead (same args), so no caps. init reaps ffmpeg children.
