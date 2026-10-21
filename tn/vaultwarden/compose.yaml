@@ -4,7 +4,7 @@ services:
     extends:
       file: ../_baseline.yaml
       service: baseline
-    image: vaultwarden/server:1.37.2@sha256:094b5689ed81549bd293418395c7cf495ae9d960fc2d4928cef2083ef913d912
+    image: vaultwarden/server:1.37.4@sha256:efb3cde962015fcc036b2ea625242248611943b27212ebf4392841fb30fad055
     container_name: vaultwarden
     user: ${HOME_UID}:${HOME_GID}
     # Mirrors the image's own HEALTHCHECK (GET /alive on ROCKET_PORT).
