@@ -114,7 +114,7 @@ Every Service carries a `tier` label (`critical`, `warning` or `info`), and ever
 
 Prometheus keeps 400 days (capped at 60 GB). Daily Availability per Service is `service:availability:ratio1d` (recording-rules.yml).
 
-4xx are visible per Service and route kind (`container_route:traefik_router_*`, from Traefik router metrics, which also count forward-auth and CrowdSec answers) and, for the home public addresses, in the access log on the Service dashboard. There is deliberately no 4xx alert: Internet scanning would make a generic one noise. Alloy labels those access-log lines `client="home"` using `tn/monitoring/alloy/home-clients.sops.env`, which must stay in step with the CrowdSec whitelist (`tn/edge/crowdsec/home-whitelist.sops.yaml`).
+4xx are visible per Service and route kind (`container_route*:traefik_router_requests:rate10m`, from Traefik router metrics, which also count forward-auth and CrowdSec answers) and, for the home public addresses, in the access log on the Service dashboard. There is deliberately no 4xx alert: Internet scanning would make a generic one noise. Alloy labels those access-log lines `client="home"` using `tn/monitoring/alloy/home-clients.sops.env`, which must stay in step with the CrowdSec whitelist (`tn/edge/crowdsec/home-whitelist.sops.yaml`).
 
 Rules are in `tn/monitoring/prometheus/alerting-rules.yml` and routing in `tn/monitoring/alertmanager/config.yml`. Silence a Stack you are working on (e.g. `alertname=ContainerDown, stack=<stack>`) in Alertmanager.
 

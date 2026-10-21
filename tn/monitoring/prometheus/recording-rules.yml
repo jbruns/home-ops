@@ -49,25 +49,19 @@ groups:
 # basic-auth Service's `ui` 401s are mostly its own Probe.
 - name: traefik_routers
   rules:
-  - record: container_route:traefik_router_requests:rate10m
+  - record: container_route_code:traefik_router_requests:rate10m
     expr: |
-      sum by (container, router, route_kind, code_class) (
-        label_replace(label_replace(label_replace(label_replace(label_replace(
+      sum by (container, router, route_kind, code) (
+        label_replace(label_replace(label_replace(label_replace(
           rate(traefik_router_requests_total{router=~".+-(https?|health|client-[a-z0-9]+)@.+"}[10m]),
           "container", "$1", "router", "(.+)-(?:https?|health|client-[a-z0-9]+)@.+"),
           "route_kind", "$1", "router", ".+-(https?|health|client)(?:-[a-z0-9]+)?@.+"),
           "route_kind", "ui", "route_kind", "https"),
-          "router", "$1", "router", "(.+)@.+"),
-          "code_class", "${1}xx", "code", "(.).."))
-  - record: container_route:traefik_router_4xx:rate10m
-    expr: |
-      sum by (container, router, route_kind, code) (
-        label_replace(label_replace(label_replace(label_replace(
-          rate(traefik_router_requests_total{router=~".+-(https?|health|client-[a-z0-9]+)@.+", code=~"4.."}[10m]),
-          "container", "$1", "router", "(.+)-(?:https?|health|client-[a-z0-9]+)@.+"),
-          "route_kind", "$1", "router", ".+-(https?|health|client)(?:-[a-z0-9]+)?@.+"),
-          "route_kind", "ui", "route_kind", "https"),
           "router", "$1", "router", "(.+)@.+"))
+  - record: container_route:traefik_router_requests:rate10m
+    expr: |
+      sum by (container, router, route_kind, code_class) (
+        label_replace(container_route_code:traefik_router_requests:rate10m, "code_class", "${1}xx", "code", "(.).."))
 
 # Uptime and Availability (GLOSSARY.md). An Exposed Service is up while every one of its Probes
 # succeeds; any other Service while its health check reports healthy (container-health-exporter).

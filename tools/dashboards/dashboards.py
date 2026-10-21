@@ -347,12 +347,12 @@ def service():
         # (forward auth's 302/401, the CrowdSec bouncer's 403). route_kind: recording-rules.yml.
         row("4xx (through Traefik routers)"),
         timeseries("4xx by route kind", [
-            target(f"sum by (route_kind) (container_route:traefik_router_4xx:rate10m{{{c}}})", "{{route_kind}}")],
+            target(f'sum by (route_kind) (container_route_code:traefik_router_requests:rate10m{{{c}, code=~"4.."}})', "{{route_kind}}")],
             w=8, unit="reqps", stack=True,
             desc="ui: the web UI (forward auth and CrowdSec answer here too); client: Client Paths; "
                  "health: the Probe path; http: the redirect to https. A basic-auth Service's ui 401s are mostly its own Probe."),
         timeseries("4xx by router and code", [
-            target(f"sum by (router, code) (container_route:traefik_router_4xx:rate10m{{{c}}})", "{{router}} {{code}}")],
+            target(f'sum by (router, code) (container_route_code:traefik_router_requests:rate10m{{{c}, code=~"4.."}})', "{{router}} {{code}}")],
             w=8, unit="reqps",
             desc="401s on a -client-<protocol> router are failed sign-ins: a user's, or brute force. "
                  "403s are mostly the CrowdSec bouncer."),
