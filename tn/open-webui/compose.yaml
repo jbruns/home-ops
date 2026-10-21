@@ -5,7 +5,7 @@ services:
     extends:
       file: ../_baseline.yaml
       service: baseline
-    image: ollama/ollama:0.34.3@sha256:7ab595e4ead391f6818c7215297781282babe0701f6d9a9f8862ac591360a58b
+    image: ollama/ollama:0.40.5@sha256:5d3a2f25f9825628daba94dc0b1d421c7d57d6c03ae5faa9ba050e058bab8241
     healthcheck:
       test: ["CMD", "ollama", "ls"]
       interval: 30s
