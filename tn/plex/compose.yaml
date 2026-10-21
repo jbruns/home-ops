@@ -5,7 +5,7 @@ services:
     extends:
       file: ../_baseline.yaml
       service: baseline
-    image: ghcr.io/home-operations/plex:1.43.4@sha256:fdc6fe82bc7d8acd08fc0aa581fcb76722803ba5905e2537135a697347dd6149
+    image: ghcr.io/home-operations/plex:1.43.5@sha256:996656c7b98462bc726e5c63ae7778fc084cff4560677b4a4e45edf0f3fa67dc
     container_name: plex
     user: ${PLEX_UID}:${MEDIA_SHARED_GID}
     group_add:
