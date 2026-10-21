@@ -63,7 +63,8 @@ recovery procedure, and Probe changes before switching the public router:
 4. Test forged identity headers, WebSockets/long polls, necessary API clients and real client apps.
    Audit **persisted runtime** Downloader/indexer/cross-Service URLs and API keys, not just Compose.
 5. Preserve a pre-cutover config/Datastore backup and tested restricted administrative recovery route.
-   An IdP outage must fail closed on the public UI; recovery must not publish an unauthenticated UI.
+   An IdP outage must not grant new unauthenticated access; existing valid sessions and deliberately
+   retained native recovery credentials may still work. Recovery must not publish an unauthenticated UI.
 6. Native OIDC: independently check an HTTP redirect from the Service's login initiation route
    to the expected IdP authorize endpoint, and unauthenticated health. Browser-side JavaScript
    navigation is not an HTTP 302 Probe. Label native Probes separately from outpost Probes.
