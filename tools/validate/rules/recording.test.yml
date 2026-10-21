@@ -148,6 +148,55 @@ tests:
           - labels: 'container:traefik_service_5xx:ratio10m{container="unsupported"}'
             value: 0
 
+  - name: Router recordings split each Service's traffic by route kind and keep 4xx codes apart
+    interval: 1m
+    input_series:
+      - series: traefik_router_requests_total{router="app-https@docker",service="app@docker",code="200",method="GET"}
+        values: 0+60x20
+      - series: traefik_router_requests_total{router="app-https@docker",service="app@docker",code="302",method="GET"}
+        values: 0+30x20
+      - series: traefik_router_requests_total{router="app-https@docker",service="app@docker",code="401",method="GET"}
+        values: 0+6x20
+      - series: traefik_router_requests_total{router="app-https@docker",service="app@docker",code="401",method="POST"}
+        values: 0+6x20
+      - series: traefik_router_requests_total{router="app-https@docker",service="app@docker",code="403",method="GET"}
+        values: 0+12x20
+      - series: traefik_router_requests_total{router="app-client-opds@docker",service="app@docker",code="401",method="GET"}
+        values: 0+60x20
+      - series: traefik_router_requests_total{router="app-health@docker",service="app@docker",code="200",method="GET"}
+        values: 0+60x20
+      - series: traefik_router_requests_total{router="app-http@docker",service="app@docker",code="302",method="GET"}
+        values: 0+60x20
+      - series: traefik_router_requests_total{router="web-app-https@docker",service="web-app@docker",code="503",method="GET"}
+        values: 0+60x20
+    promql_expr_test:
+      - expr: container_route:traefik_router_requests:rate10m
+        eval_time: 10m
+        exp_samples:
+          - labels: 'container_route:traefik_router_requests:rate10m{container="app",router="app-https",route_kind="ui",code_class="2xx"}'
+            value: 1
+          - labels: 'container_route:traefik_router_requests:rate10m{container="app",router="app-https",route_kind="ui",code_class="3xx"}'
+            value: 0.5
+          - labels: 'container_route:traefik_router_requests:rate10m{container="app",router="app-https",route_kind="ui",code_class="4xx"}'
+            value: 0.4
+          - labels: 'container_route:traefik_router_requests:rate10m{container="app",router="app-client-opds",route_kind="client",code_class="4xx"}'
+            value: 1
+          - labels: 'container_route:traefik_router_requests:rate10m{container="app",router="app-health",route_kind="health",code_class="2xx"}'
+            value: 1
+          - labels: 'container_route:traefik_router_requests:rate10m{container="app",router="app-http",route_kind="http",code_class="3xx"}'
+            value: 1
+          - labels: 'container_route:traefik_router_requests:rate10m{container="web-app",router="web-app-https",route_kind="ui",code_class="5xx"}'
+            value: 1
+      - expr: container_route:traefik_router_4xx:rate10m
+        eval_time: 10m
+        exp_samples:
+          - labels: 'container_route:traefik_router_4xx:rate10m{container="app",router="app-https",route_kind="ui",code="401"}'
+            value: 0.2
+          - labels: 'container_route:traefik_router_4xx:rate10m{container="app",router="app-https",route_kind="ui",code="403"}'
+            value: 0.2
+          - labels: 'container_route:traefik_router_4xx:rate10m{container="app",router="app-client-opds",route_kind="client",code="401"}'
+            value: 1
+
   - name: Uptime needs every Exposed Service Probe and prefers Probes over container health
     interval: 1m
     input_series:

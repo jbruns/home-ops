@@ -26,6 +26,9 @@ services:
       retries: 3
       start_period: 60s
       start_interval: 5s
+    # HOME_CLIENT_REGEX for config.alloy (the home public addresses)
+    env_file:
+      - path: ./home-clients.sops.env
     command:
       - run
       - --server.http.listen-addr=0.0.0.0:12345

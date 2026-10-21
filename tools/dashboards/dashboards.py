@@ -123,8 +123,8 @@ def table(title, targets, columns, w=12, h=8, join="container", overrides=(), de
                  options=opts, custom={"align": "auto"}, overrides=list(overrides))
 
 
-def logs(title, expr, w=24, h=12):
-    return panel("logs", title, [target(expr, ds=LOKI)], w, h, ds=LOKI,
+def logs(title, expr, w=24, h=12, desc=None):
+    return panel("logs", title, [target(expr, ds=LOKI)], w, h, desc=desc, ds=LOKI,
                  options={"showTime": True, "wrapLogMessage": True, "sortOrder": "Descending",
                           "enableLogDetails": True, "prettifyLogMessage": False})
 
@@ -342,6 +342,38 @@ def service():
             target(f"histogram_quantile({q}, sum by (le) (rate(traefik_service_request_duration_seconds_bucket{{{tsvc}}}[{rate}])))",
                    f"p{int(q * 100)}", ref)
             for q, ref in ((0.5, "A"), (0.95, "B"), (0.99, "C"))], w=8, unit="s"),
+
+        # Router metrics, unlike the service metrics above, also count what a middleware answers
+        # (forward auth's 302/401, the CrowdSec bouncer's 403). route_kind: recording-rules.yml.
+        row("4xx (through Traefik routers)"),
+        timeseries("4xx by route kind", [
+            target(f"sum by (route_kind) (container_route:traefik_router_4xx:rate10m{{{c}}})", "{{route_kind}}")],
+            w=8, unit="reqps", stack=True,
+            desc="ui: the web UI (forward auth and CrowdSec answer here too); client: Client Paths; "
+                 "health: the Probe path; http: the redirect to https. A basic-auth Service's ui 401s are mostly its own Probe."),
+        timeseries("4xx by router and code", [
+            target(f"sum by (router, code) (container_route:traefik_router_4xx:rate10m{{{c}}})", "{{router}} {{code}}")],
+            w=8, unit="reqps",
+            desc="401s on a -client-<protocol> router are failed sign-ins: a user's, or brute force. "
+                 "403s are mostly the CrowdSec bouncer."),
+        timeseries("Requests by route kind", [
+            target(f"sum by (route_kind, code_class) (container_route:traefik_router_requests:rate10m{{{c}}})",
+                   "{{route_kind}} {{code_class}}")],
+            w=8, unit="reqps", stack=True),
+        logs("4xx from home addresses",
+             '{container="traefik", logstream="access", client="home"} | json'
+             ' | DownstreamStatus >= 400 and DownstreamStatus < 500'
+             ' and RouterName =~ "$container-(https?|health|client-[a-z0-9]+)@.+"'
+             ' and request_User_Agent !~ "Blackbox-Exporter/.*"'
+             ' | line_format "{{.DownstreamStatus}} {{.RequestMethod}} {{.RequestPath}} via {{.RouterName}} ({{.request_User_Agent}})"',
+             w=16, h=10,
+             desc="A home user's failures, from the home public addresses (the CrowdSec whitelist; Alloy labels them "
+                  "client=home). Probes are excluded. Client IPs are only in the access log, never in metrics."),
+        timeseries("CrowdSec decisions in effect", [
+            target('sum by (reason) (cs_active_decisions{origin="crowdsec"})', "{{reason}}")],
+            w=8, h=10, stack=True,
+            desc="Host-wide bans from this Host's own scenarios (community blocklists excluded), "
+                 "for comparing Internet noise with the home 4xx beside it."),
 
         row("Resources"),
         timeseries("CPU", [target(f"sum(rate(container_cpu_usage_seconds_total{{{name}}}[{rate}]))", "cores")],
