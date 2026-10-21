@@ -325,7 +325,7 @@ def test_compose_reports_every_rule(validate, repo, capsys):
               web:
                 extends: {file: ../../_baseline.yaml, service: baseline}
                 image: nginx:1@sha256:abc
-                env_file: secret.sops.env
+                env_file: [{path: secret.sops.env, format: raw}]
                 healthcheck: {test: ["CMD", "true"]}
                 deploy: {resources: {limits: {memory: 64M}}}
                 labels:
@@ -343,6 +343,7 @@ def test_compose_reports_every_rule(validate, repo, capsys):
     assert "app: web: has an https router but no probe.url label" in out
     assert "app: services without json-file logging at max-size 10m, max-file 3: bare" in out
     assert "app: services without restart: unless-stopped: bare" in out
+    assert "app: env_file format is unsupported by doco-cd (use the default and single-quote values containing $): web" in out
     assert "app: Baseline (ADR 0007): bare: must extend tn/_baseline.yaml" in out
     assert "compose ok: monitoring" not in out
     assert "Baseline: " in capsys.readouterr().out

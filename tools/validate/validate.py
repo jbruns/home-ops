@@ -10,6 +10,7 @@ Subcommands:
   env         every ${VAR} a Stack uses exists in its env.template and its encrypted .sops.env
   compose     `docker compose config` succeeds for every Stack and templates/* with placeholder values;
               every Service has a startup-order label, json-file logging and restart: unless-stopped,
+              no env_file sets format (doco-cd supports only the default),
               and every Exposed Service (https router) a probe.url. A Service that extends
               tn/_baseline.yaml meets the Baseline or carries a baseline.exempt.<item> reason, and its
               routers follow ADR 0006 (names, health and Client Paths, Protected Probes)
@@ -153,6 +154,19 @@ def sensitive_refs(compose: Path) -> list[Path]:
         if isinstance(sec, dict) and sec.get("file"):
             refs.append(sec["file"])
     return [(compose.parent / r).resolve() for r in refs]
+
+
+def env_file_formats(compose: Path) -> list[str]:
+    """Services whose env_file sets a format. doco-cd loads Stacks with compose-go, which knows only
+    the default; the docker compose CLI registers "raw" itself, so `docker compose config` accepts it."""
+    doc = yaml.safe_load(compose.read_text()) or {}
+    found = []
+    for name, svc in (doc.get("services") or {}).items():
+        env_file = svc.get("env_file")
+        entries = [env_file] if isinstance(env_file, (str, dict)) else (env_file or [])
+        if any(isinstance(e, dict) and e.get("format") for e in entries):
+            found.append(name)
+    return found
 
 
 def env_keys(path: Path) -> set[str]:
@@ -412,6 +426,8 @@ def check_compose() -> None:
                     if {"driver": (svc.get("logging") or {}).get("driver"),
                         **{k: (svc.get("logging") or {}).get("options", {}).get(k) for k in ("max-size", "max-file")}} != LOGGING]
             restart = [name for name, svc in services.items() if svc.get("restart") != "unless-stopped"]
+            # `config` resolves env_file away, so read the sources.
+            env_formats = [n for f in compose_files(entry(stack)) for n in env_file_formats(f)]
             on_baseline = baseline_services(stack, work)
             if template and set(services) - on_baseline:
                 fail(f"{stack.name}: every template Service must extend {BASELINE_FILE}", src)
@@ -434,9 +450,11 @@ def check_compose() -> None:
                 fail(f"{stack.name}: services without json-file logging at max-size 10m, max-file 3: {', '.join(sorted(logs))}", src)
             if restart:
                 fail(f"{stack.name}: services without restart: unless-stopped: {', '.join(sorted(restart))}", src)
+            if env_formats:
+                fail(f"{stack.name}: env_file format is unsupported by doco-cd (use the default and single-quote values containing $): {', '.join(sorted(env_formats))}", src)
             if base_problems:
                 fail(f"{stack.name}: Baseline (ADR 0007): " + "; ".join(base_problems), src)
-            if not bad and not probes and not logs and not restart and not base_problems:
+            if not bad and not probes and not logs and not restart and not env_formats and not base_problems:
                 print(f"compose ok: {stack.name}")
     print(f"Baseline: {counts['baseline']} of {counts['total']} Services meet it (ADR 0007)")
     for x in exemptions:
