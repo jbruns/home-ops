@@ -4,7 +4,7 @@ services:
     extends:
       file: ../../_baseline.yaml
       service: baseline
-    image: nginxinc/nginx-unprivileged:1.31.5@sha256:9d689e987337916e713a2d5fa84966550d9532e4cb512e7d6ad99df87ffe1ec8
+    image: nginxinc/nginx-unprivileged:1.31.6@sha256:1d26a516fb93b18f9c0214dc9c645054486e516f13ff09ef63d5bd5c622278a2
     container_name: nginx
     user: ${COMMON_UID}:${COMMON_GID}
     deploy:
