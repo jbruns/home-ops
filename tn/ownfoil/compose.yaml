@@ -24,8 +24,8 @@ services:
     deploy:
       resources:
         limits:
-          # 30-day peak 545M, plus the /app/data tmpfs (~175M), which counts against the limit
-          memory: 1G
+          # 2.5 startup peaked at 1.03 GiB with two task workers and the /app/data tmpfs.
+          memory: 2G
     environment:
       # https://github.com/a1ex4/ownfoil#docker-compose
       - HOME=/tmp
