@@ -112,6 +112,7 @@ def test_router_names_and_rules(validate):
     }
     problems = validate.router_problems("app", labels)
     assert problems == [
+        "app: router app-client-api skips forward auth, so it needs strip-idp-headers",
         "app: Client Path app-client-api needs crowdsec-bouncer and a rate limit",
         "app: router 'wrong' must be app-http|-https|-health|-client-<protocol>",
         "app: a Protected Service needs a probe.idp_url label",
@@ -129,8 +130,35 @@ def test_router_health_rules(validate):
     assert validate.router_problems("app", labels) == [
         "app: router app-health must match one exact Path()",
         "app: router app-health must not use forward auth",
+        "app: router app-health skips forward auth, so it needs strip-idp-headers",
         "app: router app-http matches on a header; only Client Paths may",
         "app: a Protected Service needs a probe.idp_url label",
+    ]
+
+
+def test_routers_skipping_forward_auth_strip_idp_headers(validate):
+    labels = {
+        "traefik.http.routers.app-https.middlewares": "protected",
+        "traefik.http.routers.app-health.rule": "Host(`a`) && Path(`/health`)",
+        "traefik.http.routers.app-health.middlewares": "crowdsec-bouncer",
+        "traefik.http.routers.app-client-opds.rule": "Host(`a`) && PathPrefix(`/opds`)",
+        "traefik.http.routers.app-client-opds.middlewares": "crowdsec-bouncer,strip-idp-headers@docker,client-ratelimit",
+        "probe.idp_url": "https://a/",
+    }
+    assert validate.router_problems("app", labels) == [
+        "app: router app-health skips forward auth, so it needs strip-idp-headers",
+    ]
+
+
+def test_strip_idp_headers_covers_forward_auth_headers(validate):
+    mw = "traefik.http.middlewares"
+    labels = {
+        f"{mw}.idp-forward-auth.forwardAuth.authResponseHeaders": "X-a-user,X-a-groups,X-a-jwt",
+        f"{mw}.strip-idp-headers.headers.customRequestHeaders.X-a-user": "",
+        f"{mw}.strip-idp-headers.headers.customRequestHeaders.X-a-groups": "x",
+    }
+    assert validate.router_problems("edge", labels) == [
+        "edge: strip-idp-headers must empty every idp-forward-auth header; missing X-a-groups, X-a-jwt",
     ]
 
 

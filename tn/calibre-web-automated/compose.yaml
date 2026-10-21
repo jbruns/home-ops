@@ -58,7 +58,7 @@ services:
       traefik.http.routers.calibre-web-automated-health.tls: true
       traefik.http.routers.calibre-web-automated-health.tls.certresolver: ${CERT_RESOLVER}
       traefik.http.routers.calibre-web-automated-health.service: calibre-web-automated
-      traefik.http.routers.calibre-web-automated-health.middlewares: crowdsec-bouncer
+      traefik.http.routers.calibre-web-automated-health.middlewares: crowdsec-bouncer,strip-idp-headers
 
       # Client Path (GLOSSARY.md): OPDS readers, with CWA's own login
       traefik.http.routers.calibre-web-automated-client-opds.rule: Host(`cwa.${DOMAIN}`) && PathPrefix(`/opds`)
@@ -66,7 +66,7 @@ services:
       traefik.http.routers.calibre-web-automated-client-opds.tls: true
       traefik.http.routers.calibre-web-automated-client-opds.tls.certresolver: ${CERT_RESOLVER}
       traefik.http.routers.calibre-web-automated-client-opds.service: calibre-web-automated
-      traefik.http.routers.calibre-web-automated-client-opds.middlewares: crowdsec-bouncer,client-ratelimit
+      traefik.http.routers.calibre-web-automated-client-opds.middlewares: crowdsec-bouncer,strip-idp-headers,client-ratelimit
 
       traefik.http.services.calibre-web-automated.loadbalancer.server.port: 8083
     volumes:

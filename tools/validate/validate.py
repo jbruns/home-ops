@@ -311,6 +311,7 @@ ROUTER_LABEL_RE = re.compile(r"^traefik\.http\.routers\.([^.]+)\.")
 SERVICE_LABEL_RE = re.compile(r"^traefik\.http\.services\.([^.]+)\.")
 PROTECTED_CHAIN = "protected"
 FORWARD_AUTH = "idp-forward-auth"
+STRIP_IDP = "strip-idp-headers"
 
 
 def baseline_services(stack: Path, base: Path) -> set[str]:
@@ -365,6 +366,8 @@ def router_problems(name: str, labels: dict) -> list[str]:
             problems.append(f"{name}: router {r} must match one exact Path()")
         if (client or health) and {PROTECTED_CHAIN, FORWARD_AUTH} & set(mws):
             problems.append(f"{name}: router {r} must not use forward auth")
+        if (client or health) and STRIP_IDP not in mws:
+            problems.append(f"{name}: router {r} skips forward auth, so it needs {STRIP_IDP}")
         if client and ("crowdsec-bouncer" not in mws or not any("ratelimit" in m for m in mws)):
             problems.append(f"{name}: Client Path {r} needs crowdsec-bouncer and a rate limit")
     if any({PROTECTED_CHAIN, FORWARD_AUTH} & set(middlewares(labels, r)) for r in routers):
@@ -372,6 +375,12 @@ def router_problems(name: str, labels: dict) -> list[str]:
             problems.append(f"{name}: a Protected Service needs a probe.idp_url label")
         if f"{name}-health" not in routers:
             problems.append(f"{name}: a Protected Service needs a {name}-health router for its Probe")
+    handed = str(labels.get(f"traefik.http.middlewares.{FORWARD_AUTH}.forwardAuth.authResponseHeaders", ""))
+    strip = f"traefik.http.middlewares.{STRIP_IDP}.headers.customRequestHeaders."
+    if handed:
+        stripped = {k.removeprefix(strip) for k, v in labels.items() if k.startswith(strip) and v == ""}
+        if missing := sorted({h.strip() for h in handed.split(",") if h.strip()} - stripped):
+            problems.append(f"{name}: {STRIP_IDP} must empty every {FORWARD_AUTH} header; missing {', '.join(missing)}")
     for s in sorted({m.group(1) for k in labels if (m := SERVICE_LABEL_RE.match(k))} - {name}):
         problems.append(f"{name}: Traefik service {s!r} must be named {name!r} (Http5xxRatio maps it to the container)")
     return problems
