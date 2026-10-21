@@ -11,8 +11,8 @@ services:
     deploy:
       resources:
         limits:
-          # 30-day peak 175M
-          memory: 256M
+          # 0.64 artwork processing exceeds the previous 256M limit.
+          memory: 1G
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:4533/ping"]
       interval: 30s
@@ -23,6 +23,8 @@ services:
     environment:
       # https://www.navidrome.org/docs/usage/configuration-options/#environment-variables
       - ND_ENABLETRANSCODINGCONFIG=true
+      # Bound image decoding independently of the Host's 48 CPUs (default: 24 workers).
+      - ND_DEVARTWORKWORKERCONCURRENCY=2
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: warning
