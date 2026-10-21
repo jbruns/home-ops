@@ -11,7 +11,7 @@ services:
     # run.sh only adds a user, chowns /app and sudo's to PUID; start the app as that user instead,
     # so no caps. /app/data (TitleDB, rebuilt at start) was chowned by run.sh; it is a tmpfs now.
     user: ${OWNFOIL_UID}:${MEDIA_SHARED_GID}
-    entrypoint: ["python", "/app/app.py"]
+    entrypoint: ["python", "/app/run.py"]
     tmpfs:
       - /app/data:uid=${OWNFOIL_UID},gid=${MEDIA_SHARED_GID},mode=0755,size=384m
     healthcheck:
