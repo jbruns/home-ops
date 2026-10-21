@@ -2,7 +2,8 @@
 # Hostnames are under this Stack's own DOMAIN, not edge's.
 services:
   ownfoil:
-    # https://github.com/a1ex4/ownfoil/releases ; Switch clients use its basic auth on / (#503)
+    # https://github.com/a1ex4/ownfoil/releases ; Switch clients use its basic auth on every path
+    # (#503, docs/research/0503-ownfoil-client-path.md)
     extends:
       file: ../_baseline.yaml
       service: baseline
@@ -41,7 +42,8 @@ services:
       stack-back.volumes.include: "ownfoil_config"
 
       # Probe (GLOSSARY.md): the public path a user takes; see prometheus.yml
-      probe.url: https://hnx.${DOMAIN}/login
+      probe.url: https://hnx.${DOMAIN}/site.webmanifest
+      probe.idp_url: https://hnx.${DOMAIN}/
 
       traefik.enable: true
       traefik.docker.network: proxy
@@ -50,12 +52,32 @@ services:
       traefik.http.routers.ownfoil-http.entrypoints: http
       traefik.http.routers.ownfoil-http.middlewares: redirect-https
 
+      # The web UI is Protected: crowdsec-bouncer, then the IdP as a gate in front of Ownfoil's
+      # own login (ADR 0006). Ownfoil has no OIDC or identity-header support (a1ex4/ownfoil#86).
       traefik.http.routers.ownfoil-https.rule: Host(`hnx.${DOMAIN}`)
       traefik.http.routers.ownfoil-https.entrypoints: https
       traefik.http.routers.ownfoil-https.tls: true
       traefik.http.routers.ownfoil-https.tls.certresolver: ${CERT_RESOLVER}
       traefik.http.routers.ownfoil-https.service: ownfoil
-      traefik.http.routers.ownfoil-https.middlewares: crowdsec-bouncer
+      traefik.http.routers.ownfoil-https.middlewares: protected
+
+      # The Probe's path, without the IdP: a static manifest with no auth and no data
+      traefik.http.routers.ownfoil-health.rule: Host(`hnx.${DOMAIN}`) && Path(`/site.webmanifest`)
+      traefik.http.routers.ownfoil-health.entrypoints: https
+      traefik.http.routers.ownfoil-health.tls: true
+      traefik.http.routers.ownfoil-health.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.ownfoil-health.service: ownfoil
+      traefik.http.routers.ownfoil-health.middlewares: crowdsec-bouncer,strip-idp-headers
+
+      # Client Path (GLOSSARY.md): Switch shop clients (Tinfoil, Sphaira) share the UI's paths but
+      # always send Basic auth, so match the header; Ownfoil checks the credentials (#503).
+      traefik.http.routers.ownfoil-client-switch.rule: Host(`hnx.${DOMAIN}`) && HeaderRegexp(`Authorization`, `^Basic `)
+      traefik.http.routers.ownfoil-client-switch.priority: 100
+      traefik.http.routers.ownfoil-client-switch.entrypoints: https
+      traefik.http.routers.ownfoil-client-switch.tls: true
+      traefik.http.routers.ownfoil-client-switch.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.ownfoil-client-switch.service: ownfoil
+      traefik.http.routers.ownfoil-client-switch.middlewares: crowdsec-bouncer,strip-idp-headers,client-ratelimit
 
       traefik.http.services.ownfoil.loadbalancer.server.port: 8465
     volumes:
