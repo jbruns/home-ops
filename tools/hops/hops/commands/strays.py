@@ -40,29 +40,22 @@ def removable(report: dict, kind: str) -> list[dict]:
     return [e for e in report[kind] if not e["kept"]]
 
 
-def remove_image(runner, image: dict) -> str | None:
-    """Remove an image by its ID, without force; None on success, else why not.
+class Kept(str):
+    """A removal Docker refused for a reason that makes the item kept, not a failure."""
 
-    Docker refuses an ID with several tags. Then each tag is untagged, but only once every tag
-    still resolves to this ID; anything that moved since the list was read is left alone.
+
+def remove_image(runner, image: dict) -> str | None:
+    """Remove an image by its immutable ID, never by tag and without force; None on success.
+
+    Docker refuses an ID with several tags. Those tags are mutable (a concurrent pull can move
+    one), so the image is kept for a person to remove.
     """
     result = runner.docker("image", "rm", image["id"], check=False)
     if result.returncode == 0:
         return None
-    if "referenced in multiple repositories" not in result.stderr or not image["refs"]:
-        return result.stderr.strip()
-    for ref in image["refs"]:
-        now = runner.docker("image", "inspect", "--format", "{{.Id}}", ref, check=False)
-        if now.returncode != 0 or now.stdout.strip() != image["id"]:
-            return f"{ref} changed since it was listed ({now.stdout.strip() or now.stderr.strip()}); skipped"
-    for ref in image["refs"]:
-        untag = runner.docker("image", "rm", ref, check=False)
-        if untag.returncode != 0:
-            return untag.stderr.strip()
-    gone = runner.docker("image", "inspect", "--format", "{{.Id}}", image["id"], check=False)
-    if gone.returncode == 0:
-        return "still present after removing its tags (another reference holds it)"
-    return None if "no such image" in gone.stderr.lower() else gone.stderr.strip()
+    if "referenced in multiple repositories" in result.stderr:
+        return Kept(strays.multiple_tags(" ".join(image["refs"] + ["and tags added since it was listed"])))
+    return result.stderr.strip()
 
 
 def removals(report: dict, volumes: bool):
@@ -92,6 +85,10 @@ def apply(report: dict, ctx, volumes: bool, say) -> bool:
     ok = True
     for kind, label, entry, remove in removals(report, volumes):
         error = remove(ctx.runner)
+        if isinstance(error, Kept):
+            entry["kept"] = str(error)
+            say(f"kept {kind} {label}: {error}\n")
+            continue
         entry["removed"] = error is None
         if error is None:
             say(f"removed {kind} {label}\n")
@@ -113,8 +110,8 @@ def print_report(report: dict, source: str, out) -> None:
     sections = [
         ("containers", "Stray containers:", ["CONTAINER", "IMAGE", "STATE", "COMPOSE PROJECT", "NOTE"],
          lambda c: [c["container"], c["image"], c["state"], c["stack"], note(c)]),
-        ("images", "Stray images:", ["IMAGE", "ID", "SIZE", "CREATED"],
-         lambda i: [image_label(i), short(i["id"]), i["size"], i["created"]]),
+        ("images", "Stray images:", ["IMAGE", "ID", "SIZE", "CREATED", "NOTE"],
+         lambda i: [image_label(i), short(i["id"]), i["size"], i["created"], note(i)]),
         ("networks", "Stray networks:", ["NETWORK", "COMPOSE PROJECT"], lambda n: [n["network"], n["stack"]]),
         ("volumes", "Stray volumes (they can hold data):", ["VOLUME", "COMPOSE PROJECT", "NOTE"],
          lambda v: [v["volume"], v["stack"], note(v)]),
@@ -148,7 +145,7 @@ def run(args, ctx) -> int:
         # Removal trusts only what doco-cd deploys: a missing or partial checkout must not make a
         # Stack's resources Strays.
         declared, commit = origin_main.load(ctx.repo_root, config.stack_root_name(ctx.env))
-        source, said = f"{origin_main.REF}@{commit[:12]}", f"{origin_main.REF} ({commit[:12]}), fetched now"
+        source, said = f"{origin_main.REF}@{commit}", f"{origin_main.REF} at {commit}, fetched now"
     else:
         declared, source = ctx.declared, "checkout"
         said = f"this checkout ({ctx.repo_root}); --apply reads {origin_main.REF} instead"

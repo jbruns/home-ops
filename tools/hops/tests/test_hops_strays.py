@@ -129,12 +129,6 @@ def answer(fake_host, containers=CONTAINERS, volumes=VOLUMES):
     fake_host.respond("network", "ls", stdout=lines(NETWORKS))
     for removal in (("rm",), ("image", "rm"), ("network", "rm"), ("volume", "rm")):
         fake_host.respond(*removal)
-    # foo:1 and foo:latest share an ID: removing the ID needs both tags removed first.
-    fake_host.respond("image", "rm", img(7), stderr=MULTI_TAG, returncode=1)
-    for ref in ("foo:1", "foo:latest"):
-        fake_host.respond("image", "inspect", suffix=(ref,), stdout=img(7) + "\n")
-    fake_host.respond("image", "inspect", suffix=(img(7),), stderr=f"Error: No such image: {img(7)}",
-                      returncode=1)
 
 
 def commit_and_push(repo, message="x"):
@@ -160,6 +154,7 @@ def cid(name: str) -> str:
     return next(c["Id"] for c in CONTAINERS if c["Name"] == "/" + name)
 
 
+MULTIPLE_TAGS = "multiple tags, remove manually: {}"
 KEPT_STATE = "{}: only created, exited or dead containers are removed"
 UNKNOWN = "Compose project {} is no declared Stack: ownership unknown"
 UNLABELLED = "named, unlabelled and undeclared: ownership unknown"
@@ -194,7 +189,7 @@ def test_strays_json_classifies_each_kind(hops, host):
         {"id": img(6), "repository": "old", "refs": [], "size": "90MB", "created": "2026-09-01",
          "kept": None, "removed": None},
         {"id": img(7), "repository": "foo", "refs": ["foo:1", "foo:latest"], "size": "10MB",
-         "created": "2026-09-02", "kept": None, "removed": None},
+         "created": "2026-09-02", "kept": MULTIPLE_TAGS.format("foo:1 foo:latest"), "removed": None},
     ]
     # Never listed: the stopped mariadb's unmounted volume (its Stack's), volumes a Stack names,
     # home_* (a kept container's legacy project), and the anonymous volume the kept spike mounts.
@@ -250,12 +245,6 @@ def test_apply_removes_stopped_containers_images_networks_but_never_volumes(hops
         ["rm", cid("old-app")],
         ["image", "rm", img(3)],
         ["image", "rm", img(6)],
-        ["image", "rm", img(7)],
-        ["image", "inspect", "--format", "{{.Id}}", "foo:1"],
-        ["image", "inspect", "--format", "{{.Id}}", "foo:latest"],
-        ["image", "rm", "foo:1"],
-        ["image", "rm", "foo:latest"],
-        ["image", "inspect", "--format", "{{.Id}}", img(7)],
         ["network", "rm", "n-manual"],
         ["network", "rm", "n-retired"],
     ]
@@ -272,13 +261,34 @@ def test_apply_with_volumes_removes_only_volumes_nobody_could_own(hops, host):
     assert report["declared_from"].startswith("origin/main@")
 
 
-def test_apply_skips_an_image_whose_tag_moved_since_it_was_listed(hops, host):
-    host.respond("image", "inspect", suffix=("foo:latest",), stdout=img(1) + "\n")
+def test_apply_never_removes_an_image_by_tag(hops, host):
+    # alpine:3 gained a second tag after the list was read: Docker refuses the ID, and hops keeps it
+    # rather than untag mutable references a concurrent pull may have moved.
+    host.respond("image", "rm", img(3), stderr=MULTI_TAG, returncode=1)
     outcome = hops("strays", "--apply", "--json")
-    assert outcome.code == 1
-    assert "foo:latest" in outcome.err and "changed" in outcome.err
-    assert ["image", "rm", "foo:1"] not in host.docker_calls
-    assert json.loads(outcome.out)["images"][2]["removed"] is False
+    assert outcome.code == 0, outcome.err
+    assert [c for c in host.docker_calls if c[:1] == ["image"] and c[1] != "ls"] == [
+        ["image", "rm", img(3)], ["image", "rm", img(6)]]
+    images = json.loads(outcome.out)["images"]
+    assert images[0]["kept"] == MULTIPLE_TAGS.format("alpine:3 and tags added since it was listed")
+    assert images[0]["removed"] is None
+
+
+def test_anonymous_volume_of_a_removed_stray_waits_for_a_later_run(hops, host):
+    # The db Stack was renamed from old to new: old-db-1 stays behind, exited, with its anonymous
+    # data volume. The container goes; the volume stays until a run finds nothing referencing it.
+    left = on_host(container("old-db-1", project="old", service="db", status="exited", image="old:1"),
+                   image_id=img(6), volumes=["f" * 64])
+    answer(host, containers=[*CONTAINERS, left], volumes=[*VOLUMES, {"Name": "f" * 64, "Labels": ANON}])
+    report = json.loads(hops("strays", "--apply", "--volumes", "--json").out)
+    assert ["rm", left["Id"]] in host.docker_calls
+    assert ["volume", "rm", "f" * 64] not in host.docker_calls
+    volume = next(v for v in report["volumes"] if v["volume"] == "f" * 64)
+    assert volume["kept"] == "used by Stray container old-db-1: removable once nothing references it"
+
+    answer(host, volumes=[*VOLUMES, {"Name": "f" * 64, "Labels": ANON}])  # the next run
+    hops("strays", "--apply", "--volumes")
+    assert ["volume", "rm", "f" * 64] in host.docker_calls
 
 
 def test_apply_uses_origin_main_not_a_partial_checkout(hops, host, repo):
@@ -300,6 +310,19 @@ def test_apply_fetches_origin_main_first(hops, host, repo, tmp_path):
     commit_and_push(other, "retire vault")
     report = json.loads(hops("strays", "--apply", "--json").out)
     assert "vaultwarden" in [c["container"] for c in report["containers"]]
+
+
+def test_apply_fetches_main_whatever_the_fetch_refspec_and_says_which_commit(hops, host, repo, tmp_path):
+    git(repo, "config", "remote.origin.fetch", "+refs/heads/other:refs/remotes/origin/other")
+    other = tmp_path / "other"
+    subprocess.check_call(["git", "clone", "-q", str(tmp_path / "origin.git"), str(other)])
+    subprocess.check_call(["rm", "-r", str(other / "tn" / "vault")])
+    commit_and_push(other, "retire vault")
+    sha = subprocess.check_output(["git", "-C", str(other), "rev-parse", "HEAD"], text=True).strip()
+    report = json.loads(hops("strays", "--apply", "--json").out)
+    assert "vaultwarden" in [c["container"] for c in report["containers"]]
+    assert report["declared_from"] == f"origin/main@{sha}"
+    assert sha in hops("strays", "--apply").out
 
 
 def test_apply_refuses_when_origin_main_declares_no_services(hops, host, repo):

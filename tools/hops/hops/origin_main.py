@@ -9,6 +9,8 @@ from hops.declared import Declared
 from hops.errors import ConfigError, HopsError
 
 REF = "origin/main"
+# Explicit, so a narrowed remote.origin.fetch cannot leave origin/main stale.
+REFSPEC = "+refs/heads/main:refs/remotes/origin/main"
 
 
 def _git(repo_root: Path, *args: str) -> bytes:
@@ -20,13 +22,14 @@ def _git(repo_root: Path, *args: str) -> bytes:
 
 
 def load(repo_root: Path, stack_root: str = "tn") -> tuple[Declared, str]:
-    """Fetch main from origin and load the Stack root of origin/main; returns it and the commit.
+    """Fetch main from origin and load the Stack root of that commit; returns it and the commit's SHA.
 
     The tree is unpacked under the repository's git directory, so it never mixes with the checkout.
     Refuses an inventory without Services: removal must never run against a partial declared state.
     """
-    _git(repo_root, "fetch", "--quiet", "origin", "main")
-    commit = _git(repo_root, "rev-parse", "--verify", f"{REF}^{{commit}}").decode().strip()
+    _git(repo_root, "fetch", "--quiet", "origin", REFSPEC)
+    # Pinned now: everything below reads this SHA, whatever origin/main points to later.
+    commit = _git(repo_root, "rev-parse", "--verify", "refs/remotes/origin/main^{commit}").decode().strip()
     common = Path(_git(repo_root, "rev-parse", "--path-format=absolute", "--git-common-dir").decode().strip())
     dest = common / "hops" / "origin-main" / commit
     for stale in dest.parent.glob("*"):  # earlier commits' trees, and a half-written one

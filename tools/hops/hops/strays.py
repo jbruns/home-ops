@@ -31,6 +31,10 @@ def deliberate(c: Container) -> bool:
     return c.labels.get(DELIBERATE_LABEL) == DELIBERATE_VALUE
 
 
+def multiple_tags(tags: str) -> str:
+    return f"multiple tags, remove manually: {tags}"
+
+
 def parse_labels(text: str) -> dict[str, str]:
     """The Labels column of `docker volume/network ls --format json`: k=v pairs joined by commas."""
     return dict(item.partition("=")[::2] for item in (text or "").split(",") if item)
@@ -65,7 +69,17 @@ def classify(declared: Declared, containers: list[Container], images: list[dict]
         })
 
     used_images = {c.raw.get("Image") for c in kept}
-    used_volumes = {m.get("Name") for c in kept for m in c.raw.get("Mounts") or [] if m.get("Type") == "volume"}
+    def mounts(c):
+        return [m.get("Name") for m in c.raw.get("Mounts") or [] if m.get("Type") == "volume"]
+
+    used_volumes = {name for c in kept for name in mounts(c)}
+    # Volumes of Strays this run removes: Docker keeps them, a later run decides once they're unreferenced.
+    stray_mounts: dict[str, list[str]] = {}
+    kept_ids = {c.id for c in kept}
+    for c in containers:
+        if c.id not in kept_ids:
+            for name in mounts(c):
+                stray_mounts.setdefault(name, []).append(c.name)
     used_networks = {n for c in kept for n in ((c.raw.get("NetworkSettings") or {}).get("Networks") or {})}
     # Compose projects a kept container runs under, legacy ones included: their volumes are theirs.
     kept_projects = {c.compose[0] for c in kept if c.compose[0]} | set(declared.stacks)
@@ -80,6 +94,10 @@ def classify(declared: Declared, containers: list[Container], images: list[dict]
                                              "kept": None, "removed": None})
         if repository and row.get("Tag") not in (None, "", "<none>"):
             entry["refs"].append(f"{row['Repository']}:{row['Tag']}")
+    for entry in by_id.values():
+        # Docker removes an ID with several tags only by force or tag by tag, and tags are mutable.
+        if len(entry["refs"]) > 1:
+            entry["kept"] = multiple_tags(" ".join(entry["refs"]))
 
     declared_volumes = declared.resource_names("volumes")
     stray_volumes = []
@@ -95,6 +113,8 @@ def classify(declared: Declared, containers: list[Container], images: list[dict]
             keep = f"Compose project {project} is no declared Stack: ownership unknown"
         elif not anonymous:
             keep = "named, unlabelled and undeclared: ownership unknown"
+        elif name in stray_mounts:
+            keep = f"used by Stray container {', '.join(stray_mounts[name])}: removable once nothing references it"
         else:
             keep = None  # an anonymous volume nothing references or claims
         stray_volumes.append({"volume": name, "stack": project, "anonymous": anonymous, "kept": keep,
