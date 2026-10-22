@@ -27,3 +27,5 @@ Reach the Host through `hops` (install with `uv tool install -e tools/hops`; rea
 `tools/hops/README.md` before first use), with `--json` when you parse its output. It changes
 runtime state only; declared state changes through a PR (ADR 0001). For anything `hops --help`
 lacks, use read-only `ssh … sudo -n docker …`.
+
+When an agent runs `hops bump`, pass its co-author line with `--trailer` (see `tools/hops/README.md`).

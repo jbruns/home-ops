@@ -301,6 +301,41 @@ continue, and the exit code is 1.
 - `refs`: the image's tags.
 - `removed`: `true` or `false` after an `--apply` that tried it, else `null`.
 
+## `bump`: pin a newer image through a PR
+
+```sh
+hops bump <service> [<tag>] [--pr] [--trailer "Co-authored-by: …"]
+```
+
+A manual Renovate for one Service, for when the 5-day minimum release age is too long. It is
+**Repo-changing**: it edits the repo, never the Host, and the change deploys only after its PR
+merges.
+
+- **Tag:** `<tag>` as given, or the newest tag shaped like the current one: same `v` prefix,
+  number of version parts and variant suffix (`-alpine`). Pre-releases (`-rc.1`) never qualify.
+  This is the rule homelab-components' Canary uses. A tag that is not a version (`latest`,
+  `supervised-1.4.27`) has no candidates; name the tag. Check the proposal: a registry with a stray
+  tag (lscr.io's qbittorrent has `20.04.1`) can win.
+- **Digest:** the registry's index (multi-arch) digest, else the manifest digest, exactly what
+  Renovate pins (`docker:pinDigests`), so Renovate's next run sees no diff. Anonymous registry v2
+  calls; Docker Hub, GHCR, lscr.io and other Bearer-token registries work.
+- **Git:** refuses a checkout with uncommitted or untracked changes. Creates branch
+  `hops/bump-<service>-<tag>` from `HEAD` (run it from `main`) in a new worktree
+  `.worktrees/bump-<service>-<tag>`, rewrites every `image:` line in the Stack root that pins the
+  same reference (so `nextcloud` and `nextcloud-cron` move together), runs
+  `tools/validate/validate.py secrets env compose` there, and commits. If validation fails, the
+  edit stays uncommitted in the worktree. The checkout you run from is not modified.
+- **`--pr`:** pushes the branch and runs `gh pr create --base main --body-file -`. Without it
+  nothing is pushed; `hops` prints how to push or discard the worktree.
+- **Renovate:** if Renovate has an open PR for the same image, `bump` warns, continues, and the
+  PR body says "Supersedes #N". Renovate closes its own PR once `main` has that version or newer.
+- **Agents:** pass the co-author line with `--trailer` (repeatable; it goes to
+  `git commit --trailer`), e.g.
+  `--trailer "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"`.
+
+Tests replay recorded registry exchanges from `tests/fixtures/registry/`. To re-record them, see
+`tests/hops_registry_fixtures.py`.
+
 ## Adding a command
 
 - One module in `hops/commands/` per command. It exposes `register(subparsers)`, which adds a
