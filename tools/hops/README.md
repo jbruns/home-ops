@@ -107,6 +107,44 @@ in a process argument.
 - Output is the client's own, not JSON: MariaDB prints tab-separated rows with a header, Valkey
   prints raw replies, `psql` prints its aligned table.
 
+## Lifecycle commands
+
+These change runtime state only. Each takes one or more targets; a bare Stack name means every
+Service in it. They print the containers they act on, and names are checked before anything
+touches the Host.
+
+| Command | Class | What it does |
+|---|---|---|
+| `hops restart <target…>` | Runtime-reversible | `docker restart` |
+| `hops start <target…>` | Runtime-reversible | `docker start` on the existing containers |
+| `hops stop <target…> --for <dur> [--force]` | Disruptive | Silences the Service's alerts, then `docker stop` |
+| `hops recreate <target…>` | Runtime-reversible | doco-cd force-recreates the Service from the Stack it last deployed |
+
+**`stop`.** A stopped declared Service makes the Host differ from `main`. ContainerDown fires, and
+nothing starts the Service again until a reboot, the next Deploy of its Stack, or `hops start`. So:
+
+- `--for` is required (Prometheus duration syntax: `30m`, `2h`, `1d12h`). For each Service, `stop`
+  first runs `amtool silence add stack="<stack>" service="<service>" --duration=<dur>`, as
+  `alerts` does. If the silence fails, nothing is stopped. Alerts that carry other labels, such
+  as `name` alone, are not silenced.
+- A Critical Tier Service is refused unless `--force` is passed. For a Stack, one Critical
+  Service is enough to refuse.
+- `start` does not expire the silence; it runs out after `--for`. See `hops alerts`.
+
+**`recreate`** goes through doco-cd's REST API
+(`POST http://doco-cd/v1/api/project/<stack>/recreate?service=<service>`). `hops` never runs
+`docker compose` itself. The API listens only on doco-cd's networks, so the request is sent from
+the prometheus container, which shares `metrics` with it:
+
+- `sops -d tn/doco-cd/api_secret.sops.txt` decrypts the API key on this machine.
+- The whole HTTP request, key included, goes over ssh's stdin to
+  `docker exec -i prometheus sh -c …`, where busybox `nc -e` copies it to doco-cd and the
+  response back. The key is never in a process argument on either machine and never written to
+  disk on the Host. (`… | nc` would half-close the connection when stdin ends, and doco-cd
+  cancels a recreate whose client has gone away.)
+- Any answer other than 2xx is an error (exit 1) with doco-cd's message. `doco-cd` itself is
+  refused, because it replaces itself on its own Deploy.
+
 ### Exit codes
 
 | Code | Meaning |
