@@ -1,0 +1,107 @@
+[
+ {
+  "method": "HEAD",
+  "url": "https://lscr.io/v2/linuxserver/qbittorrent/manifests/5.2.4",
+  "authorized": false,
+  "accept": "application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json",
+  "status": 401,
+  "headers": {
+   "content-type": "application/json",
+   "www-authenticate": "Bearer realm=\"https://ghcr.io/token\",service=\"ghcr.io\",scope=\"repository:linuxserver/qbittorrent:pull\""
+  },
+  "body": ""
+ },
+ {
+  "method": "GET",
+  "url": "https://ghcr.io/token?service=ghcr.io&scope=repository%3Alinuxserver%2Fqbittorrent%3Apull",
+  "authorized": false,
+  "accept": null,
+  "status": 200,
+  "headers": {
+   "content-type": "application/json"
+  },
+  "body": "{\"token\": \"anonymous-token\"}"
+ },
+ {
+  "method": "HEAD",
+  "url": "https://lscr.io/v2/linuxserver/qbittorrent/manifests/5.2.4",
+  "authorized": true,
+  "accept": "application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json",
+  "status": 200,
+  "headers": {
+   "content-type": "application/vnd.oci.image.index.v1+json",
+   "docker-content-digest": "sha256:1ea873647c43d566f251a7122aee330b184509c57ee3257ed19f62dac0f8f24b"
+  },
+  "body": ""
+ },
+ {
+  "method": "GET",
+  "url": "https://lscr.io/v2/linuxserver/qbittorrent/tags/list?n=1000",
+  "authorized": false,
+  "accept": null,
+  "status": 401,
+  "headers": {
+   "content-type": "application/json",
+   "www-authenticate": "Bearer realm=\"https://ghcr.io/token\",service=\"ghcr.io\",scope=\"repository:linuxserver/qbittorrent:pull\""
+  },
+  "body": "{\"errors\":[{\"code\":\"UNAUTHORIZED\",\"message\":\"authentication required\"}]}\n"
+ },
+ {
+  "method": "GET",
+  "url": "https://ghcr.io/token?service=ghcr.io&scope=repository%3Alinuxserver%2Fqbittorrent%3Apull",
+  "authorized": false,
+  "accept": null,
+  "status": 200,
+  "headers": {
+   "content-type": "application/json"
+  },
+  "body": "{\"token\": \"anonymous-token\"}"
+ },
+ {
+  "method": "GET",
+  "url": "https://lscr.io/v2/linuxserver/qbittorrent/tags/list?n=1000",
+  "authorized": true,
+  "accept": null,
+  "status": 200,
+  "headers": {
+   "content-type": "application/json",
+   "link": "</v2/linuxserver/qbittorrent/tags/list?last=version-14.3.5.99202106151345-7374-667d4e421ubuntu20.04.1&n=1000>; rel=\"next\""
+  },
+  "body": "{\"name\": \"linuxserver/qbittorrent\", \"tags\": []}"
+ },
+ {
+  "method": "GET",
+  "url": "https://lscr.io/v2/linuxserver/qbittorrent/tags/list?last=version-14.3.5.99202106151345-7374-667d4e421ubuntu20.04.1&n=1000",
+  "authorized": true,
+  "accept": null,
+  "status": 200,
+  "headers": {
+   "content-type": "application/json",
+   "link": "</v2/linuxserver/qbittorrent/tags/list?last=arm64v8-4.5.4-r0-ls273&n=1000>; rel=\"next\""
+  },
+  "body": "{\"name\": \"linuxserver/qbittorrent\", \"tags\": [\"20.04.1\", \"14.3.9\", \"4.4.0\", \"4.4.1\", \"latest\", \"4.4.2\", \"4.4.3\", \"4.4.4\", \"4.4.5\", \"4.4.5-libtorrentv1\", \"4.5.0-libtorrentv1\", \"4.5.0\", \"4.5.1-libtorrentv1\", \"4.5.1\", \"4.5.2-libtorrentv1\", \"4.5.2\", \"4.5.3-libtorrentv1\", \"4.5.3\", \"4.5.4-libtorrentv1\", \"4.5.4\"]}"
+ },
+ {
+  "method": "GET",
+  "url": "https://lscr.io/v2/linuxserver/qbittorrent/tags/list?last=arm64v8-4.5.4-r0-ls273&n=1000",
+  "authorized": true,
+  "accept": null,
+  "status": 200,
+  "headers": {
+   "content-type": "application/json",
+   "link": "</v2/linuxserver/qbittorrent/tags/list?last=5.1.2-r2-ls416&n=1000>; rel=\"next\""
+  },
+  "body": "{\"name\": \"linuxserver/qbittorrent\", \"tags\": [\"4.5.5-libtorrentv1\", \"4.5.5\", \"4.6.0-libtorrentv1\", \"4.6.0\", \"4.6.1-libtorrentv1\", \"4.6.1\", \"4.6.2-libtorrentv1\", \"4.6.2\", \"4.6.3-libtorrentv1\", \"4.6.3\", \"4.6.4-libtorrentv1\", \"4.6.4\", \"4.6.5-libtorrentv1\", \"4.6.5\", \"4.6.6-libtorrentv1\", \"4.6.6\", \"4.6.7-libtorrentv1\", \"4.6.7\", \"5.0.0-libtorrentv1\", \"5.0.0\", \"5.0.1-libtorrentv1\", \"5.0.1\", \"5.0.2-libtorrentv1\", \"5.0.2\", \"5.0.3-libtorrentv1\", \"5.0.3\", \"5.0.4-libtorrentv1\", \"5.0.4\", \"5.0.5-libtorrentv1\", \"5.1.0-libtorrentv1\", \"5.1.0\", \"5.1.1-libtorrentv1\", \"5.1.1\", \"5.1.2-libtorrentv1\", \"5.1.2\"]}"
+ },
+ {
+  "method": "GET",
+  "url": "https://lscr.io/v2/linuxserver/qbittorrent/tags/list?last=5.1.2-r2-ls416&n=1000",
+  "authorized": true,
+  "accept": null,
+  "status": 200,
+  "headers": {
+   "content-type": "application/json"
+  },
+  "body": "{\"name\": \"linuxserver/qbittorrent\", \"tags\": [\"5.1.3-libtorrentv1\", \"5.1.4-libtorrentv1\", \"5.1.4\", \"5.2.0-libtorrentv1\", \"5.2.0\", \"5.2.1\", \"5.2.1-libtorrentv1\", \"5.2.2\", \"5.2.2-libtorrentv1\", \"5.2.3\", \"5.2.3-libtorrentv1\", \"5.2.4-libtorrentv1\", \"5.2.4\", \"5.3.0\", \"5.3.0-libtorrentv1\"]}"
+ }
+]

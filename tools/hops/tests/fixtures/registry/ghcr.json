@@ -1,0 +1,71 @@
+[
+ {
+  "method": "HEAD",
+  "url": "https://ghcr.io/v2/home-operations/sonarr/manifests/4.0.20.3012",
+  "authorized": false,
+  "accept": "application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json",
+  "status": 401,
+  "headers": {
+   "content-type": "application/json",
+   "www-authenticate": "Bearer realm=\"https://ghcr.io/token\",service=\"ghcr.io\",scope=\"repository:home-operations/sonarr:pull\""
+  },
+  "body": ""
+ },
+ {
+  "method": "GET",
+  "url": "https://ghcr.io/token?service=ghcr.io&scope=repository%3Ahome-operations%2Fsonarr%3Apull",
+  "authorized": false,
+  "accept": null,
+  "status": 200,
+  "headers": {
+   "content-type": "application/json"
+  },
+  "body": "{\"token\": \"anonymous-token\"}"
+ },
+ {
+  "method": "HEAD",
+  "url": "https://ghcr.io/v2/home-operations/sonarr/manifests/4.0.20.3012",
+  "authorized": true,
+  "accept": "application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json",
+  "status": 200,
+  "headers": {
+   "content-type": "application/vnd.oci.image.index.v1+json",
+   "docker-content-digest": "sha256:1f19eb5e0f421418c1a956bbe01310a0141423afe28bd9a4b1dcb8629ff2bce2"
+  },
+  "body": ""
+ },
+ {
+  "method": "GET",
+  "url": "https://ghcr.io/v2/home-operations/sonarr/tags/list?n=1000",
+  "authorized": false,
+  "accept": null,
+  "status": 401,
+  "headers": {
+   "content-type": "application/json",
+   "www-authenticate": "Bearer realm=\"https://ghcr.io/token\",service=\"ghcr.io\",scope=\"repository:home-operations/sonarr:pull\""
+  },
+  "body": "{\"errors\":[{\"code\":\"UNAUTHORIZED\",\"message\":\"authentication required\"}]}\n"
+ },
+ {
+  "method": "GET",
+  "url": "https://ghcr.io/token?service=ghcr.io&scope=repository%3Ahome-operations%2Fsonarr%3Apull",
+  "authorized": false,
+  "accept": null,
+  "status": 200,
+  "headers": {
+   "content-type": "application/json"
+  },
+  "body": "{\"token\": \"anonymous-token\"}"
+ },
+ {
+  "method": "GET",
+  "url": "https://ghcr.io/v2/home-operations/sonarr/tags/list?n=1000",
+  "authorized": true,
+  "accept": null,
+  "status": 200,
+  "headers": {
+   "content-type": "application/json"
+  },
+  "body": "{\"name\": \"home-operations/sonarr\", \"tags\": [\"4.0.14.2938\", \"4.0.14\", \"4\", \"4.0\", \"4.0.15.2940\", \"4.0.15\", \"4.0.16\", \"4.0.16.2942\", \"4.0.16.2943\", \"4.0.16.2946\", \"4.0.17\", \"4.0.17.2950\", \"4.0.17.2953\", \"4.0.17.2967\", \"4.0.17.2969\", \"4.0.18\", \"4.0.18.2976\", \"4.0.18.2978\", \"4.0.19\", \"4.0.19.2991\", \"4.0.19.2995\", \"4.0.19.2997\", \"4.0.19.3001\", \"4.0.19.3006\", \"4.0.19.3007\", \"4.0.19.3008\", \"4.0.19.3009\", \"4.0.19.3011\", \"4.0.20\", \"4.0.20.3012\", \"5.0.0\", \"5.0\", \"5\", \"5.0.0.2569\", \"5.0.0.2608\", \"5.0.0.2635\", \"5.0.0.2668\", \"5.0.0.2701\", \"5.0.0.2742\"]}"
+ }
+]
