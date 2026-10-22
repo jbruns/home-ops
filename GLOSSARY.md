@@ -105,7 +105,7 @@ A recorded, reasoned waiver of one Baseline item for one Service; an Exemption f
 _Avoid_: Override, exception
 
 **Stray**:
-A container, image, or volume on the Host that no Stack declares or uses. Data that belongs to a Stack is never a Stray, even while nothing uses it.
+A container, image, volume, or network on the Host that no Stack declares or uses. Data that belongs to a Stack is never a Stray, even while nothing uses it.
 _Avoid_: Ad-hoc, orphan, leftover
 
 ## Reliability

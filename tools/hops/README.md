@@ -158,7 +158,8 @@ without a note here. A field is `null` when the value is unknown or does not app
   the name Compose would give it.
 - `digest_drift`: `true` when the container's digest differs from the repo's pin, `false` when
   they match, and `null` when either side has no digest.
-- `undeclared`: running containers whose Compose labels match no declared Service. `stack` and
+- `undeclared`: running containers whose Compose labels match no declared Service (TrueNAS Apps,
+  Compose projects named `ix-…`, are left out). `stack` and
   `service` hold their Compose project and service labels, if any. This is empty when targets are
   given. It is a hint only; Stray handling is `hops strays`.
 
@@ -213,6 +214,92 @@ there is no memory limit.
 ```
 
 `state` is `active` or `suppressed` (silenced or inhibited). `matchers` use amtool's syntax.
+
+## Strays
+
+`hops strays` lists the **Strays** (GLOSSARY) on the Host: containers, images, volumes and networks
+that no Stack declares or uses. It is read-only unless given `--apply`, and takes `--json`. The rule:
+**when ownership is unknown, a Stray is listed, marked `kept`, and never removed.**
+
+| Command | Effect |
+|---|---|
+| `hops strays` | Lists Strays against **this checkout**, and says so. Changes nothing. |
+| `hops strays --apply` | Fetches `origin/main` and classifies against it. Removes Stray containers, then images, then networks. Never volumes. |
+| `hops strays --apply --volumes` | Also removes Stray volumes, the only Strays that can hold data. |
+
+`--apply` reads declared state only from `origin/main`, never from the working tree, so a missing or
+partial `tn/` cannot make a Stack's data deletable. It fetches with an explicit refspec
+(`+refs/heads/main:refs/remotes/origin/main`, whatever `remote.origin.fetch` says), pins the
+fetched commit, prints its SHA, and unpacks that commit's Stack root under the git directory. It
+refuses when that commit declares no Services.
+
+What counts as a Stray:
+
+- **Container:** its `com.docker.compose.project`/`service` labels match no declared Service, and
+  its name is no declared Service's container name. A container deployed under a legacy Compose
+  project (`home`, `common`, `media`, `asot-media`) with a declared `container_name` is kept, with
+  everything it uses. `--apply` removes only `created`, `exited` and `dead` containers, without
+  force; `running`, `paused` and `restarting` ones are kept. Containers labelled `startup-order=skip`
+  (deliberate `docker run`s, such as runbook helpers) are marked `deliberate` and otherwise treated
+  like any other Stray.
+- **Image:** used by no container except Strays that `--apply` removes. An image used by a stopped
+  declared container is in use. These are mostly images earlier Deploys and one-off runs left
+  behind; Docker pulls any of them again when something needs it. `--apply` removes an image only
+  by its ID, never by tag, and without force. An image with several tags is `kept` ("multiple
+  tags, remove manually", with its tags): Docker removes one only by force or tag by tag, and a
+  concurrent pull can move a tag. The same holds when Docker refuses an ID because it gained tags
+  after the list was read; that is not a failure.
+- **Volume:** not owned by a declared Stack or by the Compose project of a kept container, not named
+  by a Stack (a top-level `volumes:` entry, by `name:` or Compose's `<stack>_<key>`), and not
+  mounted by a kept container. A Stack's volume is never a Stray, even while nothing mounts it.
+  Only **anonymous volumes without a Compose project label** that nothing references are removed,
+  such as those Docker keeps after `compose down` (Compose 2.38 on the Host does not label them with
+  the project). One that a Stray container mounts, even one this run removes, is `kept` until a
+  later run finds nothing referencing it. A volume labelled with an unmatched Compose project, or a
+  named volume with no labels, is listed with `kept`: its ownership is unknown. `--volumes` refuses
+  to run while a declared volume name uses a variable, since `hops` cannot tell which volume it
+  means.
+- **Network:** not owned or named by a declared Stack in the same way, not used by a kept
+  container, and not one of Docker's defaults (`bridge`, `host`, `none`). Networks hold no data.
+- **Never Strays:** TrueNAS Apps' resources (Compose projects or names starting `ix-`). Build cache
+  is out of scope.
+
+A container under an unmatched Compose project is a Stray, not unknown: doco-cd is the only thing
+that deploys Stacks on the Host, and Portainer must not own one ([ADR 0001](../../docs/adr/0001-doco-cd-for-gitops.md)),
+so such a project is a Stack that was renamed or removed. Its volumes stay `kept` all the same.
+
+Removal is per item and never forced: Docker refuses to remove anything that something started
+using since the list was read. A failed or skipped removal is reported on stderr, the rest
+continue, and the exit code is 1.
+
+### `strays --json`
+
+```json
+{
+  "declared_from": "checkout",
+  "containers": [
+    {"container": "helper", "id": "…", "image": "alpine:3", "state": "exited", "stack": null,
+     "service": null, "deliberate": true, "kept": null, "removed": null}
+  ],
+  "images": [
+    {"id": "sha256:…", "repository": "traefik", "refs": ["traefik:v3.6.15"], "size": "188MB",
+     "created": "2026-04-29 16:18:27 -0700 PDT", "kept": null, "removed": null}
+  ],
+  "volumes": [
+    {"volume": "retired_data", "stack": "retired", "anonymous": false,
+     "kept": "Compose project retired is no declared Stack: ownership unknown", "removed": null}
+  ],
+  "networks": [{"network": "retired_default", "id": "…", "stack": "retired", "kept": null, "removed": null}]
+}
+```
+
+- `declared_from`: `checkout`, or `origin/main@<full commit SHA>` with `--apply`.
+- `stack`, `service`: the Compose project and service labels, if any.
+- `deliberate`: the container carries `startup-order=skip`.
+- `kept`: why `--apply` leaves this Stray (its state, unknown ownership, a Stray mounting it, or an
+  image's several tags), or `null`.
+- `refs`: the image's tags.
+- `removed`: `true` or `false` after an `--apply` that tried it, else `null`.
 
 ## Adding a command
 

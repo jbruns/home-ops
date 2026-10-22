@@ -95,9 +95,10 @@ class Service:
 
 
 class Declared:
-    def __init__(self, root: Path, services: list[Service]):
+    def __init__(self, root: Path, services: list[Service], files: dict[str, list[Path]]):
         self.root = root
         self.services = services
+        self.files = files  # each Stack's Compose files: its entry file and includes
         self.stacks: dict[str, list[Service]] = {}
         for s in services:
             self.stacks.setdefault(s.stack, []).append(s)
@@ -106,20 +107,38 @@ class Declared:
     def load(cls, root: Path, stack_root: str = "tn") -> "Declared":
         """Every Service doco-cd deploys from <stack_root>/<stack>/compose.yaml and its includes."""
         dc = _dc()
-        services = []
+        services, stack_files = [], {}
         for entry in sorted((root / stack_root).glob("*/compose.yaml")):
             stack = entry.parent.name  # doco-cd's Compose project name
             try:
                 files = dc.compose_files(entry)
             except dc.GeneratorError as exc:
                 raise ConfigError(str(exc)) from exc
+            stack_files[stack] = files
             found = []
             for f in files:
                 for name, spec in ((yaml.safe_load(f.read_text()) or {}).get("services") or {}).items():
                     spec = spec or {}
                     found.append(Service(stack, name, f, spec, dc.labels_of(spec)))
             services += sorted(found, key=lambda s: s.name)
-        return cls(root, services)
+        return cls(root, services, stack_files)
+
+    def resource_names(self, kind: str) -> dict[str, str]:
+        """Host names of the top-level `volumes` or `networks` the Stacks declare, each to its Stack.
+
+        Compose's naming: an explicit `name:`, else the key for an external one, else <stack>_<key>.
+        A name that interpolates a variable is returned as written.
+        """
+        names = {}
+        for stack, files in self.files.items():
+            for f in files:
+                for key, spec in ((yaml.safe_load(f.read_text()) or {}).get(kind) or {}).items():
+                    spec = spec or {}
+                    external = spec.get("external")
+                    name = spec.get("name") or (isinstance(external, dict) and external.get("name")) or (
+                        key if external else f"{stack}_{key}")
+                    names.setdefault(str(name), stack)
+        return names
 
     def get(self, stack: str, service: str) -> Service | None:
         return next((s for s in self.stacks.get(stack, []) if s.name == service), None)
