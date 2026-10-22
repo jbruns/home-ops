@@ -3,6 +3,11 @@ from hops import docker
 from hops.declared import Service
 
 
+def add_targets(parser) -> None:
+    parser.add_argument("targets", nargs="+", metavar="target",
+                        help="stack/service, a unique Service name, or a Stack")
+
+
 def containers(ctx, services: list[Service]) -> list[tuple[Service, str]]:
     """Each Service with the container name to pass to docker."""
     return [(s, docker.container_ref(ctx.runner, s)) for s in services]

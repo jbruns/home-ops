@@ -19,7 +19,7 @@ def register(subparsers) -> None:
         HELP + ". Disruptive: nothing restarts a stopped Service until a reboot, the next Deploy of its "
         "Stack, or hops start. --for creates an Alertmanager silence for the Service (alerts labelled with "
         "its stack and service, such as ContainerDown) that expires after the duration."))
-    p.add_argument("targets", nargs="+", metavar="target", help="stack/service, a unique Service name, or a Stack")
+    lifecycle.add_targets(p)
     p.add_argument("--for", dest="duration", metavar="DURATION",
                    help="required: how long to silence its alerts, e.g. 30m, 2h, 1d (amtool --duration)")
     p.add_argument("--force", action="store_true", help="allow stopping a Critical Service")

@@ -1,5 +1,5 @@
 """hops recreate <target…>: doco-cd force-recreates each Service (hops never runs docker compose)."""
-from hops import config, doco
+from hops import config, doco, lifecycle
 from hops.errors import UsageError
 
 HELP = "force-recreate Services through doco-cd's REST API"
@@ -10,7 +10,7 @@ def register(subparsers) -> None:
         HELP + ", e.g. after ContainerLeftoverName. Runtime-reversible: doco-cd recreates the Service "
         "from the Stack it last deployed. Decrypts the API key with sops on this machine and sends it "
         "on stdin to the prometheus container, which calls doco-cd."))
-    p.add_argument("targets", nargs="+", metavar="target", help="stack/service, a unique Service name, or a Stack")
+    lifecycle.add_targets(p)
     p.set_defaults(func=run)
 
 

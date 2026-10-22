@@ -7,7 +7,7 @@ HELP = "restart Services' containers (docker restart)"
 def register(subparsers) -> None:
     p = subparsers.add_parser("restart", help=HELP, description=HELP + ". Runtime-reversible: prints the "
                               "containers, then restarts them.")
-    p.add_argument("targets", nargs="+", metavar="target", help="stack/service, a unique Service name, or a Stack")
+    lifecycle.add_targets(p)
     p.set_defaults(func=run)
 
 
