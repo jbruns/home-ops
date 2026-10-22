@@ -84,7 +84,7 @@ def test_stop_without_for_is_refused_before_touching_the_host(hops, fake_host):
 
 @pytest.mark.parametrize("duration", ["2", "1 h", "0h", "-1h", "1x", "h"])
 def test_stop_rejects_a_bad_duration(hops, fake_host, duration):
-    outcome = hops("stop", "sonarr/sonarr", "--for", duration)
+    outcome = hops("stop", "sonarr/sonarr", f"--for={duration}")
     assert outcome.code == 2 and "--for" in outcome.err
     assert fake_host.calls == []
 
