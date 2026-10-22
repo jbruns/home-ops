@@ -107,7 +107,9 @@ groups:
       # never declared (doco-cd's self-applier, ad-hoc startup-order=skip runs) never fire. Keyed on
       # Compose project + service, so a recreate that renames the container is not "down". `for: 5m`
       # covers a first Deploy's image pull and the Deploy of monitoring trailing a removal. Held while
-      # cAdvisor is down: TargetDown reports that once.
+      # cAdvisor is down: TargetDown reports that once. `name` (Compose's guess without
+      # container_name) only serves inhibitions on Services that set container_name; the text uses
+      # the Stack and Service.
       - alert: ContainerDown
         expr: |
           max by (stack, service, name, tier) (homeops_container_declared{tier=~"critical|warning"})
@@ -119,8 +121,8 @@ groups:
             unless on () (up{job="cadvisor"} == 0)
         for: 5m
         annotations:
-          summary: "{{ $labels.name }} is not running"
-          description: "{{ $labels.name }} ({{ $labels.stack }}/{{ $labels.service }}) is declared in tn/ but has not been seen running for 7 minutes."
+          summary: "{{ $labels.stack }}/{{ $labels.service }} is not running"
+          description: "Service {{ $labels.service }} of Stack {{ $labels.stack }} is declared in tn/, but no container of it has been seen running for 7 minutes."
 
       # node-exporter serves the declared set from its textfile; without it ContainerDown is blind.
       # node-exporter being down is also TargetDown's.

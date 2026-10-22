@@ -119,6 +119,22 @@ tests:
           - labels: '{alertname="ContainerDown",tier="critical",stack="vaultwarden",name="vaultwarden-db"}'
             value: 1
 
+  # Without container_name, `name` is Compose's guess (<stack>-<service>-1); doco-cd's self-updates
+  # bump the number. The text names the Stack and Service, which match the real container.
+  - name: ContainerDown describes the Service, not the guessed container name
+    interval: 1m
+    input_series:
+      - series: homeops_container_declared{stack="doco-cd",service="doco-cd",name="doco-cd-doco-cd-1",tier="warning"}
+        values: 1x10
+    alert_rule_test:
+      - alertname: ContainerDown
+        eval_time: 5m
+        exp_alerts:
+          - exp_labels: {stack: doco-cd, service: doco-cd, name: doco-cd-doco-cd-1, tier: warning}
+            exp_annotations:
+              summary: doco-cd/doco-cd is not running
+              description: "Service doco-cd of Stack doco-cd is declared in tn/, but no container of it has been seen running for 7 minutes."
+
   - name: ContainerDown uses any container of the Service across a recreate
     interval: 1m
     input_series:

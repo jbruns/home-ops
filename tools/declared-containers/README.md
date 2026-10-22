@@ -6,7 +6,8 @@ compares with cAdvisor. Every Service in `tn/<stack>/compose.yaml` and its `incl
 textfile collector. Repo Tooling: it never runs on the Host.
 
 - `stack` is the folder name, matching `com.docker.compose.project`.
-- `name` is `container_name`, or Compose's `<stack>-<service>-1` when unset.
+- `name` is `container_name`, or Compose's `<stack>-<service>-1` when unset. That is a guess (the
+  number can grow, as doco-cd's self-updates show), so ContainerDown matches on `stack` and `service`.
 - `tier` is the Service's `tier` label. A Service without one, or a variable `container_name` or
   `tier`, is an error.
 
