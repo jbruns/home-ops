@@ -159,9 +159,9 @@ Do these in the days before; none of them changes storage.
      --duration=6h --comment='#543 window' 'stack=~"<the Stacks above>"'
    ```
 
-   `ContainerDown` looks back over one day, so it keeps firing for about 25h after a container is
-   removed or renamed. This window removes and renames none, so the alerts clear once the
-   containers are back. If one lingers, extend the silence instead of chasing it.
+   `ContainerDown` fires only for Services declared in `tn/`, and clears minutes after their
+   containers are back. This window removes and renames none. If one lingers, extend the silence
+   instead of chasing it.
 7. **Pick `<backup-dataset>`** with room for an ACL dump of the media dataset (one text line per
    ACL entry, tens of MB for a large tree) and copies of four app configs.
 

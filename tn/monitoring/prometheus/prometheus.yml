@@ -106,7 +106,10 @@ scrape_configs:
         labels: {container: alertmanager, stack: monitoring, tier: critical}
 
   # node-exporter and cAdvisor feed the Host and container alerts, so losing them is Warning.
+  # honor_labels keeps the `stack`, `name` and `tier` of homeops_container_declared (its textfile);
+  # no other node-exporter series carries those labels, so the target labels still apply to them.
   - job_name: node-exporter
+    honor_labels: true
     static_configs:
       - targets: ['node-exporter:9100']
         labels: {container: node-exporter, stack: monitoring, tier: warning}

@@ -111,6 +111,10 @@ tests:
         values: 100+0x18
       - series: container_spec_memory_limit_bytes{name="unlimited",container_label_com_docker_compose_project="app",container_label_tier="warning"}
         values: 0+0x18
+      - series: container_memory_working_set_bytes{name="doco-cd-doco-cd-6-self-applier-1792000000",container_label_tier="warning"}
+        values: 95+0x18
+      - series: container_spec_memory_limit_bytes{name="doco-cd-doco-cd-6-self-applier-1792000000",container_label_tier="warning"}
+        values: 100+0x18
     promql_expr_test:
       - expr: &leftover sum by (alertname, tier, stack, container) (ALERTS{alertname="ContainerLeftoverName",alertstate="firing"})
         eval_time: 9m
@@ -145,6 +149,22 @@ tests:
       - expr: *memory
         eval_time: 16m
         exp_samples: []
+
+  # Without homeops_container_declared (node-exporter's textfile), ContainerDown cannot fire.
+  - name: DeclaredContainersMissing reports a missing declared-containers textfile
+    interval: 1m
+    input_series:
+      - series: homeops_container_declared{stack="app",service="web",name="web",tier="warning"}
+        values: 1x2 stale
+    promql_expr_test:
+      - expr: &declared sum by (alertname, tier, stack) (ALERTS{alertname="DeclaredContainersMissing",alertstate="firing"})
+        eval_time: 12m
+        exp_samples: []
+      - expr: *declared
+        eval_time: 13m
+        exp_samples:
+          - labels: '{alertname="DeclaredContainersMissing",tier="warning",stack="monitoring"}'
+            value: 1
 
   - name: IdpOutpostSlow requires sustained high p95 latency and meaningful request volume
     interval: 1m
@@ -334,6 +354,9 @@ tests:
     input_series:
       - series: doco_cd_deployment_errors_total{deployment="nextcloud"}
         values: 0 1 2+0x18
+      # No deployment label: no Stack to report.
+      - series: doco_cd_deployment_errors_total{context="default"}
+        values: 0 1 2+0x18
       - series: doco_cd_poll_errors_total
         values: 0 1 2 3+0x18
     promql_expr_test:
@@ -381,11 +404,20 @@ tests:
         values: 0+0x4
       - series: backup_coverage_volume_bytes{path="/volumes/app/new"}
         values: 1024+0x4
+      # No Compose project: reported under ops, which owns stack-back.
+      - series: backup_coverage_entries{path="/volumes/orphan",service="orphan"}
+        values: 0 1+0x3
+      - series: backup_coverage_due{path="/volumes/orphan"}
+        values: 1+0x4
+      - series: backup_coverage_volume_bytes{path="/volumes/orphan"}
+        values: 1024+0x4
     promql_expr_test:
       - expr: &volume sum by (alertname, tier, stack) (ALERTS{alertname="BackupVolumeMissing",alertstate="firing"})
         eval_time: 0m
         exp_samples:
           - labels: '{alertname="BackupVolumeMissing",tier="warning",stack="app"}'
+            value: 1
+          - labels: '{alertname="BackupVolumeMissing",tier="warning",stack="ops"}'
             value: 1
       - expr: *volume
         eval_time: 1m
@@ -402,6 +434,10 @@ tests:
         values: 0+0x1565
       - series: backup_coverage_due{path="/databases/app/new"}
         values: 0+0x1565
+      - series: backup_coverage_snapshot_timestamp{path="/databases/orphan",kind="database",service="orphan"}
+        values: 0+0x1561 93720+60x3
+      - series: backup_coverage_due{path="/databases/orphan"}
+        values: 1+0x1565
     promql_expr_test:
       - expr: &dbbackup sum by (alertname, tier, stack) (ALERTS{alertname="BackupDatabaseStale",alertstate="firing"})
         eval_time: 26h
@@ -410,6 +446,8 @@ tests:
         eval_time: 26h1m
         exp_samples:
           - labels: '{alertname="BackupDatabaseStale",tier="warning",stack="app"}'
+            value: 1
+          - labels: '{alertname="BackupDatabaseStale",tier="warning",stack="ops"}'
             value: 1
       - expr: *dbbackup
         eval_time: 26h2m

@@ -84,6 +84,7 @@ BASE_FILES = {
               forwardedHeadersTrustedIPs: {CIDRS}
     """,
     "tools/dashboards/dashboards.py": "import sys\nsys.exit(0)\n",
+    "tools/declared-containers/declared_containers.py": "import sys\nsys.exit(0)\n",
 }
 
 
