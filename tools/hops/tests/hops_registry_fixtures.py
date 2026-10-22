@@ -3,9 +3,10 @@
 Re-record (needs network). Tokens are redacted, and tag lists keep only version-shaped tags (and
 `latest`) to keep the files small:
 
-    PYTHONPATH=tools/hops:tools/hops/tests python3 -m hops_registry_fixtures
+    PYTHONPATH=tools/hops:tools/hops/tests python3 -m hops_registry_fixtures [name ...]
 """
 import json
+import sys
 from pathlib import Path
 
 from hops.registry import Registry, Response, urllib_http
@@ -19,6 +20,8 @@ RECORDINGS = {
     "dockerhub": ("traefik", "v3.7.15"),
     "ghcr": ("ghcr.io/home-operations/sonarr", "4.0.20.3012"),
     "lscr": ("lscr.io/linuxserver/qbittorrent", "5.2.4"),
+    # The registry tn/ pins qbittorrent from; its tags include a stray 2021 `20.04.1`.
+    "ghcr-qbittorrent": ("ghcr.io/linuxserver/qbittorrent", "5.2.4"),
 }
 
 
@@ -64,7 +67,8 @@ class Replay:
 
 def main() -> None:
     FIXTURES.mkdir(parents=True, exist_ok=True)
-    for name, (repository, tag) in RECORDINGS.items():
+    for name in sys.argv[1:] or RECORDINGS:
+        repository, tag = RECORDINGS[name]
         recorder = Recorder()
         Registry(http=recorder).digest(repository, tag)
         Registry(http=recorder).tags(repository)  # a fresh client, so it records its own token exchange

@@ -1,30 +1,37 @@
 """hops bump: pin a Service's image to a newer tag and its index digest, through a PR.
 
-Repo-changing: it never touches the Host. The edit happens on a new branch in a new worktree under
-.worktrees/, so the checkout hops runs from is never modified; nothing is pushed without --pr.
+Repo-changing: it never touches the Host. The edit happens on a new branch from origin/main in a
+new worktree under .worktrees/, so the checkout hops runs from is never modified (whatever branch it
+is on); nothing is pushed without --pr.
 """
 import argparse
+import io
 import json
 import re
 import subprocess
 import sys
+import tarfile
+import tempfile
 from pathlib import Path
 
 from hops import config
+from hops.declared import Declared
 from hops.errors import HopsError, UsageError
 from hops.registry import Registry
-from hops.tags import newest_same_shape
+from hops.tags import propose
 
 HELP = "pin a Service's image to a newer tag and its index digest, on a branch for a PR"
 DESCRIPTION = """\
 Pin a Service's image to <tag>, or to the newest tag shaped like the current one (same v prefix,
-number of version parts and variant suffix; pre-releases never qualify), with the tag's index
-digest as Renovate pins it. Every Service in the same Stack that pins the same image moves too.
+number of version parts and variant suffix; pre-releases never qualify, nor a jump of more than one
+major version), with the tag's index digest as Renovate pins it. Every Service in the same Stack
+that pins the same image moves too.
 
-The edit is committed on branch hops/bump-<service>-<tag> in a new worktree under .worktrees/,
-after tools/validate/validate.py passes there. The checkout hops runs from is never modified and
-must be clean. Nothing is pushed unless --pr is given. Agents pass their co-author line with
---trailer."""
+The Service and its current pin are read from origin/main (fetched first), and the edit is
+committed on branch hops/bump-<service>-<tag> from origin/main, in a new worktree under
+.worktrees/, after tools/validate/validate.py passes there. The checkout hops runs from is never
+modified and must be clean. Nothing is pushed unless --pr is given. Agents pass their co-author
+line with --trailer."""
 VALIDATE = ["secrets", "env", "compose"]
 BASE = "main"
 RENOVATE = "app/renovate"
@@ -83,21 +90,43 @@ def rewrite(stack_dir: Path, old: str, new: str) -> list[Path]:
     return changed
 
 
+def declared_at(root: Path, ref: str, stack_root: str, into: Path) -> Declared:
+    """The declared Stacks as of `ref`, extracted into `into` without a checkout."""
+    r = subprocess.run(["git", "archive", "--format=tar", ref, stack_root], cwd=root, capture_output=True)
+    if r.returncode != 0:
+        raise HopsError(f"git archive {ref} {stack_root}: {r.stderr.decode().strip()}")
+    with tarfile.open(fileobj=io.BytesIO(r.stdout)) as tar:
+        # filter= exists from Python 3.11.4; git archive output is trusted either way.
+        tar.extractall(into, **({"filter": "data"} if hasattr(tarfile, "data_filter") else {}))
+    return Declared.load(into, stack_root)
+
+
 def run(args, ctx) -> int:
-    service = ctx.declared.resolve_one(args.service)
+    root = ctx.repo_root
+    # The bump ignores local changes (it starts from origin/main); refusing them avoids the surprise.
+    if dirty := _git(root, "status", "--porcelain"):
+        raise UsageError(f"{root} has uncommitted changes; commit or stash them first:\n{dirty}")
+    _git(root, "fetch", "-q", "origin", BASE)
+    base = f"origin/{BASE}"
+    stack_root = config.stack_root_name(ctx.env)
+    with tempfile.TemporaryDirectory(prefix="hops-bump-") as tmp:
+        service = declared_at(root, base, stack_root, Path(tmp)).resolve_one(args.service)
+        service_file = service.file.relative_to(tmp)
     image = service.image
     if not image or not image.tag:
         raise UsageError(f"{service.key} has no image with a tag to bump")
-    root = ctx.repo_root
-    if dirty := _git(root, "status", "--porcelain"):
-        raise UsageError(f"{root} has uncommitted changes; commit or stash them first:\n{dirty}")
 
     registry = Registry()
-    # The pinned tag is always a candidate, so a registry missing it never proposes a downgrade.
-    tag = args.tag or newest_same_shape(image.tag, [*registry.tags(image.repository), image.tag])
-    if tag is None:
-        raise UsageError(f"{image.tag!r} is not a version tag hops can compare; name a tag: "
-                         f"hops bump {service.key} <tag>")
+    tag = args.tag
+    if not tag:
+        tag, rejected = propose(image.tag, registry.tags(image.repository))
+        if tag is None:
+            raise UsageError(f"{image.tag!r} is not a version tag hops can compare; name a tag: "
+                             f"hops bump {service.key} <tag>")
+        if rejected:
+            other = f"the newest acceptable is {tag}" if tag != image.tag else f"no newer tag than {tag} qualifies"
+            raise UsageError(f"the newest {image.tag}-shaped tag, {rejected}, is more than one major version "
+                             f"ahead (a stray tag?); {other}. Name the tag: hops bump {service.key} {tag}")
     new_ref = f"{image.repository}:{tag}@{registry.digest(image.repository, tag)}"
     if new_ref == image.ref:
         ctx.stdout.write(f"{service.key} already pins {new_ref}\n")
@@ -114,20 +143,16 @@ def run(args, ctx) -> int:
 
     branch = f"hops/bump-{service.name}-{tag}"
     _git(root, "check-ref-format", "--branch", branch)
-    current = _git(root, "branch", "--show-current")
-    if current != BASE:
-        ctx.stderr.write(f"hops: warning: {branch} starts from {current or 'a detached HEAD'}, not {BASE}\n")
     main_root = Path(_git(root, "rev-parse", "--path-format=absolute", "--git-common-dir")).parent
     wt = main_root / ".worktrees" / f"bump-{service.name}-{tag}"
     if wt.exists() or _git(root, "branch", "--list", branch):
         raise UsageError(f"{wt} or branch {branch} already exists; discard them first: "
                          f"git worktree remove --force {wt}; git branch -D {branch}")
-    _git(root, "worktree", "add", "-q", "-b", branch, str(wt), "HEAD")
+    _git(root, "worktree", "add", "-q", "--no-track", "-b", branch, str(wt), base)
 
-    stack_dir = wt / config.stack_root_name(ctx.env) / service.stack
-    changed = rewrite(stack_dir, image.ref, new_ref)
-    if wt / service.file.relative_to(root) not in changed:
-        raise HopsError(f"no `image: {image.ref}` line in {service.file.relative_to(root)} to rewrite (in {wt})")
+    changed = rewrite(wt / stack_root / service.stack, image.ref, new_ref)
+    if wt / service_file not in changed:
+        raise HopsError(f"no `image: {image.ref}` line in {service_file} to rewrite (in {wt})")
     files = [str(f.relative_to(wt)) for f in changed]
     ctx.stdout.write(f"{service.key}: {image.ref}\n  -> {new_ref}\n  in {', '.join(files)}\n")
 

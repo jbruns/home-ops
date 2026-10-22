@@ -108,19 +108,26 @@ def checkout(repo, tmp_path, monkeypatch, registry):
     return Checkout
 
 
+def land(repo, message):
+    """Commit everything and push it to origin's main, as a merged PR would."""
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", message)
+    git(repo, "push", "-q", "origin", "main")
+
+
 def worktree(checkout, tag):
     return checkout.root / ".worktrees" / f"bump-sonarr-{tag}"
 
 
 def test_bump_pins_the_newest_same_shape_tag_and_its_digest_on_a_branch_in_a_new_worktree(hops, checkout):
-    head = git(checkout.root, "rev-parse", "HEAD")
+    main = git(checkout.root, "rev-parse", "HEAD")
     outcome = hops("bump", "sonarr/sonarr")
     assert outcome.code == 0, outcome.err
     wt = worktree(checkout, "5.0.0.2742")
     assert git(wt, "branch", "--show-current") == "hops/bump-sonarr-5.0.0.2742"
     assert f"image: ghcr.io/home-operations/sonarr:5.0.0.2742@{DIGEST_5}\n" in (wt / SONARR).read_text()
     assert git(wt, "status", "--porcelain") == ""
-    assert git(wt, "rev-parse", "HEAD~1") == head
+    assert git(wt, "rev-parse", "HEAD~1") == main
     assert git(wt, "show", "--name-only", "--format=", "HEAD").split() == [SONARR]
     assert str(wt) in outcome.out and "hops/bump-sonarr-5.0.0.2742" in outcome.out
 
@@ -178,7 +185,7 @@ def test_a_dirty_tree_is_refused_before_anything_else(hops, checkout, registry, 
 def test_a_pin_already_current_changes_nothing(hops, checkout, repo):
     text = (repo / SONARR).read_text().replace(OLD, f"ghcr.io/home-operations/sonarr:5.0.0.2742@{DIGEST_5}")
     (repo / SONARR).write_text(text)
-    git(repo, "commit", "-q", "-am", "pin")
+    land(repo, "pin")
     outcome = hops("bump", "sonarr/sonarr")
     assert outcome.code == 0
     assert "already pins" in outcome.out
@@ -187,7 +194,7 @@ def test_a_pin_already_current_changes_nothing(hops, checkout, repo):
 
 def test_a_pin_that_is_not_a_version_asks_for_an_explicit_tag(hops, checkout, repo):
     (repo / SONARR).write_text((repo / SONARR).read_text().replace(OLD, "ghcr.io/home-operations/sonarr:rolling"))
-    git(repo, "commit", "-q", "-am", "rolling")
+    land(repo, "rolling")
     outcome = hops("bump", "sonarr/sonarr")
     assert outcome.code == 2
     assert "'rolling' is not a version tag" in outcome.err and "name a tag" in outcome.err
@@ -215,8 +222,7 @@ def test_every_service_in_the_stack_pinning_the_same_image_moves_together(hops, 
     other = "tn/radarr/compose.yaml"
     (repo / other).parent.mkdir()
     (repo / other).write_text(f"services:\n  radarr-sonarr:\n    image: {OLD}\n")
-    git(repo, "add", "-A")
-    git(repo, "commit", "-q", "-m", "cron")
+    land(repo, "cron")
     assert hops("bump", "sonarr/sonarr").code == 0
     wt = worktree(checkout, "5.0.0.2742")
     text = (wt / SONARR).read_text()
@@ -255,3 +261,40 @@ def test_pr_pushes_the_branch_and_opens_a_pr_that_supersedes_renovates(hops, che
     assert "Supersedes #42" in create["stdin"]
     assert f"ghcr.io/home-operations/sonarr:5.0.0.2742@{DIGEST_5}" in create["stdin"]
     assert "https://github.com/jbruns/home-ops/pull/999" in outcome.out
+
+
+def test_a_stray_tag_more_than_one_major_ahead_is_refused_before_any_worktree(hops, checkout, registry):
+    registry._tags = [*TAGS, "20.04.1.0"]
+    outcome = hops("bump", "sonarr/sonarr")
+    assert outcome.code == 2
+    assert "20.04.1.0" in outcome.err and "5.0.0.2742" in outcome.err
+    assert "hops bump sonarr/sonarr 5.0.0.2742" in outcome.err
+    assert not any(c[0] == "digest" for c in registry.calls)
+    assert not (checkout.root / ".worktrees").exists()
+    assert git(checkout.root, "branch", "--list", "hops/*") == ""
+
+
+def test_an_explicit_tag_skips_the_major_version_check(hops, checkout, registry):
+    registry._digests["20.04.1.0"] = DIGEST_5
+    assert hops("bump", "sonarr/sonarr", "20.04.1.0").code == 0
+
+
+def test_the_bump_starts_from_origin_main_not_the_callers_branch(hops, checkout, repo, tmp_path):
+    other = tmp_path / "other"
+    subprocess.run(["git", "clone", "-q", str(checkout.remote), str(other)], check=True)
+    (other / "README.md").write_text("merged elsewhere\n")
+    land(other, "merged on main")
+    git(repo, "checkout", "-q", "-b", "feature")
+    (repo / SONARR).write_text((repo / SONARR).read_text().replace(OLD, "ghcr.io/home-operations/sonarr:9.9.9.9@sha256:9999"))
+    (repo / "feature.txt").write_text("wip\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "feature work")
+
+    outcome = hops("bump", "sonarr/sonarr")
+    assert outcome.code == 0, outcome.err
+    wt = worktree(checkout, "5.0.0.2742")
+    assert git(wt, "rev-parse", "HEAD~1") == git(other, "rev-parse", "HEAD")
+    assert not (wt / "feature.txt").exists()
+    assert OLD in outcome.out  # the pin on main, not the feature branch's 9.9.9.9
+    assert git(repo, "branch", "--show-current") == "feature"
+    assert "9.9.9.9" in (repo / SONARR).read_text()

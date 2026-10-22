@@ -314,13 +314,18 @@ merges.
 - **Tag:** `<tag>` as given, or the newest tag shaped like the current one: same `v` prefix,
   number of version parts and variant suffix (`-alpine`). Pre-releases (`-rc.1`) never qualify.
   This is the rule homelab-components' Canary uses. A tag that is not a version (`latest`,
-  `supervised-1.4.27`) has no candidates; name the tag. Check the proposal: a registry with a stray
-  tag (lscr.io's qbittorrent has `20.04.1`) can win.
+  `supervised-1.4.27`) has no candidates; name the tag. A candidate more than one major version
+  ahead of the pin is refused before anything is created: registries carry stray tags (qbittorrent
+  has a 2021 `20.04.1` beside `5.2.4`). `bump` names the rejected tag and the newest acceptable
+  one; pass the tag you want explicitly. An explicit tag skips this check.
 - **Image digest:** the registry's index (multi-arch) digest, else the manifest digest, exactly what
   Renovate pins (`docker:pinDigests`), so Renovate's next run sees no diff. Anonymous registry v2
   calls; Docker Hub, GHCR, lscr.io and other Bearer-token registries work.
-- **Git:** refuses a checkout with uncommitted or untracked changes. Creates branch
-  `hops/bump-<service>-<tag>` from `HEAD` (run it from `main`) in a new worktree
+- **Git:** fetches `origin main` and works from `origin/main`, whatever branch you are on: the
+  Service and its current pin are read from that tree, and the branch starts there, so the PR
+  holds only the bump. It still refuses a checkout with uncommitted or untracked changes, because
+  those would silently not be in the bump. Creates branch
+  `hops/bump-<service>-<tag>` from `origin/main` in a new worktree
   `.worktrees/bump-<service>-<tag>`, rewrites every `image:` line in the Service's Stack that pins
   the same reference (so `nextcloud` and `nextcloud-cron` move together; other Stacks that pin
   it, such as vaultwarden's `mariadb`, need their own bump), runs
