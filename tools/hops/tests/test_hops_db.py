@@ -208,6 +208,8 @@ def test_read_statements(engine, statement):
     ("mariadb", "SELECT 1; DROP TABLE oc_users"),
     ("mariadb", "/* hi */ SELECT 1"),
     ("mariadb", "\\! sh"),
+    ("mariadb", "SELECT 1 \\! touch x"),
+    ("postgres", "SELECT 1 \\g\nDELETE FROM t"),
     ("mariadb", "SELECTED"),
     ("mariadb", ""),
     ("postgres", "UPDATE t SET a = 1"),

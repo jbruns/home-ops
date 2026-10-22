@@ -56,7 +56,7 @@ from running containers. An unknown or ambiguous name fails before anything touc
 
 ## Commands
 
-Every command below is **read-only**. Each takes `--json`.
+Every command in this table is **read-only**. Each takes `--json`.
 
 | Command | What it shows |
 |---|---|
@@ -100,7 +100,7 @@ in a process argument.
   `INFO`, `SCAN`, `TTL`, `CLIENT LIST`, …; not `CONFIG`). **This is a speed bump against slips,
   not a security boundary.** It does not parse SQL: `SELECT … INTO OUTFILE`, `SELECT` of a
   function with side effects, or Postgres `EXPLAIN ANALYZE DELETE …` all pass without `--write`.
-  Leading comments and client commands (`\!`, `\copy`) need `--write`.
+  Leading comments and any backslash (client commands such as `\!`, `\g`, `\copy`) need `--write`.
 - Output is the client's own, not JSON: MariaDB prints tab-separated rows with a header, Valkey
   prints raw replies, `psql` prints its aligned table.
 
@@ -222,7 +222,8 @@ there is no memory limit.
 - `ctx.runner` (`hops.runner.Runner`) is the only way to reach the Host. `docker(*args)`
   captures output. `pipeline(*commands)` pipes docker commands into each other on the Host,
   under `bash -c 'set -o pipefail; …'`, so it fails if any command fails.
-  `attach(*args, tty=)` connects the terminal. `hops.docker` reads containers, and
+  `attach(*args, tty=)` connects the terminal; interactive modes first call
+  `hops.terminal.require_tty(what)`. `hops.docker` reads containers, and
   `hops.alertmanager.amtool` runs amtool.
 - Raise `hops.errors.UsageError` for bad input (exit 2) and `HopsError` for failures (exit 1).
 
