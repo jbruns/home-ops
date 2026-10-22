@@ -11,6 +11,9 @@ textfile collector. Repo Tooling: it never runs on the Host.
 - `tier` is the Service's `tier` label. A Service without one, or a variable `container_name` or
   `tier`, is an error.
 
+`tools/hops` reuses `compose_files()` and `labels_of()` to read the same Services, so keep their
+signatures stable.
+
 ## Run
 
 ```sh
