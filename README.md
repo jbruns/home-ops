@@ -13,6 +13,7 @@ Terms used here (Stack, Service, Datastore, Tier, Page, Digest, ...) are defined
 | `tn/<stack>/.sops.env` | SOPS-encrypted interpolation values for the Stack (required) |
 | `tn/<stack>/env.template` | The keys `.sops.env` must contain, with empty values |
 | `.doco-cd.yml` | How doco-cd discovers and deploys Stacks |
+| `.env.example` | Keys for the gitignored repo-root `.env`: client-side Host access and Repo Tooling config, each with its purpose and consumer |
 | `host/` | Run on the Host itself: the startup-order pin and install runbook, and the identities runbook |
 | `tools/<name>/` | Repo Tooling (CI and contributor machines only), each with a README: `validate` (the checks CI runs on every PR), `hops` (ops and diagnostics on the Host over SSH), `cloudflare-ips`, `dashboards`, `declared-containers`, `agent-skills` |
 

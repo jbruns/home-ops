@@ -17,6 +17,10 @@ Use the five default triage labels. Before triaging issues, read `docs/agents/tr
 
 Single-context: root `GLOSSARY.md` and `docs/adr/`. Before exploring the codebase, read `docs/agents/domain.md`.
 
+### Repo-root `.env`
+
+SSH and API access to the Host comes from the gitignored repo-root `.env`; see `.env.example` for its keys. Never print, log or commit its values, and never edit `.env` (only @jbruns does).
+
 ### Host access
 
 Reach the Host through `hops` (install with `uv tool install -e tools/hops`; read
