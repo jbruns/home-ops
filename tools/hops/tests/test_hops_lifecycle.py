@@ -123,7 +123,7 @@ def test_stop_silences_the_service_then_stops_it(hops, fake_host):
         assert "--duration=1h30m" in args
         assert any(a.startswith("--comment=hops stop sonarr/sonarr") for a in args)
     assert fake_host.calls[-1].docker == [["stop", "sonarr"]]
-    assert "silence-1" in outcome.out
+    assert 'Silenced container="sonarr" for 1h30m (silence-1): sonarr/sonarr: alerts on its container' in outcome.out
     assert "Nothing restarts" in outcome.out and "hops start sonarr/sonarr" in outcome.out
 
 
@@ -177,9 +177,22 @@ def silenced(matcher_sets: list[dict], labels: dict) -> bool:
     return any(m.items() <= labels.items() for m in matcher_sets)
 
 
+def stop_plan(*stopped: tuple[str, str]) -> list:
+    """The silences `hops stop` would create for (stack/service, container) pairs, from the real repo."""
+    declared = Declared.load(REPO)
+    found = [(declared.resolve_one(key), container) for key, container in stopped]
+    return silences_module.plan(declared, found, silences_module.Monitoring.load(REPO, "tn"))
+
+
 def stop_silences(key: str, container: str) -> list[dict]:
-    service = Declared.load(REPO).resolve_one(key)
-    return silences_module.matchers(service, container, silences_module.scrape_targets(REPO, "tn"))
+    return [s.matchers for s in stop_plan((key, container))]
+
+
+def probe_failed(stack: str, service: str, container: str, job: str = "probe", **labels) -> dict:
+    """ProbeFailed as the probe jobs relabel it from the probed container's Compose labels."""
+    service_ = Declared.load(REPO).get(stack, service)
+    return alert("ProbeFailed", {"job": job, "instance": "https://example", "container": container,
+                                 "service": service, "stack": stack, "tier": service_.tier, **labels})
 
 
 def test_stopping_traefik_silences_its_target_down_page():
@@ -203,6 +216,56 @@ def test_stopping_a_service_silences_container_down():
     found = stop_silences("sonarr/sonarr", "sonarr")
     assert silenced(found, alert("ContainerDown", {"stack": "sonarr", "service": "sonarr", "name": "sonarr",
                                                    "tier": "warning"}))
+
+
+def test_stopping_traefik_silences_every_probe_its_own_missing_probe_no_longer_inhibits():
+    """Docker SD drops a stopped container's Probe, so ProbeFailed{container="traefik"} never fires."""
+    plan = stop_plan(("edge/traefik", "traefik"))
+    found = [s.matchers for s in plan]
+    assert silenced(found, probe_failed("vaultwarden", "vaultwarden", "vaultwarden"))
+    assert silenced(found, probe_failed("nextcloud", "nextcloud", "nextcloud"))
+    assert silenced(found, probe_failed("calibre-web-automated", "calibre-web-automated", "calibre-web-automated",
+                                        job="probe-idp", auth="forward"))
+    assert silenced(found, alert("IdpForwardAuthFailing", {}))
+    (every_probe,) = [s for s in plan if s.matchers == {"alertname": "ProbeFailed"}]
+    assert "all Probes" in every_probe.reason
+
+
+def test_stopping_other_services_leaves_other_probes_paging():
+    for key, container in [("sonarr/sonarr", "sonarr"), ("edge/crowdsec", "crowdsec"), ("nextcloud/mariadb", "mariadb")]:
+        found = stop_silences(key, container)
+        assert not silenced(found, probe_failed("vaultwarden", "vaultwarden", "vaultwarden")), key
+
+
+def test_stopping_a_datastore_silences_the_services_in_its_stack_that_depend_on_it():
+    found = stop_silences("vaultwarden/vaultwarden-db", "vaultwarden-db")
+    assert silenced(found, probe_failed("vaultwarden", "vaultwarden", "vaultwarden"))
+    assert silenced(found, alert("TargetDown", scrape_target("mysqld", datastore="vaultwarden-db")))
+    nextcloud = stop_silences("nextcloud/mariadb", "mariadb")
+    assert silenced(nextcloud, probe_failed("nextcloud", "nextcloud", "nextcloud"))
+    assert silenced(nextcloud, alert("ContainerDown", {"stack": "nextcloud", "service": "nextcloud-cron",
+                                                       "name": "nextcloud-cron", "tier": "warning"}))
+    assert not silenced(found, probe_failed("nextcloud", "nextcloud", "nextcloud"))
+
+
+def test_stopping_a_service_silences_its_stacks_alerts_that_name_no_service():
+    found = stop_silences("ops/stack-back", "stack-back")
+    assert silenced(found, alert("BackupStale", {"kind": "volumes"}))
+    assert silenced(found, alert("BackupMetricsMissing", {}))
+    assert not silenced(stop_silences("sonarr/sonarr", "sonarr"), alert("BackupStale", {"kind": "volumes"}))
+
+
+def test_stopping_a_monitoring_service_never_silences_the_heartbeat():
+    found = stop_silences("monitoring/grafana", "grafana")
+    assert not silenced(found, alert("Watchdog", {}))
+
+
+@pytest.mark.parametrize("key, container", [("edge/traefik", "traefik"), ("ops/stack-back", "stack-back"),
+                                            ("vaultwarden/vaultwarden-db", "vaultwarden-db"),
+                                            ("monitoring/prometheus", "prometheus")])
+def test_every_silence_is_narrow_and_explained(key, container):
+    for s in stop_plan((key, container)):
+        assert s.matchers and set(s.matchers) != {"stack"} and s.reason, s
 
 
 # recreate
