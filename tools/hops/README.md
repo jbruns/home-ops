@@ -158,7 +158,8 @@ without a note here. A field is `null` when the value is unknown or does not app
   the name Compose would give it.
 - `digest_drift`: `true` when the container's digest differs from the repo's pin, `false` when
   they match, and `null` when either side has no digest.
-- `undeclared`: running containers whose Compose labels match no declared Service. `stack` and
+- `undeclared`: running containers whose Compose labels match no declared Service (TrueNAS Apps,
+  Compose projects named `ix-…`, are left out). `stack` and
   `service` hold their Compose project and service labels, if any. This is empty when targets are
   given. It is a hint only; Stray handling is `hops strays`.
 
@@ -213,6 +214,65 @@ there is no memory limit.
 ```
 
 `state` is `active` or `suppressed` (silenced or inhibited). `matchers` use amtool's syntax.
+
+## Strays
+
+`hops strays` lists the **Strays** (GLOSSARY) on the Host: containers, images, volumes and networks
+that no Stack declares or uses. It is read-only unless given `--apply`, and takes `--json`.
+
+| Command | Effect |
+|---|---|
+| `hops strays` | Lists Strays. Changes nothing. |
+| `hops strays --apply` | Removes stopped Stray containers (`docker rm -f`), then Stray images, then networks. Never volumes. |
+| `hops strays --apply --volumes` | Also removes Stray volumes, the only Strays that can hold data. |
+
+What counts as a Stray:
+
+- **Container:** its `com.docker.compose.project`/`service` labels match no declared Service.
+  Containers labelled `startup-order=skip` (deliberate `docker run`s, such as runbook helpers) are
+  marked `deliberate`, and otherwise treated like any other Stray. `--apply` **keeps running** Stray
+  containers, deliberate or not: Portainer still deploys Stacks that `tn/` does not declare, and a
+  helper may be mid-job. Stop one (`docker stop`) to let `--apply` remove it.
+- **Image:** used by no container except Strays that `--apply` removes. An image used by a stopped
+  declared container is in use. These are mostly images earlier Deploys and one-off runs left
+  behind; Docker pulls any of them again when something needs it.
+- **Volume:** neither owned by a declared Stack (its Compose project is one) nor named by one (a
+  top-level `volumes:` entry, by `name:` or Compose's `<stack>_<key>`), and not mounted by a kept
+  container. A Stack's volume is never a Stray, even while nothing mounts it. `--volumes` refuses
+  to run while a declared volume name uses a variable, since `hops` cannot tell which volume it is.
+- **Network:** not owned or named by a declared Stack in the same way, not used by a kept
+  container, and not one of Docker's defaults (`bridge`, `host`, `none`).
+- **Never Strays:** TrueNAS Apps' resources (Compose projects or names starting `ix-`). Build cache
+  is out of scope.
+
+Declared state comes from this checkout, like `status`. A Stack missing from it, for example on a
+branch that removes one, makes that Stack's stopped containers and networks Strays: run `--apply` from an
+up-to-date checkout of `main`, and read the list first. Removal is per item: Docker refuses to remove
+an image, network or volume that something started using since the list was read. A failed removal
+is reported on stderr, the rest continue, and the exit code is 1.
+
+### `strays --json`
+
+```json
+{
+  "containers": [
+    {"container": "helper", "id": "…", "image": "alpine:3", "state": "exited", "stack": null,
+     "service": null, "deliberate": true, "kept": null, "removed": null}
+  ],
+  "images": [
+    {"id": "sha256:…", "repository": "traefik", "refs": ["traefik:v3.6.15"], "size": "188MB",
+     "created": "2026-04-29 16:18:27 -0700 PDT", "removed": null}
+  ],
+  "volumes": [{"volume": "retired_data", "stack": "retired", "anonymous": false, "removed": null}],
+  "networks": [{"network": "retired_default", "id": "…", "stack": "retired", "removed": null}]
+}
+```
+
+- `stack`, `service`: the Compose project and service labels, if any.
+- `deliberate`: the container carries `startup-order=skip`.
+- `kept`: why `--apply` leaves a Stray container (it is running), or `null`.
+- `refs`: the image's tags; `--apply` removes the image by these, or by `id` when it has none.
+- `removed`: `true` or `false` after an `--apply` that tried it, else `null`.
 
 ## Adding a command
 

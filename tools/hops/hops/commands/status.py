@@ -1,6 +1,7 @@
 """hops status [target…]: each declared Service against what runs on the Host."""
 from hops import docker, output
 from hops.declared import Service
+from hops.strays import undeclared as no_declared_service
 
 HELP = "declared vs running: state, health, restarts and digest drift for each Service"
 
@@ -38,7 +39,7 @@ def report(declared, services: list[Service], containers: list[docker.Container]
         owner = declared.by_compose_labels(c.labels)
         if owner:
             by_service.setdefault(owner.key, []).append(c)
-        elif c.running:
+        elif c.running and no_declared_service(declared, c):
             strays.append(c)
     return {
         "services": [service_row(s, docker.pick(by_service.get(s.key, []))) for s in services],
