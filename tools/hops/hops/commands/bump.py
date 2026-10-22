@@ -19,7 +19,7 @@ HELP = "pin a Service's image to a newer tag and its index digest, on a branch f
 DESCRIPTION = """\
 Pin a Service's image to <tag>, or to the newest tag shaped like the current one (same v prefix,
 number of version parts and variant suffix; pre-releases never qualify), with the tag's index
-digest as Renovate pins it. Every Service in the Stack root that pins the same image moves too.
+digest as Renovate pins it. Every Service in the same Stack that pins the same image moves too.
 
 The edit is committed on branch hops/bump-<service>-<tag> in a new worktree under .worktrees/,
 after tools/validate/validate.py passes there. The checkout hops runs from is never modified and
@@ -42,7 +42,10 @@ def register(subparsers) -> None:
 
 
 def _git(cwd: Path, *args: str) -> str:
-    r = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
+    try:
+        r = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
+    except OSError as exc:
+        raise HopsError(f"git: {exc}") from exc
     if r.returncode != 0:
         raise HopsError(f"git {' '.join(args)}: {r.stderr.strip() or r.stdout.strip()}")
     return r.stdout.strip()
@@ -67,11 +70,11 @@ def renovate_prs(cwd: Path, repository: str) -> list[dict]:
     return [pr for pr in prs if repository in package.findall(pr.get("body") or "")]
 
 
-def rewrite(stack_root: Path, old: str, new: str) -> list[Path]:
-    """Replace the image reference `old` with `new` on every `image:` line under stack_root."""
+def rewrite(stack_dir: Path, old: str, new: str) -> list[Path]:
+    """Replace the image reference `old` with `new` on every `image:` line in one Stack's files."""
     pattern = re.compile(r"(?m)^(\s*image:\s*[\"']?)" + re.escape(old) + r"(?=[\"']?\s*(?:#.*)?$)")
     changed = []
-    for f in sorted([*stack_root.rglob("*.yaml"), *stack_root.rglob("*.yml")]):
+    for f in sorted([*stack_dir.rglob("*.yaml"), *stack_dir.rglob("*.yml")]):
         text = f.read_text()
         updated = pattern.sub(lambda m: m.group(1) + new, text)
         if updated != text:
@@ -90,7 +93,8 @@ def run(args, ctx) -> int:
         raise UsageError(f"{root} has uncommitted changes; commit or stash them first:\n{dirty}")
 
     registry = Registry()
-    tag = args.tag or newest_same_shape(image.tag, registry.tags(image.repository))
+    # The pinned tag is always a candidate, so a registry missing it never proposes a downgrade.
+    tag = args.tag or newest_same_shape(image.tag, [*registry.tags(image.repository), image.tag])
     if tag is None:
         raise UsageError(f"{image.tag!r} is not a version tag hops can compare; name a tag: "
                          f"hops bump {service.key} <tag>")
@@ -115,12 +119,13 @@ def run(args, ctx) -> int:
         ctx.stderr.write(f"hops: warning: {branch} starts from {current or 'a detached HEAD'}, not {BASE}\n")
     main_root = Path(_git(root, "rev-parse", "--path-format=absolute", "--git-common-dir")).parent
     wt = main_root / ".worktrees" / f"bump-{service.name}-{tag}"
-    if wt.exists():
-        raise UsageError(f"{wt} already exists; remove it first: git worktree remove {wt}")
+    if wt.exists() or _git(root, "branch", "--list", branch):
+        raise UsageError(f"{wt} or branch {branch} already exists; discard them first: "
+                         f"git worktree remove --force {wt}; git branch -D {branch}")
     _git(root, "worktree", "add", "-q", "-b", branch, str(wt), "HEAD")
 
-    stack_root = config.stack_root_name(ctx.env)
-    changed = rewrite(wt / stack_root, image.ref, new_ref)
+    stack_dir = wt / config.stack_root_name(ctx.env) / service.stack
+    changed = rewrite(stack_dir, image.ref, new_ref)
     if wt / service.file.relative_to(root) not in changed:
         raise HopsError(f"no `image: {image.ref}` line in {service.file.relative_to(root)} to rewrite (in {wt})")
     files = [str(f.relative_to(wt)) for f in changed]
@@ -130,7 +135,8 @@ def run(args, ctx) -> int:
                        capture_output=True, text=True)
     if v.returncode != 0:
         ctx.stderr.write(v.stdout + v.stderr)
-        raise HopsError(f"validate.py failed; the uncommitted edit is in {wt} (branch {branch})")
+        raise HopsError(f"validate.py failed; the uncommitted edit is in {wt} (branch {branch}). "
+                        f"Discard: git worktree remove --force {wt}; git branch -D {branch}")
 
     subject = f"chore(deps): bump {image.repository} to {tag}"
     body = f"Pinned with `hops bump {service.key}`:\n\n- from {image.ref}\n- to {new_ref}"
@@ -158,6 +164,6 @@ def pr_body(service, old: str, new: str, files: list[str], superseded: list[dict
               "digest for the tag, the one Renovate pins, so Renovate's next run sees no diff.", "",
               "## Merge Danger", "",
               "**Door:** two-way. Revert this PR to go back to the previous pin.", "",
-              f"**Blast Radius:** the `{service.stack}` Stack. doco-cd recreates every Service that uses this image.",
+              f"**Blast Radius:** the `{service.stack}` Stack. doco-cd recreates its Services that use this image.",
               ""]
     return "\n".join(lines)

@@ -185,24 +185,44 @@ def test_a_pin_already_current_changes_nothing(hops, checkout, repo):
     assert not (checkout.root / ".worktrees").exists()
 
 
-def test_no_same_shape_tag_asks_for_an_explicit_one(hops, checkout, registry):
-    registry._tags = ["latest", "rolling"]
+def test_a_pin_that_is_not_a_version_asks_for_an_explicit_tag(hops, checkout, repo):
+    (repo / SONARR).write_text((repo / SONARR).read_text().replace(OLD, "ghcr.io/home-operations/sonarr:rolling"))
+    git(repo, "commit", "-q", "-am", "rolling")
     outcome = hops("bump", "sonarr/sonarr")
     assert outcome.code == 2
-    assert "name a tag" in outcome.err
+    assert "'rolling' is not a version tag" in outcome.err and "name a tag" in outcome.err
 
 
-def test_every_service_pinning_the_same_image_moves_together(hops, checkout, repo):
+def test_a_registry_without_the_pinned_tag_never_proposes_a_downgrade(hops, checkout, registry):
+    registry._tags = ["4.0.19.2900", "latest"]
+    assert hops("bump", "sonarr/sonarr").code == 0
+    assert f"sonarr:4.0.20.3012@{DIGEST_4}" in (worktree(checkout, "4.0.20.3012") / SONARR).read_text()
+
+
+def test_a_leftover_branch_is_refused_with_how_to_discard_it(hops, checkout):
+    git(checkout.root, "branch", "hops/bump-sonarr-5.0.0.2742")
+    outcome = hops("bump", "sonarr/sonarr")
+    assert outcome.code == 2
+    assert "git branch -D hops/bump-sonarr-5.0.0.2742" in outcome.err
+
+
+def test_every_service_in_the_stack_pinning_the_same_image_moves_together(hops, checkout, repo):
     (repo / SONARR).write_text((repo / SONARR).read_text() + textwrap.indent(textwrap.dedent(f"""\
         sonarr-cron:
           image: {OLD}  # same image, run as a job
           labels: {{tier: info}}
     """), "  "))
-    git(repo, "commit", "-q", "-am", "cron")
+    other = "tn/radarr/compose.yaml"
+    (repo / other).parent.mkdir()
+    (repo / other).write_text(f"services:\n  radarr-sonarr:\n    image: {OLD}\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "cron")
     assert hops("bump", "sonarr/sonarr").code == 0
-    text = (worktree(checkout, "5.0.0.2742") / SONARR).read_text()
+    wt = worktree(checkout, "5.0.0.2742")
+    text = (wt / SONARR).read_text()
     assert OLD not in text
     assert f"image: ghcr.io/home-operations/sonarr:5.0.0.2742@{DIGEST_5}  # same image" in text
+    assert OLD in (wt / other).read_text(), "another Stack's pin needs its own bump"
 
 
 def test_trailer_is_added_to_the_commit(hops, checkout):
