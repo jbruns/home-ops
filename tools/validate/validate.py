@@ -922,6 +922,16 @@ def check_rule_tests(image: str, rule_files: list[Path], mounts: dict[Path, str]
                    *[f"/tests/{f.name}" for f in suites])
 
 
+def check_generator(name: str, what: str, *args: str) -> None:
+    """Run a generator's --check: its committed output must match what it would write."""
+    generator = path(name)
+    result = subprocess.run([sys.executable, str(generator), "--check", *args], capture_output=True, text=True)
+    if result.returncode:
+        fail(result.stdout.strip() or result.stderr.strip(), generator)
+    else:
+        print(f"ok: {what} match {generator.name}")
+
+
 def check_monitoring() -> None:
     prom = path("prometheus")
     prom_image = deployed_image(prom / INCLUDED_NAME, "prometheus")
@@ -957,20 +967,8 @@ def check_monitoring() -> None:
     alloy_image = deployed_image(alloy / INCLUDED_NAME, "alloy")
     docker_run(alloy_image, {alloy / "config.alloy": "/etc/alloy/config.alloy"}, "/bin/alloy", "validate", "/etc/alloy/config.alloy")
 
-    generator = path("dashboards")
-    result = subprocess.run([sys.executable, str(generator), "--check", "--out", str(path("dashboards-json"))],
-                            capture_output=True, text=True)
-    if result.returncode:
-        fail(result.stdout.strip() or result.stderr.strip(), generator)
-    else:
-        print(f"ok: grafana dashboards match {generator.name}")
-    generator = path("declared-containers")
-    result = subprocess.run([sys.executable, str(generator), "--check", "--root", str(ROOT)],
-                            capture_output=True, text=True)
-    if result.returncode:
-        fail(result.stdout.strip() or result.stderr.strip(), generator)
-    else:
-        print(f"ok: declared containers match {generator.name}")
+    check_generator("dashboards", "grafana dashboards", "--out", str(path("dashboards-json")))
+    check_generator("declared-containers", "declared containers", "--root", str(ROOT))
     try:
         check_grafana(prom_image, loki_image)
     except (MonitoringError, urllib.error.URLError, ConnectionError, TimeoutError) as exc:
