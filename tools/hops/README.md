@@ -144,14 +144,21 @@ nothing starts the Service again until a reboot, the next Deploy of its Stack, o
 **`recreate`** goes through doco-cd's REST API
 (`POST http://doco-cd/v1/api/project/<stack>/recreate?service=<service>`). `hops` never runs
 `docker compose` itself. The API listens only on doco-cd's networks, so the request is sent from
-the prometheus container, which shares `metrics` with it:
+a transport container on `metrics`:
 
+- The transport is the first running container on `metrics` (prometheus first, then by name)
+  whose busybox has `nc -e` and `timeout`, and which is not among the Services being recreated.
+  Recreating the transport would cut the request off. If none qualifies, `recreate` refuses
+  before decrypting the key or touching any Service.
 - `sops -d tn/doco-cd/api_secret.sops.txt` decrypts the API key on this machine.
 - The whole HTTP request, key included, goes over ssh's stdin to
-  `docker exec -i prometheus sh -c …`, where busybox `nc -e` copies it to doco-cd and the
+  `docker exec -i <transport> sh -c …`, where busybox `nc -e` copies it to doco-cd and the
   response back. The key is never in a process argument on either machine and never written to
   disk on the Host. (`… | nc` would half-close the connection when stdin ends, and doco-cd
   cancels a recreate whose client has gone away.)
+- `--timeout` (seconds, default 600) bounds each Service: `timeout` inside the transport ends the
+  request, and the ssh process is killed 30 seconds later. Either way `recreate` exits 1 and says
+  the recreate may have been interrupted; check with `hops status`.
 - Any answer other than 2xx is an error (exit 1) with doco-cd's message. `doco-cd` itself is
   refused, because it replaces itself on its own Deploy.
 

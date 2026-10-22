@@ -71,7 +71,7 @@ Other Stacks declare these networks `external: true`, so `edge`, `monitoring` an
 
 Changes to `tn/doco-cd/` ship in their own PR (CI enforces this). doco-cd replaces itself with the `applier` strategy, which waits for in-flight Deploys to finish first. With `scale_out`, two deployers overlapped and left containers named `<id>_<name>`.
 
-To force-recreate one Service (for example after `ContainerLeftoverName`), run `hops recreate <stack>/<service>` ([tools/hops](tools/hops/README.md#lifecycle-commands)). It calls doco-cd's REST API from the prometheus container on the `metrics` network. The key (`tn/doco-cd/api_secret.sops.txt`) is decrypted locally and sent on stdin.
+To force-recreate one Service (for example after `ContainerLeftoverName`), run `hops recreate <stack>/<service>` ([tools/hops](tools/hops/README.md#lifecycle-commands)). It calls doco-cd's REST API from a container on the `metrics` network that is not being recreated. The key (`tn/doco-cd/api_secret.sops.txt`) is decrypted locally and sent on stdin.
 
 Deleting a Stack folder removes the Stack from the Host but keeps its volumes. Volumes that predate the one-Stack-per-app split keep their old names (e.g. `home_vaultwarden_data`) through an explicit `name:`; don't rename them without a planned data move (ADR-0004).
 

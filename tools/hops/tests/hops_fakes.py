@@ -101,6 +101,7 @@ class Call:
     argv: list[str]
     input: str | None
     capture: bool
+    timeout: float | None = None
 
     @property
     def remote(self) -> str:
@@ -142,10 +143,10 @@ class FakeHost:
                 returncode: int = 0):
         self._responses.append((docker_args, tuple(suffix), returncode, stdout, stderr))
 
-    def __call__(self, argv, *, input=None, capture=True):
+    def __call__(self, argv, *, input=None, capture=True, timeout=None):
         from hops.runner import Result
 
-        call = Call(list(argv), input, capture)
+        call = Call(list(argv), input, capture, timeout)
         self.calls.append(call)
         last = tuple(call.docker[-1])
         for prefix, suffix, returncode, stdout, stderr in reversed(self._responses):

@@ -110,3 +110,18 @@ def test_hops_exits_0_when_its_reader_stops_early():
     proc.stdout.close()
     assert proc.wait(timeout=30) == 0
     assert proc.stderr.read() == b""
+
+
+def test_a_deadline_ends_the_ssh_process_and_raises(tmp_path):
+    from hops.errors import HostTimeout
+    from hops.runner import run_process
+
+    with pytest.raises(HostTimeout, match="0.2s"):
+        run_process(["sleep", "5"], timeout=0.2)
+
+
+def test_docker_passes_its_deadline_to_the_ssh_process(runner, fake_host):
+    fake_host.respond("ps")
+    runner.docker("ps", timeout=12)
+    runner.docker("ps")
+    assert [c.timeout for c in fake_host.calls] == [12, None]
