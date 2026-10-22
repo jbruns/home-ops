@@ -282,6 +282,8 @@ def test_an_explicit_tag_skips_the_major_version_check(hops, checkout, registry)
 def test_the_bump_starts_from_origin_main_not_the_callers_branch(hops, checkout, repo, tmp_path):
     other = tmp_path / "other"
     subprocess.run(["git", "clone", "-q", str(checkout.remote), str(other)], check=True)
+    git(other, "config", "user.name", "Test")
+    git(other, "config", "user.email", "test@example.com")
     (other / "README.md").write_text("merged elsewhere\n")
     land(other, "merged on main")
     git(repo, "checkout", "-q", "-b", "feature")
