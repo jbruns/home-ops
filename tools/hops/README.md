@@ -184,7 +184,8 @@ there is no memory limit.
   `resolve_one(name)`. Each `Service` has `tier`, `image` (repository, tag, digest), `container`
   and `datastore`.
 - `ctx.runner` (`hops.runner.Runner`) is the only way to reach the Host. `docker(*args)`
-  captures output. `pipeline(*commands)` pipes docker commands into each other on the Host.
+  captures output. `pipeline(*commands)` pipes docker commands into each other on the Host,
+  under `bash -c 'set -o pipefail; …'`, so it fails if any command fails.
   `attach(*args, tty=)` connects the terminal. `hops.docker` reads containers, and
   `hops.alertmanager.amtool` runs amtool.
 - Raise `hops.errors.UsageError` for bad input (exit 2) and `HopsError` for failures (exit 1).

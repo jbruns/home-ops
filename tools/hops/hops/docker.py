@@ -70,13 +70,19 @@ def all_containers(runner: Runner) -> list[Container]:
     ids = runner.docker("ps", "-aq", "--no-trunc").stdout.split()
     if not ids:
         return []
-    # A Deploy can remove a container between ps and inspect; inspect then still prints the rest but exits 1.
     result = runner.docker("inspect", *ids, check=False)
-    try:
-        found = json.loads(result.stdout)
-    except json.JSONDecodeError:
-        raise HopsError(f"docker inspect failed: {result.stderr.strip()}") from None
-    return [Container.from_inspect(d) for d in found]
+    if result.returncode != 0 and not _only_vanished(result.stderr, ids):
+        detail = result.stderr.strip() or f"exit code {result.returncode}"
+        raise HopsError(f"docker inspect failed: {detail}")
+    return [Container.from_inspect(d) for d in json.loads(result.stdout)]
+
+
+def _only_vanished(stderr: str, ids: list[str]) -> bool:
+    """Whether inspect failed only because containers that ps listed are gone: a Deploy can remove
+    them in between. Docker then still prints the others and exits 1."""
+    lines = [line.strip() for line in stderr.splitlines() if line.strip()]
+    prefix = "Error: No such object: "
+    return bool(lines) and all(line.startswith(prefix) and line[len(prefix):] in ids for line in lines)
 
 
 def pick(containers: list[Container]) -> Container | None:

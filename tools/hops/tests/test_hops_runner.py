@@ -1,7 +1,12 @@
 """The Runner: the one place that builds the ssh argv for `sudo -n docker` on the Host."""
+import os
+import shlex
+import subprocess
+
 import pytest
 
 from hops.errors import HopsError
+from hops.runner import Result
 
 SSH = ["ssh", "-i", "/keys/id", "-o", "BatchMode=yes", "-o", "ControlMaster=auto"]
 
@@ -22,12 +27,38 @@ def test_docker_runs_over_ssh_with_a_shared_connection(runner, fake_host, host_c
     assert host_config.control_dir.is_dir()
 
 
-def test_pipeline_runs_each_docker_command_on_the_host(runner, fake_host):
+def test_pipeline_runs_each_docker_command_on_the_host_under_bash_pipefail(runner, fake_host):
     fake_host.respond("exec", "-i", "b")
     runner.pipeline(["exec", "a", "cat", "/x"], ["exec", "-i", "b", "sh", "-c", "read -r p; echo $p"], input="hi")
     call = fake_host.calls[0]
-    assert call.remote == "sudo -n docker exec a cat /x | sudo -n docker exec -i b sh -c 'read -r p; echo $p'"
+    # The Host's /bin/sh is dash, which has no pipefail; bash is named explicitly.
+    assert shlex.split(call.remote) == [
+        "bash", "-c",
+        "set -o pipefail; sudo -n docker exec a cat /x | sudo -n docker exec -i b sh -c 'read -r p; echo $p'",
+    ]
+    assert call.docker == [["exec", "a", "cat", "/x"], ["exec", "-i", "b", "sh", "-c", "read -r p; echo $p"]]
     assert call.input == "hi"
+
+
+def test_pipeline_fails_when_the_first_command_fails_and_the_last_succeeds(runner, tmp_path):
+    """Run the remote command line locally, with sudo and docker stubs: the producer fails."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "sudo").write_text('#!/bin/sh\nshift\nexec "$@"\n')
+    (bin_dir / "docker").write_text(
+        '#!/bin/sh\nif [ "$1" = produce ]; then echo "no such secret" >&2; exit 1; fi\ncat >/dev/null\n')
+    for stub in bin_dir.iterdir():
+        stub.chmod(0o755)
+
+    def local_host(argv, *, input=None, capture=True):
+        done = subprocess.run(["bash", "-c", argv[-1]], input=input, capture_output=True, text=True,
+                              env={**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"})
+        return Result(argv, done.returncode, done.stdout, done.stderr)
+
+    runner.process = local_host
+    with pytest.raises(HopsError, match="no such secret"):
+        runner.pipeline(["produce"], ["consume"])
+    assert runner.pipeline(["produce"], ["consume"], check=False).returncode == 1
 
 
 def test_attach_passes_stdio_through_and_uses_a_tty_on_request(runner, fake_host, host_config):

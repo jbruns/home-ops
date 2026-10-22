@@ -70,19 +70,23 @@ class Runner:
         """Run docker commands piped into each other on the Host, so data between them never
         reaches this machine (e.g. a secret read in one container and fed to another)."""
         remote = " | ".join(shlex.join(["sudo", "-n", "docker", *c]) for c in commands)
-        return self._run(remote, commands[-1], input=input, capture=True, check=check)
+        if len(commands) > 1:
+            # Fail when any command fails, not only the last. The Host's /bin/sh (dash) has no pipefail.
+            remote = shlex.join(["bash", "-c", f"set -o pipefail; {remote}"])
+        what = " | ".join(shlex.join(["docker", *c]) for c in commands)
+        return self._run(remote, what, input=input, capture=True, check=check)
 
     def attach(self, *args: str, tty: bool = False) -> int:
         """Run `docker <args>` with this terminal attached (follow logs, interactive exec)."""
-        return self._run(shlex.join(["sudo", "-n", "docker", *args]), args,
+        return self._run(shlex.join(["sudo", "-n", "docker", *args]), shlex.join(["docker", *args]),
                          input=None, capture=False, check=False, tty=tty).returncode
 
-    def _run(self, remote: str, last: Sequence[str], *, input, capture, check, tty=False) -> Result:
+    def _run(self, remote: str, what: str, *, input, capture, check, tty=False) -> Result:
         self.host.control_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         result = self.process(self.ssh_argv(remote, tty=tty), input=input, capture=capture)
         if result.returncode == SSH_FAILED and capture:
             raise HopsError(f"ssh {self.destination} failed: {result.stderr.strip()}")
         if check and result.returncode != 0:
             detail = result.stderr.strip() or f"exit code {result.returncode}"
-            raise HopsError(f"docker {shlex.join(last)} failed: {detail}")
+            raise HopsError(f"{what} failed: {detail}")
         return result

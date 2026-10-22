@@ -110,8 +110,13 @@ class Call:
     @property
     def docker(self) -> list[list[str]]:
         """The docker arguments of each command in the remote pipeline, without `sudo -n docker`."""
+        tokens = shlex.split(self.remote)
+        if tokens[:2] == ["bash", "-c"]:
+            prefix = "set -o pipefail; "
+            assert len(tokens) == 3 and tokens[2].startswith(prefix), tokens
+            tokens = shlex.split(tokens[2][len(prefix):])
         segments, current = [], []
-        for token in shlex.split(self.remote) + ["|"]:
+        for token in tokens + ["|"]:
             if token == "|":
                 assert current[:3] == ["sudo", "-n", "docker"], current
                 segments.append(current[3:])

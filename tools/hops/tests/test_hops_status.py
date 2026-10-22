@@ -123,3 +123,19 @@ def test_status_drift_message_names_the_checkout_not_a_failed_deploy(hops, fake_
     # Declared state is read from the current checkout, which may be a branch doco-cd does not deploy.
     assert "this checkout pins" in out
     assert "or this checkout is not what doco-cd deploys" in out
+
+
+def test_status_fails_with_the_error_when_inspect_fails_for_another_reason(hops, fake_host):
+    fake_host.respond("ps", stdout=CONTAINERS[0]["Id"] + "\n")
+    fake_host.respond("inspect", stdout="[]", returncode=1,
+                      stderr="Cannot connect to the Docker daemon at unix:///var/run/docker.sock.")
+    result = hops("status", "--json")
+    assert result.code == 1
+    assert "Cannot connect to the Docker daemon" in result.err
+    assert result.out == ""
+
+
+def test_status_fails_when_inspect_reports_an_object_it_was_not_asked_for(hops, fake_host):
+    fake_host.respond("ps", stdout=CONTAINERS[0]["Id"] + "\n")
+    fake_host.respond("inspect", stdout="[]", returncode=1, stderr="Error: No such object: something-else")
+    assert hops("status", "--json").code == 1
