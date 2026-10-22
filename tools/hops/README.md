@@ -107,6 +107,71 @@ in a process argument.
 - Output is the client's own, not JSON: MariaDB prints tab-separated rows with a header, Valkey
   prints raw replies, `psql` prints its aligned table.
 
+## Lifecycle commands
+
+These change runtime state only. Each takes one or more targets; a bare Stack name means every
+Service in it. They print the containers they act on, and names are checked before anything
+touches the Host.
+
+| Command | Class | What it does |
+|---|---|---|
+| `hops restart <target…>` | Runtime-reversible | `docker restart` |
+| `hops start <target…>` | Runtime-reversible | `docker start` on the existing containers |
+| `hops stop <target…> --for <dur> [--force]` | Disruptive | Silences the Service's alerts, then `docker stop` |
+| `hops recreate <target…>` | Runtime-reversible | doco-cd force-recreates the Service from the Stack it last deployed |
+
+**`stop`.** A stopped declared Service makes the Host differ from `main`. ContainerDown fires, and
+nothing starts the Service again until a reboot, the next Deploy of its Stack, or `hops start`. So:
+
+- `--for` is required (Prometheus duration syntax: `30m`, `2h`, `1d12h`). Before stopping, `stop`
+  runs `amtool silence add … --duration=<dur>` (as `alerts` does) once for each way an alert can
+  name the Service (`hops/silences.py`):
+  - `stack` and `service`: ContainerDown and Probes.
+  - `container` and `name`: its container name. This covers TargetDown, ProbeFailed, cAdvisor's
+    alerts, and DatastoreDown's `name`.
+  - For each static scrape target in `tn/monitoring/prometheus/prometheus.yml` that is scraped at
+    the Service's hostname, that target's `container` label (for doco-cd that is `doco-cd`, not
+    `doco-cd-doco-cd-1`).
+  - For a Datastore, the `datastore` label of its exporter's target.
+
+  It also silences alerts the stop sets off elsewhere, all derived from the repo:
+  - Services in the same Stack that `depends_on` it, directly or transitively, get the same sets
+    (stopping `vaultwarden-db` silences Vaultwarden's ProbeFailed).
+  - An inhibit rule in `alertmanager/config.yml` whose source is the stopped container's own
+    ProbeFailed no longer works, because Docker SD drops a stopped container's Probe target. What
+    it inhibited is silenced instead. Stopping traefik adds `alertname="ProbeFailed"`, which
+    covers all Probes, and IdpForwardAuthFailing.
+  - The Stack's notifying rules whose labels name the Stack but no Service get `alertname` and
+    `stack` (stopping `stack-back` silences BackupStale). The Watchdog heartbeat is never
+    silenced.
+
+  `stop` prints each silence with its reason. If a silence fails, nothing is stopped. Other
+  fan-out alerts are left to the inhibit rules, because a silenced source alert still inhibits.
+- A Critical Tier Service is refused unless `--force` is passed. For a Stack, one Critical
+  Service is enough to refuse.
+- `start` does not expire the silences; they run out after `--for`. See `hops alerts`.
+
+**`recreate`** goes through doco-cd's REST API
+(`POST http://doco-cd/v1/api/project/<stack>/recreate?service=<service>`). `hops` never runs
+`docker compose` itself. The API listens only on doco-cd's networks, so the request is sent from
+a transport container on `metrics`:
+
+- The transport is the first running container on `metrics` (prometheus first, then by name)
+  whose busybox has `nc -e` and `timeout`, and which is not among the Services being recreated.
+  Recreating the transport would cut the request off. If none qualifies, `recreate` refuses
+  before decrypting the key or touching any Service.
+- `sops -d tn/doco-cd/api_secret.sops.txt` decrypts the API key on this machine.
+- The whole HTTP request, key included, goes over ssh's stdin to
+  `docker exec -i <transport> sh -c …`, where busybox `nc -e` copies it to doco-cd and the
+  response back. The key is never in a process argument on either machine and never written to
+  disk on the Host. (`… | nc` would half-close the connection when stdin ends, and doco-cd
+  cancels a recreate whose client has gone away.)
+- `--timeout` (seconds, default 600) bounds each Service: `timeout` inside the transport ends the
+  request, and the ssh process is killed 30 seconds later. Either way `recreate` exits 1 and says
+  the recreate may have been interrupted; check with `hops status`.
+- Any answer other than 2xx is an error (exit 1) with doco-cd's message. `doco-cd` itself is
+  refused, because it replaces itself on its own Deploy.
+
 ### Exit codes
 
 | Code | Meaning |

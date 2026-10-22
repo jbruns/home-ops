@@ -19,3 +19,7 @@ class ConfigError(UsageError):
 
 class ResolveError(UsageError):
     """A target name that is unknown or ambiguous in the declared Stacks."""
+
+
+class HostTimeout(HopsError):
+    """A Host call ran past its deadline; the ssh process was ended."""

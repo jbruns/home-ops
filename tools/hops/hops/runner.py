@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from hops.config import HostConfig
-from hops.errors import HopsError
+from hops.errors import HopsError, HostTimeout
 
 SSH_FAILED = 255
 
@@ -27,13 +27,19 @@ class Result:
 
 
 class Process(Protocol):
-    def __call__(self, argv: list[str], *, input: str | None = None, capture: bool = True) -> Result: ...
+    def __call__(self, argv: list[str], *, input: str | None = None, capture: bool = True,
+                 timeout: float | None = None) -> Result: ...
 
 
-def run_process(argv: list[str], *, input: str | None = None, capture: bool = True) -> Result:
-    """Run argv locally; with capture=False stdin/stdout/stderr stay attached to the terminal."""
+def run_process(argv: list[str], *, input: str | None = None, capture: bool = True,
+                timeout: float | None = None) -> Result:
+    """Run argv locally; with capture=False stdin/stdout/stderr stay attached to the terminal.
+    Past `timeout` seconds the process is killed and HostTimeout raised."""
     if capture:
-        done = subprocess.run(argv, input=input, capture_output=True, text=True)
+        try:
+            done = subprocess.run(argv, input=input, capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            raise HostTimeout(f"{argv[0]} did not finish within {timeout:g}s and was ended") from None
         return Result(argv, done.returncode, done.stdout, done.stderr)
     try:
         done = subprocess.run(argv, input=input, text=True)
@@ -62,11 +68,13 @@ class Runner:
             self.destination, remote,
         ]
 
-    def docker(self, *args: str, input: str | None = None, check: bool = True) -> Result:
-        """Run `docker <args>` on the Host and capture its output."""
-        return self.pipeline(args, input=input, check=check)
+    def docker(self, *args: str, input: str | None = None, check: bool = True,
+               timeout: float | None = None) -> Result:
+        """Run `docker <args>` on the Host and capture its output; `timeout` bounds the ssh process."""
+        return self.pipeline(args, input=input, check=check, timeout=timeout)
 
-    def pipeline(self, *commands: Sequence[str], input: str | None = None, check: bool = True) -> Result:
+    def pipeline(self, *commands: Sequence[str], input: str | None = None, check: bool = True,
+                 timeout: float | None = None) -> Result:
         """Run docker commands piped into each other on the Host, so data between them never
         reaches this machine (e.g. a secret read in one container and fed to another)."""
         remote = " | ".join(shlex.join(["sudo", "-n", "docker", *c]) for c in commands)
@@ -74,16 +82,18 @@ class Runner:
             # Fail when any command fails, not only the last. The Host's /bin/sh (dash) has no pipefail.
             remote = shlex.join(["bash", "-c", f"set -o pipefail; {remote}"])
         what = " | ".join(shlex.join(["docker", *c]) for c in commands)
-        return self._run(remote, what, input=input, capture=True, check=check)
+        return self._run(remote, what, input=input, capture=True, check=check, timeout=timeout)
 
     def attach(self, *args: str, tty: bool = False) -> int:
         """Run `docker <args>` with this terminal attached (follow logs, interactive exec)."""
         return self._run(shlex.join(["sudo", "-n", "docker", *args]), shlex.join(["docker", *args]),
                          input=None, capture=False, check=False, tty=tty).returncode
 
-    def _run(self, remote: str, what: str, *, input, capture, check, tty=False) -> Result:
+    def _run(self, remote: str, what: str, *, input, capture, check, tty=False, timeout=None) -> Result:
         self.host.control_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
-        result = self.process(self.ssh_argv(remote, tty=tty), input=input, capture=capture)
+        # timeout is passed only when set, so a Process without the parameter keeps working.
+        extra = {} if timeout is None else {"timeout": timeout}
+        result = self.process(self.ssh_argv(remote, tty=tty), input=input, capture=capture, **extra)
         if result.returncode == SSH_FAILED and capture:
             raise HopsError(f"ssh {self.destination} failed: {result.stderr.strip()}")
         if check and result.returncode != 0:
