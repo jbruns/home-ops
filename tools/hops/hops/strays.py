@@ -11,8 +11,8 @@ DEFAULT_NETWORKS = {"bridge", "host", "none"}
 ANONYMOUS = "com.docker.volume.anonymous"
 # A deliberate `docker run` on the Host carries this label (README: startup-order=skip).
 DELIBERATE_LABEL, DELIBERATE_VALUE = "startup-order", "skip"
-# Portainer still deploys Stacks that tn/ does not declare, so a running Stray may be live.
-KEPT_RUNNING = "running; stop it first to remove it"
+# Docker removes these without force; a container in any other state may be doing work.
+REMOVABLE_STATES = ("created", "exited", "dead")
 
 
 def truenas_app(name: str, project: str | None) -> bool:
@@ -21,8 +21,10 @@ def truenas_app(name: str, project: str | None) -> bool:
 
 
 def undeclared(declared: Declared, c: Container) -> bool:
-    """A container no declared Service accounts for (and not a TrueNAS App's)."""
-    return declared.by_compose_labels(c.labels) is None and not truenas_app(c.name, c.compose[0])
+    """A container no declared Service accounts for, by its Compose labels or its declared
+    container_name (a container deployed under a legacy Compose project), and not a TrueNAS App's."""
+    return (declared.by_compose_labels(c.labels) is None and not truenas_app(c.name, c.compose[0])
+            and c.name not in {s.container for s in declared.services})
 
 
 def deliberate(c: Container) -> bool:
@@ -43,15 +45,17 @@ def classify(declared: Declared, containers: list[Container], images: list[dict]
              networks: list[dict]) -> dict:
     """The Strays of each kind, as the JSON `hops strays` prints (README). Rows are `docker … ls` JSON.
 
-    A running Stray container is listed but kept. Images, volumes and networks used only by
-    Strays that --apply removes are Strays too; what kept containers use is not.
+    When ownership is unknown, a Stray is listed with the reason in `kept` and never removed. Images,
+    volumes and networks used only by Strays that --apply removes are Strays too; what kept
+    containers use is not.
     """
     stray_containers, kept = [], []
     for c in containers:
         if not undeclared(declared, c):
             kept.append(c)
             continue
-        keep = KEPT_RUNNING if c.running else None
+        keep = None if c.status in REMOVABLE_STATES else f"{c.status}: only {', '.join(REMOVABLE_STATES[:-1])} " \
+                                                          f"or {REMOVABLE_STATES[-1]} containers are removed"
         if keep:
             kept.append(c)
         stray_containers.append({
@@ -63,6 +67,8 @@ def classify(declared: Declared, containers: list[Container], images: list[dict]
     used_images = {c.raw.get("Image") for c in kept}
     used_volumes = {m.get("Name") for c in kept for m in c.raw.get("Mounts") or [] if m.get("Type") == "volume"}
     used_networks = {n for c in kept for n in ((c.raw.get("NetworkSettings") or {}).get("Networks") or {})}
+    # Compose projects a kept container runs under, legacy ones included: their volumes are theirs.
+    kept_projects = {c.compose[0] for c in kept if c.compose[0]} | set(declared.stacks)
 
     by_id: dict[str, dict] = {}
     for row in images:
@@ -70,8 +76,8 @@ def classify(declared: Declared, containers: list[Container], images: list[dict]
             continue
         repository = row.get("Repository") if row.get("Repository") not in ("", "<none>") else None
         entry = by_id.setdefault(row["ID"], {"id": row["ID"], "repository": repository, "refs": [],
-                                             "size": row.get("Size"),
-                                             "created": row.get("CreatedAt"), "removed": None})
+                                             "size": row.get("Size"), "created": row.get("CreatedAt"),
+                                             "kept": None, "removed": None})
         if repository and row.get("Tag") not in (None, "", "<none>"):
             entry["refs"].append(f"{row['Repository']}:{row['Tag']}")
 
@@ -80,10 +86,18 @@ def classify(declared: Declared, containers: list[Container], images: list[dict]
     for row in volumes:
         labels = parse_labels(row.get("Labels", ""))
         project = labels.get(PROJECT) or None
-        if (project in declared.stacks or row["Name"] in declared_volumes or row["Name"] in used_volumes
-                or truenas_app(row["Name"], project)):
+        name = row["Name"]
+        if (project in kept_projects or name in declared_volumes or name in used_volumes
+                or truenas_app(name, project)):
             continue
-        stray_volumes.append({"volume": row["Name"], "stack": project, "anonymous": ANONYMOUS in labels,
+        anonymous = ANONYMOUS in labels
+        if project:
+            keep = f"Compose project {project} is no declared Stack: ownership unknown"
+        elif not anonymous:
+            keep = "named, unlabelled and undeclared: ownership unknown"
+        else:
+            keep = None  # an anonymous volume nothing references or claims
+        stray_volumes.append({"volume": name, "stack": project, "anonymous": anonymous, "kept": keep,
                               "removed": None})
 
     declared_networks = declared.resource_names("networks")
@@ -94,7 +108,8 @@ def classify(declared: Declared, containers: list[Container], images: list[dict]
         if (name in DEFAULT_NETWORKS or project in declared.stacks or name in declared_networks
                 or name in used_networks or truenas_app(name, project)):
             continue
-        stray_networks.append({"network": name, "id": row["ID"], "stack": project, "removed": None})
+        stray_networks.append({"network": name, "id": row["ID"], "stack": project, "kept": None,
+                               "removed": None})
 
     return {
         "containers": sorted(stray_containers, key=lambda r: r["container"]),

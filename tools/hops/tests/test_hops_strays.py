@@ -1,8 +1,12 @@
-"""hops strays: classify Stray containers, images, volumes and networks; remove them with --apply."""
+"""hops strays: classify Stray containers, images, volumes and networks; remove them with --apply.
+
+When ownership is unknown, a resource is listed but never removed.
+"""
 import json
+import subprocess
 
 import pytest
-from hops_fakes import container, write
+from hops_fakes import container, git, write
 
 # A Stack that names its volumes and networks: an external volume by name, one Compose names
 # vault_cache, the shared proxy network by name, and one Compose names vault_backend.
@@ -44,14 +48,19 @@ CONTAINERS = [
     on_host(container("traefik", project="edge", service="traefik"), image_id=img(1), networks=["proxy"]),
     # A stopped declared Service: its image is in use, its volume unmounted but still its Stack's.
     on_host(container("mariadb", project="nextcloud", service="mariadb", status="exited"), image_id=img(2)),
-    # Running Strays are kept, with what they use: Portainer still deploys Stacks tn/ lacks.
+    # A declared container_name under a legacy Compose project (deployed before the Stack moved to
+    # tn/): it, what it mounts, and its project's volumes are kept.
+    on_host(container("vaultwarden", project="home", service="vaultwarden", status="exited"), image_id=img(9),
+            volumes=["home_extra"]),
+    # Only created, exited and dead Strays are removed; running, paused and restarting ones are kept.
     on_host(container("adhoc", image="adhoc:1"), image_id=img(8)),
+    on_host(container("frozen", image="adhoc:1", status="paused"), image_id=img(8)),
     on_host(container("old-app", project="retired", service="app", status="exited", image="old:1"),
             image_id=img(3), volumes=["retired_data"], networks=["retired_default"]),
-    # Deliberate docker runs are flagged; like any Stray, the running one is kept.
+    # Deliberate docker runs are flagged; otherwise they are like any Stray.
     on_host(container("spike", image="beyla:2"), image_id=img(4), labels=SKIP,
             volumes=["a" * 64], networks=["spike-net"]),
-    on_host(container("helper", image="alpine:3", status="exited"), image_id=img(3), labels=SKIP),
+    on_host(container("helper", image="alpine:3", status="dead"), image_id=img(3), labels=SKIP),
     # A TrueNAS App.
     on_host(container("ix-foo-web-1", project="ix-foo", service="web"), image_id=img(5)),
 ]
@@ -65,16 +74,22 @@ IMAGES = [
     {"ID": img(6), "Repository": "old", "Tag": "<none>", "Size": "90MB", "CreatedAt": "2026-09-01"},
     {"ID": img(7), "Repository": "foo", "Tag": "1", "Size": "10MB", "CreatedAt": "2026-09-02"},
     {"ID": img(7), "Repository": "foo", "Tag": "latest", "Size": "10MB", "CreatedAt": "2026-09-02"},
+    {"ID": img(8), "Repository": "adhoc", "Tag": "1", "Size": "1MB", "CreatedAt": "2026-09-03"},
+    {"ID": img(9), "Repository": "vaultwarden/server", "Tag": "1.37.4", "Size": "1MB", "CreatedAt": "2026-09-04"},
 ]
 
+ANON = "com.docker.volume.anonymous="
 VOLUMES = [
     {"Name": "nextcloud_db", "Driver": "local", "Labels": "com.docker.compose.project=nextcloud,"
                                                           "com.docker.compose.volume=db"},
     {"Name": "home_vaultwarden_data", "Driver": "local", "Labels": ""},
     {"Name": "vault_cache", "Driver": "local", "Labels": ""},
+    {"Name": "home_extra", "Driver": "local", "Labels": "com.docker.compose.project=home"},
+    {"Name": "home_other", "Driver": "local", "Labels": "com.docker.compose.project=home"},
     {"Name": "retired_data", "Driver": "local", "Labels": "com.docker.compose.project=retired"},
-    {"Name": "a" * 64, "Driver": "local", "Labels": "com.docker.volume.anonymous="},
-    {"Name": "b" * 64, "Driver": "local", "Labels": "com.docker.volume.anonymous="},
+    {"Name": "loose", "Driver": "local", "Labels": ""},
+    {"Name": "a" * 64, "Driver": "local", "Labels": ANON},
+    {"Name": "b" * 64, "Driver": "local", "Labels": ANON},
     {"Name": "ix-foo_data", "Driver": "local", "Labels": "com.docker.compose.project=ix-foo"},
 ]
 
@@ -98,22 +113,46 @@ READS = [
     ["volume", "ls", "--format", "json"],
     ["network", "ls", "--no-trunc", "--format", "json"],
 ]
+MULTI_TAG = "Error response from daemon: conflict: unable to delete 777777777777 (must be forced) - " \
+            "image is referenced in multiple repositories"
 
 
 def lines(rows: list[dict]) -> str:
     return "".join(json.dumps(r) + "\n" for r in rows)
 
 
-@pytest.fixture
-def host(repo, fake_host):
-    write(repo, VAULT)
-    fake_host.respond("ps", stdout="".join(c["Id"] + "\n" for c in CONTAINERS))
-    fake_host.respond("inspect", stdout=json.dumps(CONTAINERS))
+def answer(fake_host, containers=CONTAINERS, volumes=VOLUMES):
+    fake_host.respond("ps", stdout="".join(c["Id"] + "\n" for c in containers))
+    fake_host.respond("inspect", stdout=json.dumps(containers))
     fake_host.respond("image", "ls", stdout=lines(IMAGES))
-    fake_host.respond("volume", "ls", stdout=lines(VOLUMES))
+    fake_host.respond("volume", "ls", stdout=lines(volumes))
     fake_host.respond("network", "ls", stdout=lines(NETWORKS))
     for removal in (("rm",), ("image", "rm"), ("network", "rm"), ("volume", "rm")):
         fake_host.respond(*removal)
+    # foo:1 and foo:latest share an ID: removing the ID needs both tags removed first.
+    fake_host.respond("image", "rm", img(7), stderr=MULTI_TAG, returncode=1)
+    for ref in ("foo:1", "foo:latest"):
+        fake_host.respond("image", "inspect", suffix=(ref,), stdout=img(7) + "\n")
+    fake_host.respond("image", "inspect", suffix=(img(7),), stderr=f"Error: No such image: {img(7)}",
+                      returncode=1)
+
+
+def commit_and_push(repo, message="x"):
+    git(repo, "add", "-A")
+    git(repo, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false",
+        "commit", "-q", "--no-verify", "--allow-empty", "-m", message)
+    git(repo, "push", "-q", "origin", "HEAD:main")
+
+
+@pytest.fixture
+def host(repo, fake_host, tmp_path):
+    """The fake Host, and the fixture repo as a clone whose origin/main declares STACKS and VAULT."""
+    write(repo, VAULT)
+    subprocess.check_call(["git", "init", "-q", "--bare", "-b", "main", str(tmp_path / "origin.git")])
+    git(repo, "init", "-q", "-b", "main")
+    git(repo, "remote", "add", "origin", str(tmp_path / "origin.git"))
+    commit_and_push(repo)
+    answer(fake_host)
     return fake_host
 
 
@@ -121,79 +160,156 @@ def cid(name: str) -> str:
     return next(c["Id"] for c in CONTAINERS if c["Name"] == "/" + name)
 
 
+KEPT_STATE = "{}: only created, exited or dead containers are removed"
+UNKNOWN = "Compose project {} is no declared Stack: ownership unknown"
+UNLABELLED = "named, unlabelled and undeclared: ownership unknown"
+
+
 def test_strays_json_classifies_each_kind(hops, host):
     outcome = hops("strays", "--json")
     assert outcome.code == 0, outcome.err
     report = json.loads(outcome.out)
 
+    assert report["declared_from"] == "checkout"
     assert report["containers"] == [
         {"container": "adhoc", "id": cid("adhoc"), "image": "adhoc:1", "state": "running",
-         "stack": None, "service": None, "deliberate": False, "kept": "running; stop it first to remove it",
+         "stack": None, "service": None, "deliberate": False, "kept": KEPT_STATE.format("running"),
          "removed": None},
-        {"container": "helper", "id": cid("helper"), "image": "alpine:3", "state": "exited",
+        {"container": "frozen", "id": cid("frozen"), "image": "adhoc:1", "state": "paused",
+         "stack": None, "service": None, "deliberate": False, "kept": KEPT_STATE.format("paused"),
+         "removed": None},
+        {"container": "helper", "id": cid("helper"), "image": "alpine:3", "state": "dead",
          "stack": None, "service": None, "deliberate": True, "kept": None, "removed": None},
         {"container": "old-app", "id": cid("old-app"), "image": "old:1", "state": "exited",
          "stack": "retired", "service": "app", "deliberate": False, "kept": None, "removed": None},
         {"container": "spike", "id": cid("spike"), "image": "beyla:2", "state": "running",
-         "stack": None, "service": None, "deliberate": True,
-         "kept": "running; stop it first to remove it", "removed": None},
+         "stack": None, "service": None, "deliberate": True, "kept": KEPT_STATE.format("running"),
+         "removed": None},
     ]
-    # alpine is used only by Strays that --apply removes; beyla by the kept spike; mariadb by a
-    # stopped declared Service.
+    # alpine is used only by Strays that --apply removes; adhoc and beyla by kept ones; mariadb by a
+    # stopped declared Service; vaultwarden/server by a declared container under a legacy project.
     assert report["images"] == [
-        {"id": img(3), "repository": "alpine", "refs": ["alpine:3"], "size": "8MB", "created": "2026-10-03", "removed": None},
-        {"id": img(6), "repository": "old", "refs": [], "size": "90MB", "created": "2026-09-01", "removed": None},
-        {"id": img(7), "repository": "foo", "refs": ["foo:1", "foo:latest"], "size": "10MB", "created": "2026-09-02", "removed": None},
+        {"id": img(3), "repository": "alpine", "refs": ["alpine:3"], "size": "8MB", "created": "2026-10-03",
+         "kept": None, "removed": None},
+        {"id": img(6), "repository": "old", "refs": [], "size": "90MB", "created": "2026-09-01",
+         "kept": None, "removed": None},
+        {"id": img(7), "repository": "foo", "refs": ["foo:1", "foo:latest"], "size": "10MB",
+         "created": "2026-09-02", "kept": None, "removed": None},
     ]
-    # The stopped mariadb's unmounted volume is its Stack's, so never a Stray; likewise volumes a
-    # Stack names, and the anonymous volume the kept spike mounts.
+    # Never listed: the stopped mariadb's unmounted volume (its Stack's), volumes a Stack names,
+    # home_* (a kept container's legacy project), and the anonymous volume the kept spike mounts.
     assert report["volumes"] == [
-        {"volume": "b" * 64, "stack": None, "anonymous": True, "removed": None},
-        {"volume": "retired_data", "stack": "retired", "anonymous": False, "removed": None},
+        {"volume": "b" * 64, "stack": None, "anonymous": True, "kept": None, "removed": None},
+        {"volume": "loose", "stack": None, "anonymous": False, "kept": UNLABELLED, "removed": None},
+        {"volume": "retired_data", "stack": "retired", "anonymous": False,
+         "kept": UNKNOWN.format("retired"), "removed": None},
     ]
     assert report["networks"] == [
-        {"network": "manual-net", "id": "n-manual", "stack": None, "removed": None},
-        {"network": "retired_default", "id": "n-retired", "stack": "retired", "removed": None},
+        {"network": "manual-net", "id": "n-manual", "stack": None, "kept": None, "removed": None},
+        {"network": "retired_default", "id": "n-retired", "stack": "retired", "kept": None, "removed": None},
     ]
 
 
-def test_default_run_only_reads(hops, host):
-    assert hops("strays").code == 0
+def test_anonymous_volume_left_by_compose_down(hops, host):
+    # `compose down` removed nextcloud's containers; Docker retained their anonymous volumes. Compose
+    # versions that label them with the project keep them their Stack's. Unlabelled ones (Compose
+    # 2.38 on the Host) and ones labelled with an unknown project are handled like any other volume.
+    left = [
+        {"Name": "c" * 64, "Driver": "local", "Labels": ANON + ",com.docker.compose.project=nextcloud"},
+        {"Name": "d" * 64, "Driver": "local", "Labels": ANON + ",com.docker.compose.project=gone"},
+        {"Name": "e" * 64, "Driver": "local", "Labels": ANON},
+    ]
+    answer(host, containers=CONTAINERS[:1], volumes=left)
+    volumes = {v["volume"][0]: v["kept"] for v in json.loads(hops("strays", "--json").out)["volumes"]}
+    assert volumes == {"d": UNKNOWN.format("gone"), "e": None}
+
+
+def test_default_run_only_reads_and_says_the_checkout_is_the_source(hops, host):
+    out = hops("strays").out
     assert host.docker_calls == READS
+    assert "this checkout" in out and "origin/main" in out
 
 
 def test_table_lists_strays_and_says_nothing_was_removed(hops, host):
     out = hops("strays").out
     assert "adhoc" in out and "old-app" in out and "manual-net" in out and "retired_data" in out
     assert "deliberate docker run (startup-order=skip)" in out
+    assert "kept: running: only created, exited or dead" in out
+    assert "kept: Compose project retired is no declared Stack" in out
     assert "old (untagged)" in out
-    assert "kept: running; stop it first" in out
     assert "Nothing removed" in out and "--volumes" in out
-    for kept in ("traefik", "mariadb", "ix-foo", "vault_cache", "home_vaultwarden_data", "proxy", "bridge"):
+    for kept in ("traefik", "mariadb", "vaultwarden", "home_", "ix-foo", "vault_cache", "proxy", "bridge"):
         assert kept not in out, kept
 
 
-def test_apply_removes_containers_then_images_then_networks_but_never_volumes(hops, host):
+def test_apply_removes_stopped_containers_images_networks_but_never_volumes(hops, host):
     outcome = hops("strays", "--apply")
     assert outcome.code == 0, outcome.err
     assert host.docker_calls[len(READS):] == [
-        ["rm", "-f", cid("helper")],
-        ["rm", "-f", cid("old-app")],
-        ["image", "rm", "alpine:3"],
+        ["rm", cid("helper")],
+        ["rm", cid("old-app")],
+        ["image", "rm", img(3)],
         ["image", "rm", img(6)],
-        ["image", "rm", "foo:1", "foo:latest"],
+        ["image", "rm", img(7)],
+        ["image", "inspect", "--format", "{{.Id}}", "foo:1"],
+        ["image", "inspect", "--format", "{{.Id}}", "foo:latest"],
+        ["image", "rm", "foo:1"],
+        ["image", "rm", "foo:latest"],
+        ["image", "inspect", "--format", "{{.Id}}", img(7)],
         ["network", "rm", "n-manual"],
         ["network", "rm", "n-retired"],
     ]
-    assert not any(c[:2] == ["volume", "rm"] for c in host.docker_calls)
-    assert "kept" in outcome.out and "--volumes" in outcome.out
+    assert "origin/main" in outcome.out
 
 
-def test_apply_with_volumes_also_removes_volumes(hops, host):
+def test_apply_with_volumes_removes_only_volumes_nobody_could_own(hops, host):
+    outcome = hops("strays", "--apply", "--volumes", "--json")
+    assert outcome.code == 0, outcome.err
+    report = json.loads(outcome.out)
+    assert [c for c in host.docker_calls if c[:2] == ["volume", "rm"]] == [["volume", "rm", "b" * 64]]
+    assert [c["removed"] for c in report["containers"]] == [None, None, True, True, None]
+    assert [v["removed"] for v in report["volumes"]] == [True, None, None]
+    assert report["declared_from"].startswith("origin/main@")
+
+
+def test_apply_skips_an_image_whose_tag_moved_since_it_was_listed(hops, host):
+    host.respond("image", "inspect", suffix=("foo:latest",), stdout=img(1) + "\n")
+    outcome = hops("strays", "--apply", "--json")
+    assert outcome.code == 1
+    assert "foo:latest" in outcome.err and "changed" in outcome.err
+    assert ["image", "rm", "foo:1"] not in host.docker_calls
+    assert json.loads(outcome.out)["images"][2]["removed"] is False
+
+
+def test_apply_uses_origin_main_not_a_partial_checkout(hops, host, repo):
+    # This checkout lost tn/vault and tn/nextcloud; origin/main still declares them.
+    for stack in ("vault", "nextcloud"):
+        subprocess.check_call(["rm", "-r", str(repo / "tn" / stack)])
+    assert "home_other" in hops("strays", "--json").out  # list mode reads the checkout, and says so
     report = json.loads(hops("strays", "--apply", "--volumes", "--json").out)
-    assert host.docker_calls[-2:] == [["volume", "rm", "b" * 64], ["volume", "rm", "retired_data"]]
-    assert [c["removed"] for c in report["containers"]] == [None, True, True, None]
-    assert all(v["removed"] for v in report["volumes"])
+    assert ["rm", cid("mariadb")] not in host.docker_calls
+    assert [c for c in host.docker_calls if c[:2] == ["volume", "rm"]] == [["volume", "rm", "b" * 64]]
+    assert "mariadb" not in [c["container"] for c in report["containers"]]
+
+
+def test_apply_fetches_origin_main_first(hops, host, repo, tmp_path):
+    # Another clone retires the vault Stack on origin/main after this checkout last fetched.
+    other = tmp_path / "other"
+    subprocess.check_call(["git", "clone", "-q", str(tmp_path / "origin.git"), str(other)])
+    subprocess.check_call(["rm", "-r", str(other / "tn" / "vault")])
+    commit_and_push(other, "retire vault")
+    report = json.loads(hops("strays", "--apply", "--json").out)
+    assert "vaultwarden" in [c["container"] for c in report["containers"]]
+
+
+def test_apply_refuses_when_origin_main_declares_no_services(hops, host, repo):
+    subprocess.check_call(["git", "rm", "-q", "-r", "tn"], cwd=repo)
+    write(repo, {"tn/README.md": "empty\n"})
+    commit_and_push(repo, "empty tn")
+    outcome = hops("strays", "--apply")
+    assert outcome.code == 2
+    assert "origin/main" in outcome.err and "no Services" in outcome.err
+    assert host.calls == []
 
 
 def test_volumes_without_apply_is_a_usage_error(hops, fake_host):
@@ -204,29 +320,30 @@ def test_volumes_without_apply_is_a_usage_error(hops, fake_host):
 
 
 def test_apply_keeps_going_after_a_failed_removal_and_exits_1(hops, host):
-    host.respond("rm", "-f", cid("old-app"), stderr="Error: permission denied", returncode=1)
+    host.respond("rm", cid("old-app"), stderr="Error: permission denied", returncode=1)
     outcome = hops("strays", "--apply", "--json")
     assert outcome.code == 1
     assert "old-app" in outcome.err and "permission denied" in outcome.err
     report = json.loads(outcome.out)
-    assert [c["removed"] for c in report["containers"]] == [None, True, False, None]
+    assert [c["removed"] for c in report["containers"]] == [None, None, True, False, None]
     assert ["network", "rm", "n-retired"] in host.docker_calls
 
 
-def test_apply_volumes_refuses_when_a_declared_volume_name_uses_a_variable(hops, repo, fake_host):
+def test_apply_volumes_refuses_when_a_declared_volume_name_uses_a_variable(hops, host, repo):
     write(repo, {"tn/vault/compose.yaml": VAULT["tn/vault/compose.yaml"].replace(
         "name: home_vaultwarden_data", "name: ${PREFIX}_vaultwarden_data")})
+    commit_and_push(repo, "variable volume name")
     outcome = hops("strays", "--apply", "--volumes")
     assert outcome.code == 2
     assert "${PREFIX}_vaultwarden_data" in outcome.err
-    assert fake_host.calls == []
+    assert host.calls == []
 
 
 def test_no_strays(hops, fake_host):
     fake_host.respond("ps", stdout="")
     for kind in ("image", "volume", "network"):
         fake_host.respond(kind, "ls", stdout="")
-    outcome = hops("strays", "--apply")
+    outcome = hops("strays")
     assert outcome.code == 0
     assert "No Strays" in outcome.out
     assert fake_host.docker_calls == [READS[0], *READS[2:]]
