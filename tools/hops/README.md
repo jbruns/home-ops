@@ -70,6 +70,40 @@ Alertmanager password file (`/run/secrets/prometheus_password`) from the prometh
 into the alertmanager container. There, `sh` hands it to `amtool` on stdin, so it never appears
 in a process argument.
 
+### exec and db
+
+| Command | What it does | Guardrail class |
+|---|---|---|
+| `hops exec <service> [--] cmd…` | `docker exec` the command in the Service's container; stdout and stderr stream to this terminal; returns the command's exit code | none |
+| `hops exec <service>` | An interactive shell (bash if the image has one, else sh) via `ssh -t` and `docker exec -it` | Disruptive: needs a TTY |
+| `hops db <datastore>` | The Datastore's own client, interactive: `mariadb` as root, `valkey-cli`, or `psql` | Disruptive: needs a TTY |
+| `hops db <datastore> -e "<statement>"` | One statement, non-interactive (for agents); prints the client's output and returns its exit code | Read-only, or `--write` |
+
+- **Interactive modes refuse without a TTY on stdin** (exit 2), so an agent cannot open a session
+  that waits for input. Agents use `exec` with a command, or `db -e`.
+- **`db` targets only Datastores** (GLOSSARY): Services whose image is MariaDB, Valkey or Postgres
+  (or MySQL, Redis). Any other Service fails with exit 2 before the Host is touched.
+- **Credentials stay in the container.** `hops` sends `docker exec … sh -c '<script>'`. That shell,
+  in the container, reads the credential and hands it to the client in an environment variable,
+  so it is never in an argument on this machine or in `ps` on the Host:
+
+  | Engine | Credential | Client |
+  |---|---|---|
+  | MariaDB | `MARIADB_ROOT_PASSWORD_FILE` (or `MARIADB_ROOT_PASSWORD`, and the `MYSQL_` forms) | `mariadb --user=root`, password in `MYSQL_PWD` |
+  | Valkey | `requirepass` in the `.conf` file named in the Service's `command` (else `VALKEY_PASSWORD`/`REDIS_PASSWORD`) | `valkey-cli`, password in `REDISCLI_AUTH` |
+  | Postgres | `POSTGRES_PASSWORD_FILE` or `POSTGRES_PASSWORD`; user `POSTGRES_USER` (default `postgres`), database `POSTGRES_DB` | `psql -X`, password in `PGPASSWORD` |
+
+  The `-e` statement goes to the client on stdin. What the client prints still comes back: a
+  query that selects a secret (Valkey `CONFIG GET requirepass`, `mysql.user`) shows it.
+- **`-e` needs `--write`** unless every statement starts with `SELECT`, `SHOW`, `EXPLAIN` or
+  `DESCRIBE` (statements split on `;`), or, for Valkey, every line is a read command (`GET`,
+  `INFO`, `SCAN`, `TTL`, `CLIENT LIST`, …; not `CONFIG`). **This is a speed bump against slips,
+  not a security boundary.** It does not parse SQL: `SELECT … INTO OUTFILE`, `SELECT` of a
+  function with side effects, or Postgres `EXPLAIN ANALYZE DELETE …` all pass without `--write`.
+  Leading comments and client commands (`\!`, `\copy`) need `--write`.
+- Output is the client's own, not JSON: MariaDB prints tab-separated rows with a header, Valkey
+  prints raw replies, `psql` prints its aligned table.
+
 ### Exit codes
 
 | Code | Meaning |
@@ -77,6 +111,8 @@ in a process argument.
 | 0 | Success. `status` returns 0 even when Services are down; read the output for problems. |
 | 1 | A Host call failed (SSH unreachable, docker error, no container). `logs` returns `docker logs`' own exit code. |
 | 2 | Usage error before any Host call: bad arguments, unknown or ambiguous name, missing config |
+
+`exec` with a command and `db -e` return the remote command's own exit code.
 
 Errors go to stderr as `hops: error: …`, including with `--json`.
 
