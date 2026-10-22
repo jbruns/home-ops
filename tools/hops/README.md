@@ -123,13 +123,23 @@ touches the Host.
 **`stop`.** A stopped declared Service makes the Host differ from `main`. ContainerDown fires, and
 nothing starts the Service again until a reboot, the next Deploy of its Stack, or `hops start`. So:
 
-- `--for` is required (Prometheus duration syntax: `30m`, `2h`, `1d12h`). For each Service, `stop`
-  first runs `amtool silence add stack="<stack>" service="<service>" --duration=<dur>`, as
-  `alerts` does. If the silence fails, nothing is stopped. Alerts that carry other labels, such
-  as `name` alone, are not silenced.
+- `--for` is required (Prometheus duration syntax: `30m`, `2h`, `1d12h`). Before stopping, `stop`
+  runs `amtool silence add … --duration=<dur>` (as `alerts` does) once for each way an alert can
+  name the Service (`hops/silences.py`):
+  - `stack` and `service`: ContainerDown and Probes.
+  - `container` and `name`: its container name. This covers TargetDown, ProbeFailed, cAdvisor's
+    alerts, and DatastoreDown's `name`.
+  - For each static scrape target in `tn/monitoring/prometheus/prometheus.yml` that is scraped at
+    the Service's hostname, that target's `container` label (for doco-cd that is `doco-cd`, not
+    `doco-cd-doco-cd-1`).
+  - For a Datastore, the `datastore` label of its exporter's target.
+
+  If a silence fails, nothing is stopped. Alertmanager's inhibit rules handle alerts that fan out
+  to other Services, such as every Probe while Traefik is down, because a silenced source alert
+  still inhibits.
 - A Critical Tier Service is refused unless `--force` is passed. For a Stack, one Critical
   Service is enough to refuse.
-- `start` does not expire the silence; it runs out after `--for`. See `hops alerts`.
+- `start` does not expire the silences; they run out after `--for`. See `hops alerts`.
 
 **`recreate`** goes through doco-cd's REST API
 (`POST http://doco-cd/v1/api/project/<stack>/recreate?service=<service>`). `hops` never runs

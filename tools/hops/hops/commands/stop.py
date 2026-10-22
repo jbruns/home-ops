@@ -4,9 +4,10 @@ A stopped declared Service makes the Host differ from main: ContainerDown fires,
 it again until a reboot or the next Deploy of its Stack. So stop is Disruptive: --for is required
 and becomes an Alertmanager silence, and a Critical Service also needs --force.
 """
+import json
 import re
 
-from hops import alertmanager, lifecycle
+from hops import alertmanager, config, lifecycle, silences
 from hops.errors import UsageError
 
 HELP = "silence Services' alerts for a duration, then stop their containers (docker stop)"
@@ -17,8 +18,9 @@ DURATION = re.compile(r"(?:(\d+)y)?(?:(\d+)w)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(
 def register(subparsers) -> None:
     p = subparsers.add_parser("stop", help=HELP, description=(
         HELP + ". Disruptive: nothing restarts a stopped Service until a reboot, the next Deploy of its "
-        "Stack, or hops start. --for creates an Alertmanager silence for the Service (alerts labelled with "
-        "its stack and service, such as ContainerDown) that expires after the duration."))
+        "Stack, or hops start. --for creates Alertmanager silences that expire after the duration, one for "
+        "each way an alert names the Service: its stack and service, its container, and any scrape target "
+        "or Datastore label that points at it."))
     lifecycle.add_targets(p)
     p.add_argument("--for", dest="duration", metavar="DURATION",
                    help="required: how long to silence its alerts, e.g. 30m, 2h, 1d (amtool --duration)")
@@ -44,12 +46,16 @@ def run(args, ctx) -> int:
                          "pass --force to stop anyway")
     found = lifecycle.containers(ctx, services)
     author = f"hops ({ctx.env.get('USER') or 'unknown'})"
-    for s in services:
-        result = alertmanager.amtool(
-            ctx.runner, ctx.declared, "silence", "add", f'stack="{s.stack}"', f'service="{s.name}"',
-            f"--duration={args.duration}", f"--author={author}",
-            f"--comment=hops stop {s.key} --for {args.duration}")
-        ctx.stdout.write(f"Silenced {s.key} for {args.duration} (silence {result.stdout.strip()}).\n")
+    targets = silences.scrape_targets(ctx.repo_root, config.stack_root_name(ctx.env))
+    for s, name in found:
+        for m in silences.matchers(s, name, targets):
+            matcher_args = [f"{k}={json.dumps(v)}" for k, v in m.items()]
+            shown = " ".join(matcher_args)
+            result = alertmanager.amtool(
+                ctx.runner, ctx.declared, "silence", "add", *matcher_args,
+                f"--duration={args.duration}", f"--author={author}",
+                f"--comment=hops stop {s.key} --for {args.duration}")
+            ctx.stdout.write(f"Silenced {shown} for {args.duration} (silence {result.stdout.strip()}).\n")
     lifecycle.act(ctx, "stop", "Stopped", found)
     names = " ".join(args.targets)
     ctx.stdout.write(f"Nothing restarts {'it' if len(found) == 1 else 'them'} automatically until a reboot or "
