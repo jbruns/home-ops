@@ -5,7 +5,7 @@ services:
     extends:
       file: ../../_baseline.yaml
       service: baseline
-    image: ghcr.io/autobrr/autobrr:v1.85@sha256:f7594d15dfe9a59e7bbc4bce8aee437a1d440d60b350e2ee74331c0d4ec01928
+    image: ghcr.io/autobrr/autobrr:v1.89@sha256:60efc357e1852f1cd337b8c26d65c5299feadbb4f364c89299b1eede5d159ce4
     container_name: autobrr
     user: ${AUTOBRR_UID}:${MEDIA_SHARED_GID}
     deploy:
