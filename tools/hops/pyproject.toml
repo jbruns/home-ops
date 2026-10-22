@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hops"
+version = "0.1.0"
+description = "Client-side ops and diagnostics for the home-ops Host (Repo Tooling)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["PyYAML>=6"]
+
+[project.scripts]
+hops = "hops.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["hops", "hops.*"]
