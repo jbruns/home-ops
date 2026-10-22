@@ -104,6 +104,10 @@ _Avoid_: Template (the template is a starting point; the Baseline is the enforce
 A recorded, reasoned waiver of one Baseline item for one Service; an Exemption for an item the Service already meets is invalid.
 _Avoid_: Override, exception
 
+**Stray**:
+A container, image, or volume on the Host that no Stack declares or uses. Data that belongs to a Stack is never a Stray, even while nothing uses it.
+_Avoid_: Ad-hoc, orphan, leftover
+
 ## Reliability
 
 **Tier**:
