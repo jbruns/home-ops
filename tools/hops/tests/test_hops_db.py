@@ -146,16 +146,56 @@ def test_write_flag_needs_a_statement(hops, fake_host):
     assert fake_host.calls == []
 
 
-def test_valkey_authenticates_from_requirepass_in_its_config(hops, fake_host, stores):
+def test_valkey_one_shot_runs_each_line_as_valkey_cli_e_with_requirepass_from_its_config(hops, fake_host, stores):
     fake_host.respond("exec")
-    assert hops("db", "vault/cache", "-e", "INFO server").code == 0
-    call = fake_host.calls[0]
-    assert call.docker[0][:3] == ["exec", "-i", "vault-cache"]
-    out = remote(call, stores, {})
-    assert "client: valkey-cli \n" in out
-    assert "auth: unset valkey-secret unset" in out
-    assert "stdin: INFO server" in out
+    assert hops("db", "vault/cache", "-e", "INFO server\nGET 'a key'\n").code == 0
+    assert [c.docker[0][:2] for c in fake_host.calls] == [["exec", "vault-cache"]] * 2
+    assert [c.input for c in fake_host.calls] == [None, None]
+    first, second = (remote(c, stores, {}) for c in fake_host.calls)
+    assert "client: valkey-cli -e INFO server\n" in first
+    assert "auth: unset valkey-secret unset" in first
+    assert "client: valkey-cli -e GET a key\n" in second
+    assert fake_host.calls[1].docker[0][-2:] == ["GET", "a key"]
     assert "valkey-secret" not in all_argv(fake_host)
+
+
+def test_valkey_one_shot_fails_on_a_command_error_and_stops(repo, host_config, stores, capsys):
+    """End to end: the in-container script runs here, with a valkey-cli that, like the real one
+    with -e, exits non-zero when a command errors."""
+    from hops import cli
+    from hops.runner import Result, Runner
+    from hops_fakes import Call
+
+    (stores / "bin" / "valkey-cli").write_text(textwrap.dedent("""\
+        #!/bin/sh
+        [ "$1" = -e ] && shift
+        echo "ran: $*" >> "$(dirname "$0")/../ran"
+        if [ "$1" = GET ] && [ $# -lt 2 ]; then echo "(error) ERR wrong number of arguments for 'get'"; exit 1; fi
+        echo "$REDISCLI_AUTH" | grep -q valkey-secret && echo PONG
+    """))
+
+    def container(argv, *, input=None, capture=True):
+        args = Call(list(argv), input, capture).docker[0]
+        done = subprocess.run(args[args.index("sh"):], input=input or "", capture_output=True, text=True,
+                              env={"PATH": f"{stores}/bin:/usr/bin:/bin"})
+        return Result(list(argv), done.returncode, done.stdout, done.stderr)
+
+    def hops(*argv):
+        ctx = cli.Context(repo_root=repo, runner=Runner(host_config, process=container))
+        return cli.main(list(argv), ctx=ctx), capsys.readouterr()
+
+    code, out = hops("db", "vault/cache", "-e", "PING")
+    assert code == 0 and out.out == "PONG\n"
+    code, out = hops("db", "vault/cache", "-e", "PING\nGET\nPING")
+    assert code == 1
+    assert "wrong number of arguments" in out.out
+    assert (stores / "ran").read_text() == "ran: PING\nran: PING\nran: GET\n"
+
+
+def test_valkey_one_shot_with_unbalanced_quotes_is_a_usage_error(hops, fake_host):
+    outcome = hops("db", "nextcloud/valkey", "-e", "GET 'a", "--write")
+    assert outcome.code == 2
+    assert fake_host.calls == []
 
 
 def test_valkey_without_a_config_uses_the_password_in_its_environment(hops, fake_host, box, tty):

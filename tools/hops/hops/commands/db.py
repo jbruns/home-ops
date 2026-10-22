@@ -3,7 +3,9 @@
 The client never sees a credential. A shell in the container reads it (MariaDB's root password
 file, Valkey's requirepass, Postgres's environment) and hands it to the Datastore client in an
 environment variable (MYSQL_PWD, REDISCLI_AUTH, PGPASSWORD), so it is in no process argument on
-the Host either. The -e statement travels on stdin.
+the Host either. An -e SQL statement travels on stdin. Valkey's REPL exits 0 at the end of stdin
+even after an error, so each -e line runs as its own `valkey-cli -e <args…>`, which exits
+non-zero when the command fails.
 """
 import re
 import shlex
@@ -94,6 +96,17 @@ def valkey_read(statement: str) -> bool:
     return bool(commands) and all(_valkey_read(line) for line in commands)
 
 
+def valkey_commands(statement: str) -> list[list[str]]:
+    """Each non-empty line as valkey-cli arguments, quoted as in valkey-cli ('…', "…")."""
+    try:
+        commands = [shlex.split(line) for line in statement.splitlines() if line.strip()]
+    except ValueError as exc:
+        raise UsageError(f"cannot parse the -e Valkey command: {exc}") from None
+    if not commands:
+        raise UsageError("the -e statement has no Valkey command")
+    return [["-e", *words] for words in commands]
+
+
 def _valkey_read(line: str) -> bool:
     try:
         words = [w.upper() for w in shlex.split(line)]
@@ -110,12 +123,14 @@ class Engine:
     read: Callable[[str], bool]
     reads: str  # what read() allows, for the refusal message
     one_shot_args: tuple[str, ...] = ()
+    # Splits an -e statement into one client run each (its arguments); None: the statement goes on stdin.
+    commands: Callable[[str], list[list[str]]] | None = None
 
 
 SQL_READS = "SELECT, SHOW, EXPLAIN or DESCRIBE"
 ENGINES = {
     "mariadb": Engine(MARIADB, sql_read, SQL_READS),
-    "valkey": Engine(VALKEY, valkey_read, "a read command"),
+    "valkey": Engine(VALKEY, valkey_read, "a read command", commands=valkey_commands),
     "postgres": Engine(POSTGRES, sql_read, SQL_READS, ("-v", "ON_ERROR_STOP=1")),
 }
 
@@ -144,10 +159,17 @@ def run(args, ctx) -> int:
         return ctx.runner.attach("exec", "-it", docker.container_ref(ctx.runner, service), *script, tty=True)
     if not args.write and not engine.read(args.statement):
         raise UsageError(f"the -e statement is not {engine.reads}; add --write to run it")
+    if engine.commands:
+        runs = [(argv, None) for argv in engine.commands(args.statement)]
+    else:
+        statement = args.statement if args.statement.endswith("\n") else args.statement + "\n"
+        runs = [(list(engine.one_shot_args), statement)]
     container = docker.container_ref(ctx.runner, service)
-    statement = args.statement if args.statement.endswith("\n") else args.statement + "\n"
-    result = ctx.runner.docker("exec", "-i", container, *script, *engine.one_shot_args,
-                               input=statement, check=False)
-    ctx.stdout.write(result.stdout)
-    ctx.stderr.write(result.stderr)
-    return result.returncode
+    for argv, statement in runs:
+        result = ctx.runner.docker("exec", *(["-i"] if statement else []), container, *script, *argv,
+                                   input=statement, check=False)
+        ctx.stdout.write(result.stdout)
+        ctx.stderr.write(result.stderr)
+        if result.returncode:
+            return result.returncode
+    return 0

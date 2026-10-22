@@ -93,8 +93,11 @@ in a process argument.
   | Valkey | `requirepass` in the `.conf` file named in the Service's `command` (else `VALKEY_PASSWORD`/`REDIS_PASSWORD`) | `valkey-cli`, password in `REDISCLI_AUTH` |
   | Postgres | `POSTGRES_PASSWORD_FILE` or `POSTGRES_PASSWORD`; user `POSTGRES_USER` (default `postgres`), database `POSTGRES_DB` | `psql -X`, password in `PGPASSWORD` |
 
-  The `-e` statement goes to the client on stdin. What the client prints still comes back: a
-  query that selects a secret (Valkey `CONFIG GET requirepass`, `mysql.user`) shows it.
+  An SQL `-e` statement goes to the client on stdin. A Valkey `-e` runs each line as its own
+  `valkey-cli -e <args…>` (arguments split as a shell would, so quote with `'…'` or `"…"`), in
+  order, and stops at the first command that fails with its exit code; the REPL would exit 0
+  after an error. What the client prints still comes back: a query that selects a secret
+  (Valkey `CONFIG GET requirepass`, `mysql.user`) shows it.
 - **`-e` needs `--write`** unless every statement starts with `SELECT`, `SHOW`, `EXPLAIN` or
   `DESCRIBE` (statements split on `;`), or, for Valkey, every line is a read command (`GET`,
   `INFO`, `SCAN`, `TTL`, `CLIENT LIST`, …; not `CONFIG`). **This is a speed bump against slips,
