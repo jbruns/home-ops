@@ -17,6 +17,6 @@ Use the five default triage labels. Before triaging issues, read `docs/agents/tr
 
 Single-context: root `GLOSSARY.md` and `docs/adr/`. Before exploring the codebase, read `docs/agents/domain.md`.
 
-### Host access
+### Repo-root `.env`
 
-Host access settings (`TRUENAS_*`, `HOPS_*`) come from the gitignored repo-root `.env`; `.env.example` lists every key, its purpose and its consumer. Never print, log or commit its values, and never edit `.env` (only @jbruns does). Secrets a Stack needs go in SOPS, not `.env`.
+SSH and API access to the Host comes from the gitignored repo-root `.env`; see `.env.example` for its keys. Never print, log or commit its values, and never edit `.env` (only @jbruns does).
