@@ -101,24 +101,40 @@ groups:
 
   - name: containers
     rules:
-      # cAdvisor stops reporting a container once it is gone. Looking back over a day keeps
-      # the alert firing until the container returns, or for up to 24h after a deliberate removal
-      # (silence the retired Stack). Keyed on Compose project + service, newest container wins, so
-      # a recreate that renames the container (doco-cd self-update) or changes labels is not "down".
+      # A container tn/ declares (homeops_container_declared: tools/declared-containers, served by
+      # node-exporter) that cAdvisor has not seen for 2 minutes. Retiring or renaming a Stack, or
+      # removing a Service, in git removes it from the declared set, so neither fires; containers git
+      # never declared (doco-cd's self-applier, ad-hoc startup-order=skip runs) never fire. Keyed on
+      # Compose project + service, so a recreate that renames the container is not "down". `for: 5m`
+      # covers a first Deploy's image pull and the Deploy of monitoring trailing a removal. Held while
+      # cAdvisor is down: TargetDown reports that once. `name` (Compose's guess without
+      # container_name) only serves inhibitions on Services that set container_name; the text uses
+      # the Stack and Service.
       - alert: ContainerDown
         expr: |
-          time() - topk by (container_label_com_docker_compose_project, container_label_com_docker_compose_service) (1,
-            max by (name, container_label_tier, container_label_com_docker_compose_project, container_label_com_docker_compose_service) (
-              max_over_time(container_last_seen{container_label_tier=~"critical|warning"}[1d])
-            )
-          ) > 120
-        for: 1m
-        labels:
-          tier: "{{ $labels.container_label_tier }}"
-          stack: "{{ $labels.container_label_com_docker_compose_project }}"
+          max by (stack, service, name, tier) (homeops_container_declared{tier=~"critical|warning"})
+            unless on (stack, service)
+              label_replace(label_replace(
+                max_over_time(container_last_seen{container_label_com_docker_compose_project!=""}[2m]),
+                "stack", "$1", "container_label_com_docker_compose_project", "(.+)"),
+                "service", "$1", "container_label_com_docker_compose_service", "(.+)")
+            unless on () (up{job="cadvisor"} == 0)
+        for: 5m
         annotations:
-          summary: "{{ $labels.name }} is not running"
-          description: "Container {{ $labels.name }} ({{ $labels.container_label_com_docker_compose_project }}) was last seen {{ $value | humanizeDuration }} ago."
+          summary: "{{ $labels.stack }}/{{ $labels.service }} is not running"
+          description: "Service {{ $labels.service }} of Stack {{ $labels.stack }} is declared in tn/, but no container of it has been seen running for 7 minutes."
+
+      # node-exporter serves the declared set from its textfile; without it ContainerDown is blind.
+      # node-exporter being down is also TargetDown's.
+      - alert: DeclaredContainersMissing
+        expr: absent(homeops_container_declared)
+        for: 10m
+        labels:
+          tier: warning
+          stack: monitoring
+        annotations:
+          summary: No declared containers
+          description: "Prometheus has no homeops_container_declared for 10 minutes; check node-exporter's textfile (tools/declared-containers). ContainerDown is blind."
 
       # An interrupted Compose recreate (two deployers racing) leaves a running container named
       # <id>_<name>; cAdvisor and Loki series then split. Compose's own recreates hold the name
@@ -148,7 +164,7 @@ groups:
       - alert: ContainerRestarting
         expr: |
           sum by (name, container_label_tier, container_label_com_docker_compose_project) (
-            changes(container_start_time_seconds{container_label_tier=~"critical|warning"}[15m])
+            changes(container_start_time_seconds{container_label_tier=~"critical|warning", container_label_com_docker_compose_project!=""}[15m])
           ) > 2
         labels:
           tier: "{{ $labels.container_label_tier }}"
@@ -163,7 +179,7 @@ groups:
       - alert: ContainerOOMKilled
         expr: |
           sum by (name, container_label_tier, container_label_com_docker_compose_project) (
-            increase(container_oom_events_total{container_label_tier=~"critical|warning"}[15m])
+            increase(container_oom_events_total{container_label_tier=~"critical|warning", container_label_com_docker_compose_project!=""}[15m])
           ) > 0
         labels:
           tier: "{{ $labels.container_label_tier }}"
@@ -176,7 +192,7 @@ groups:
       - alert: ContainerMemoryNearLimit
         expr: |
           max by (name, container_label_com_docker_compose_project) (
-            container_memory_working_set_bytes{container_label_tier=~"critical|warning"}
+            container_memory_working_set_bytes{container_label_tier=~"critical|warning", container_label_com_docker_compose_project!=""}
               / (container_spec_memory_limit_bytes > 0)
           ) > 0.9
         for: 15m
@@ -356,7 +372,7 @@ groups:
       # doco-cd retries a failed Deploy on every poll (2 min). One failure that a retry fixes is
       # already reported to Discord; two or more in 10 minutes means the Stack is stuck.
       - alert: DeployFailing
-        expr: sum by (deployment) (increase(doco_cd_deployment_errors_total[10m])) >= 2
+        expr: sum by (deployment) (increase(doco_cd_deployment_errors_total{deployment!=""}[10m])) >= 2
         labels:
           tier: warning
           stack: "{{ $labels.deployment }}"
@@ -404,10 +420,11 @@ groups:
 
       # backup-coverage expects every volume and database stack-back is labelled to back up,
       # from Docker (stopped containers too). "Due" waits for the first backup after a recreate.
+      # One without a Compose project is reported under ops, which owns stack-back.
       - alert: BackupVolumeMissing
         # An empty volume is expected to back up empty (volume_bytes 0).
         expr: |
-          backup_coverage_entries == 0
+          label_replace(backup_coverage_entries, "project", "ops", "project", "") == 0
             and on (path) backup_coverage_due == 1
             and on (path) backup_coverage_volume_bytes != 0
         labels:
@@ -419,7 +436,7 @@ groups:
 
       - alert: BackupDatabaseStale
         expr: |
-          time() - backup_coverage_snapshot_timestamp{kind="database"} > 26 * 3600
+          time() - label_replace(backup_coverage_snapshot_timestamp{kind="database"}, "project", "ops", "project", "") > 26 * 3600
             and on (path) backup_coverage_due == 1
         labels:
           tier: warning

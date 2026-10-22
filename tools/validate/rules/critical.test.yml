@@ -75,34 +75,125 @@ tests:
         eval_time: 6m
         exp_samples: []
 
-  - name: ContainerDown waits past last-seen threshold and restores routing labels
+  # ContainerDown: a container tn/ declares (homeops_container_declared, tools/declared-containers)
+  # that cAdvisor has not seen for 2 minutes, for 5 minutes.
+  - name: ContainerDown fires for a declared container that stopped and clears when it returns
     interval: 1m
     input_series:
-      - series: container_last_seen{name="vaultwarden",container_label_tier="critical",container_label_com_docker_compose_project="vaultwarden",container_label_com_docker_compose_service="vaultwarden"}
-        values: 0+60x1 60+0x3 360+60x2
+      - series: homeops_container_declared{job="node-exporter",instance="node-exporter:9100",stack="vaultwarden",service="vaultwarden",name="vaultwarden",tier="critical"}
+        values: 1x15
+      # cAdvisor series carry its own scrape target labels (stack="monitoring"); the rule replaces them.
+      - series: container_last_seen{job="cadvisor",container="cadvisor",stack="monitoring",tier="warning",name="vaultwarden",container_label_tier="critical",container_label_com_docker_compose_project="vaultwarden",container_label_com_docker_compose_service="vaultwarden"}
+        values: 0+60x2 stale _x7 660+60x3
+      - series: up{job="cadvisor",stack="monitoring",tier="warning"}
+        values: 1x15
     promql_expr_test:
       - expr: &container sum by (alertname, tier, stack, name) (ALERTS{alertname="ContainerDown",alertstate="firing"})
+        eval_time: 8m
+        exp_samples: []
+      - expr: *container
+        eval_time: 9m
+        exp_samples:
+          - labels: '{alertname="ContainerDown",tier="critical",stack="vaultwarden",name="vaultwarden"}'
+            value: 1
+      - expr: *container
+        eval_time: 11m
+        exp_samples: []
+
+  - name: ContainerDown fires for a declared container that was never created, but waits out a slow first Deploy
+    interval: 1m
+    input_series:
+      - series: homeops_container_declared{stack="vaultwarden",service="vaultwarden-db",name="vaultwarden-db",tier="critical"}
+        values: 1x10
+      - series: homeops_container_declared{stack="plex",service="plex",name="plex",tier="warning"}
+        values: 1x10
+      - series: container_last_seen{name="plex",container_label_tier="warning",container_label_com_docker_compose_project="plex",container_label_com_docker_compose_service="plex"}
+        values: _x4 240+60x6
+    promql_expr_test:
+      - expr: *container
         eval_time: 4m
         exp_samples: []
       - expr: *container
         eval_time: 5m
         exp_samples:
-          - labels: '{alertname="ContainerDown",tier="critical",stack="vaultwarden",name="vaultwarden"}'
+          - labels: '{alertname="ContainerDown",tier="critical",stack="vaultwarden",name="vaultwarden-db"}'
             value: 1
-      - expr: *container
-        eval_time: 6m
-        exp_samples: []
 
-  - name: ContainerDown uses the newest container across a recreate
+  # Without container_name, `name` is Compose's guess (<stack>-<service>-1); doco-cd's self-updates
+  # bump the number. The text names the Stack and Service, which match the real container.
+  - name: ContainerDown describes the Service, not the guessed container name
     interval: 1m
     input_series:
+      - series: homeops_container_declared{stack="doco-cd",service="doco-cd",name="doco-cd-doco-cd-1",tier="warning"}
+        values: 1x10
+    alert_rule_test:
+      - alertname: ContainerDown
+        eval_time: 5m
+        exp_alerts:
+          - exp_labels: {stack: doco-cd, service: doco-cd, name: doco-cd-doco-cd-1, tier: warning}
+            exp_annotations:
+              summary: doco-cd/doco-cd is not running
+              description: "Service doco-cd of Stack doco-cd is declared in tn/, but no container of it has been seen running for 7 minutes."
+
+  - name: ContainerDown uses any container of the Service across a recreate
+    interval: 1m
+    input_series:
+      - series: homeops_container_declared{stack="app",service="web",name="web",tier="critical"}
+        values: 1x8
       - series: container_last_seen{name="old",container_label_tier="critical",container_label_com_docker_compose_project="app",container_label_com_docker_compose_service="web"}
         values: 0 stale
       - series: container_last_seen{name="new",container_label_tier="critical",container_label_com_docker_compose_project="app",container_label_com_docker_compose_service="web"}
-        values: _ _ 120+60x5
+        values: _ _ 120+60x6
     promql_expr_test:
       - expr: *container
-        eval_time: 5m
+        eval_time: 8m
+        exp_samples: []
+
+  # #508, #553, #558: a Stack retired or renamed, or a Service removed from a Stack, in git. The
+  # declared file lags the removal by 2 minutes (monitoring deploys after the Stack is removed).
+  # Neither the doco-cd self-applier nor an ad-hoc startup-order=skip container is declared.
+  - name: ContainerDown ignores Stacks and Services removed from git and one-shot helpers
+    interval: 1m
+    input_series:
+      - series: homeops_container_declared{stack="asot-media",service="shelfmark",name="shelfmark",tier="warning"}
+        values: 1x4 stale
+      - series: container_last_seen{name="shelfmark",container_label_tier="warning",container_label_com_docker_compose_project="asot-media",container_label_com_docker_compose_service="shelfmark"}
+        values: 0+60x2 stale
+      - series: homeops_container_declared{stack="shelfmark",service="shelfmark",name="shelfmark",tier="warning"}
+        values: _x3 1x12
+      - series: container_last_seen{name="shelfmark",container_label_tier="warning",container_label_com_docker_compose_project="shelfmark",container_label_com_docker_compose_service="shelfmark"}
+        values: _x3 180+60x12
+      - series: homeops_container_declared{stack="audiobookshelf",service="audiobookrequest",name="audiobookrequest",tier="warning"}
+        values: 1x4 stale
+      - series: container_last_seen{name="audiobookrequest",container_label_tier="warning",container_label_com_docker_compose_project="audiobookshelf",container_label_com_docker_compose_service="audiobookrequest"}
+        values: 0+60x2 stale
+      - series: homeops_container_declared{stack="audiobookshelf",service="audiobookshelf",name="audiobookshelf",tier="warning"}
+        values: 1x15
+      - series: container_last_seen{name="audiobookshelf",container_label_tier="warning",container_label_com_docker_compose_project="audiobookshelf",container_label_com_docker_compose_service="audiobookshelf"}
+        values: 0+60x15
+      - series: container_last_seen{name="doco-cd-doco-cd-6-self-applier-1792000000",container_label_tier="warning"}
+        values: 0+60x1 stale
+      - series: container_last_seen{name="beyla-spike",container_label_tier="warning",container_label_startup_order="skip"}
+        values: 0+60x1 stale
+    promql_expr_test:
+      - expr: *container
+        eval_time: 4m
+        exp_samples: []
+      - expr: *container
+        eval_time: 15m
+        exp_samples: []
+
+  # cAdvisor down hides every container; TargetDown reports it once instead.
+  - name: ContainerDown holds while cAdvisor is down
+    interval: 1m
+    input_series:
+      - series: homeops_container_declared{stack="vaultwarden",service="vaultwarden",name="vaultwarden",tier="critical"}
+        values: 1x10
+      - series: up{job="cadvisor",stack="monitoring",tier="warning"}
+        values: 0x10
+    promql_expr_test:
+      - expr: *container
+        eval_time: 10m
         exp_samples: []
 
   - name: ContainerRestarting needs more than two changes and retains the Critical Tier
@@ -111,6 +202,9 @@ tests:
       - series: container_start_time_seconds{name="vaultwarden",container_label_tier="critical",container_label_com_docker_compose_project="vaultwarden"}
         values: 0 60 120 180+0x20
       - series: container_start_time_seconds{name="exporter",container_label_tier="info",container_label_com_docker_compose_project="monitoring"}
+        values: 0+60x23
+      # No Compose project (doco-cd's self-applier inherits doco-cd's tier): no Stack to report.
+      - series: container_start_time_seconds{name="doco-cd-doco-cd-6-self-applier-1792000000",container_label_tier="warning"}
         values: 0+60x23
     promql_expr_test:
       - expr: &restarting sum by (alertname, tier, stack, name) (ALERTS{alertname="ContainerRestarting",alertstate="firing"})
@@ -131,6 +225,8 @@ tests:
       - series: container_oom_events_total{name="vaultwarden",container_label_tier="critical",container_label_com_docker_compose_project="vaultwarden"}
         values: 0 1+0x20
       - series: container_oom_events_total{name="exporter",container_label_tier="info",container_label_com_docker_compose_project="monitoring"}
+        values: 0 1+0x20
+      - series: container_oom_events_total{name="doco-cd-doco-cd-6-self-applier-1792000000",container_label_tier="warning"}
         values: 0 1+0x20
     promql_expr_test:
       - expr: &oom sum by (alertname, tier, stack, name) (ALERTS{alertname="ContainerOOMKilled",alertstate="firing"})

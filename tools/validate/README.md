@@ -8,7 +8,7 @@ hook runs before each commit. Repo Tooling: it never runs on the Host.
 | `secrets` | Sensitive files are tracked only SOPS-encrypted as `*.sops.*`; Stack layout (`tn/<stack>/compose.yaml`, `<service>/service.yaml`); `.doco-cd.yml` keeps `auto_discovery.depth: 1` |
 | `env` | Every `${VAR}` a Stack uses is in its `env.template` and `.sops.env`; `dependencies.yml` placeholders reach `dependencies-render` |
 | `compose` | `docker compose config` renders every Stack and template; startup-order, logging, restart, Probe and Baseline rules; no `env_file` `format` (doco-cd supports only the default) ([ADR-0007](../../docs/adr/0007-service-baseline-via-extends.md)) |
-| `monitoring` | Full Prometheus config and rule checks, behavioral rule suites, amtool/Loki/Alloy config checks, dashboard generation and query checks, and Grafana provisioning boots, using the deployed images |
+| `monitoring` | Full Prometheus config and rule checks, behavioral rule suites, amtool/Loki/Alloy config checks, dashboard generation and query checks, declared-containers freshness, and Grafana provisioning boots, using the deployed images |
 | `cloudflare` | Traefik's trusted Cloudflare ranges are valid and identical (see [cloudflare-ips](../cloudflare-ips/)) |
 | `isolation` | `tn/doco-cd` and `tn/_baseline.yaml` changes ship in their own PR |
 
@@ -30,7 +30,9 @@ python3 tools/validate/validate.py secrets env          # just these
   `tn/monitoring/<name>`), `blackbox` (`tn/monitoring/blackbox-exporter/blackbox.yml`),
   `dashboards` (`tools/dashboards/dashboards.py`, the generator), `dashboards-json`
   (`tn/monitoring/grafana/dashboards`, the generated JSON it checks), `grafana`
-  (`tn/monitoring/grafana`), `rule-tests` (`tools/validate/rules`),
+  (`tn/monitoring/grafana`), `declared-containers`
+  (`tools/declared-containers/declared_containers.py`, run with `--check --root`),
+  `rule-tests` (`tools/validate/rules`),
   `traefik` (`tn/edge/traefik/service.yaml`).
 - `VALIDATE_BASE`: the comparison ref for `isolation`, rule-test freshness and the Grafana upgrade
   boot (default `origin/main`; CI fetches history and sets the PR base).
@@ -48,7 +50,9 @@ No decryption key, production credential or Host access is needed.
 - `promtool test rules` runs every `rules/*.test.yml` with the deployed rule files.
   Every alert needs firing and nonfiring cases (except the always-firing Watchdog), and
   every firing expectation must include the `tier` and `stack` labels Alertmanager routes
-  and inhibits on. An alert with `for:` needs, in one test group, a nonfiring evaluation at
+  and inhibits on. A templated `tier` or `stack` (`{{ $labels.X }}`) must have `X` pinned
+  non-empty in the expression (`X!=""`, a non-empty `=~`, or a `label_replace` default) so it
+  never routes as the literal template. An alert with `for:` needs, in one test group, a nonfiring evaluation at
   most `for:` before a firing one, which proves the pending period. Every recording rule
   needs an assertion. Suites also cover recovery, thresholds, the other inhibiting labels
   and the recording rules used by alerts. Use

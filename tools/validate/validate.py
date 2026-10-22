@@ -57,6 +57,7 @@ PATHS = {
     "blackbox": "tn/monitoring/blackbox-exporter/blackbox.yml",
     "dashboards": "tools/dashboards/dashboards.py",
     "dashboards-json": "tn/monitoring/grafana/dashboards",
+    "declared-containers": "tools/declared-containers/declared_containers.py",
     "grafana": "tn/monitoring/grafana",
     "rule-tests": "tools/validate/rules",
     "traefik": "tn/edge/traefik/service.yaml",
@@ -841,6 +842,30 @@ def alert_evaluations(case: dict) -> list[tuple[float, list[set[str]]]]:
             for test in case["alert_rule_test"]]
 
 
+def label_template_problems(rule: dict) -> list[str]:
+    """A routing label templated from a series label renders empty (or, in promtool, literally)
+    when that label is missing, so the expr must guarantee it: a matcher that cannot match the
+    empty string, or a label_replace that fills it in when empty."""
+    problems = []
+    expr = rule["expr"]
+    for key in sorted(ROUTING_LABELS):
+        value = str((rule.get("labels") or {}).get(key, ""))
+        if "{{" not in value:
+            continue
+        single = re.fullmatch(r"\{\{\s*\$labels\.(\w+)\s*\}\}", value.strip())
+        if not single:
+            problems.append(f"{key} can render empty or literally; template it as a single {{{{ $labels.<label> }}}}")
+            continue
+        label = single.group(1)
+        matchers = re.findall(rf'\b{label}\s*(=~|!=|=)\s*"((?:[^"\\]|\\.)*)"', expr)
+        pinned = any((op == "!=" and v == "") or (op == "=" and v != "") or
+                     (op == "=~" and not re.fullmatch(v, "")) for op, v in matchers)
+        filled = re.search(rf'label_replace\(.*?,\s*"{label}"\s*,\s*"[^"]+"\s*,\s*"{label}"\s*,\s*""\s*\)', expr, re.S)
+        if not pinned and not filled:
+            problems.append(f'{key} can render empty or literally; pin {label} non-empty in the expr (e.g. {label}!="")')
+    return problems
+
+
 def alert_test_problems(name: str, rule: dict, cases: list[dict]) -> list[str]:
     groups = [alert_evaluations(case) for case in cases]
     evaluations = [e for group in groups for e in group]
@@ -869,7 +894,7 @@ def check_rule_tests(image: str, rule_files: list[Path], mounts: dict[Path, str]
         alert = "alert" in definition["rule"]
         cases = rule_cases(documents, name, alert)
         if alert:
-            for problem in alert_test_problems(name, definition["rule"], cases):
+            for problem in alert_test_problems(name, definition["rule"], cases) + label_template_problems(definition["rule"]):
                 fail(f"{name}: {problem}", path("rule-tests"))
         elif not cases:
             fail(f"{name}: add a recording-rule assertion to a promtool suite", path("rule-tests"))
@@ -895,6 +920,16 @@ def check_rule_tests(image: str, rule_files: list[Path], mounts: dict[Path, str]
     if suites:
         docker_run(image, {**mounts, path("rule-tests"): "/tests"}, "promtool", "test", "rules",
                    *[f"/tests/{f.name}" for f in suites])
+
+
+def check_generator(name: str, what: str, *args: str) -> None:
+    """Run a generator's --check: its committed output must match what it would write."""
+    generator = path(name)
+    result = subprocess.run([sys.executable, str(generator), "--check", *args], capture_output=True, text=True)
+    if result.returncode:
+        fail(result.stdout.strip() or result.stderr.strip(), generator)
+    else:
+        print(f"ok: {what} match {generator.name}")
 
 
 def check_monitoring() -> None:
@@ -932,13 +967,8 @@ def check_monitoring() -> None:
     alloy_image = deployed_image(alloy / INCLUDED_NAME, "alloy")
     docker_run(alloy_image, {alloy / "config.alloy": "/etc/alloy/config.alloy"}, "/bin/alloy", "validate", "/etc/alloy/config.alloy")
 
-    generator = path("dashboards")
-    result = subprocess.run([sys.executable, str(generator), "--check", "--out", str(path("dashboards-json"))],
-                            capture_output=True, text=True)
-    if result.returncode:
-        fail(result.stdout.strip() or result.stderr.strip(), generator)
-    else:
-        print(f"ok: grafana dashboards match {generator.name}")
+    check_generator("dashboards", "grafana dashboards", "--out", str(path("dashboards-json")))
+    check_generator("declared-containers", "declared containers", "--root", str(ROOT))
     try:
         check_grafana(prom_image, loki_image)
     except (MonitoringError, urllib.error.URLError, ConnectionError, TimeoutError) as exc:

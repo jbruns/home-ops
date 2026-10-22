@@ -160,3 +160,25 @@ def test_monitoring_rejects_unknown_datasource_uids_and_undeclared_variables(val
     errors = monitoring_errors(validate)
     assert "Typo: unknown datasource uid 'promethues'" in errors
     assert "Missing variable" in errors and "undeclared Grafana variable $missing" in errors
+
+
+def test_monitoring_requires_templated_routing_labels_to_be_pinned_non_empty(validate, repo, runtime):
+    def rule(expr, stack='"{{ $labels.project }}"'):
+        return f"""
+            groups:
+              - name: example
+                rules:
+                  - alert: Example
+                    expr: '{expr}'
+                    labels: {{tier: warning, stack: {stack}}}
+        """
+    write(repo, {"tn/monitoring/prometheus/alerting-rules.yml": rule("x == 0")})
+    assert "Example: stack can render empty or literally; pin project" in monitoring_errors(validate)
+    for expr in ['x{project!=""} == 0', 'x{project=~".+"} == 0', 'x{project="app"} == 0',
+                 'label_replace(x, "project", "ops", "project", "") == 0']:
+        write(repo, {"tn/monitoring/prometheus/alerting-rules.yml": rule(expr.replace("'", "''"))})
+        assert "can render empty" not in monitoring_errors(validate), expr
+    write(repo, {"tn/monitoring/prometheus/alerting-rules.yml": rule('x{project=~".*"} == 0')})
+    assert "Example: stack can render empty" in monitoring_errors(validate)
+    write(repo, {"tn/monitoring/prometheus/alerting-rules.yml": rule("x == 0", stack='"{{ $labels.a }}-{{ $labels.b }}"')})
+    assert "Example: stack can render empty" in monitoring_errors(validate)

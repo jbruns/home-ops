@@ -444,6 +444,13 @@ def test_monitoring_checks_dashboards_json_under_root(validate, repo, runtime):
     assert messages(validate) == f"--check --out {repo / 'json'}"
 
 
+def test_monitoring_reports_stale_declared_containers_under_root(validate, repo, runtime):
+    write(repo, {"tools/declared-containers/declared_containers.py":
+                 "import sys; print('stale', *sys.argv[1:]); raise SystemExit(1)\n"})
+    validate.check_monitoring()
+    assert messages(validate) == f"stale --check --root {repo}"
+
+
 def test_configure_rejects_unknown_path(validate, repo):
     with pytest.raises(KeyError):
         validate.configure(repo, {"nope": "x"})
