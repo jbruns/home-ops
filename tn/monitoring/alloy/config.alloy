@@ -1,7 +1,8 @@
 // Ships every container's logs to Loki, read through the Docker API.
 // Labels: container, stack (Compose project), service (Compose service), tier, logstream.
 // The `stack` label comes from Compose itself, so a new Service needs no opt-in label.
-// Also tails Traefik's access log (logstream=access). Both redact keys and tokens in URLs.
+// Also tails Traefik's access log (logstream=access, plus client=home from the home public
+// addresses). Both redact keys and tokens in URLs.
 
 discovery.docker "containers" {
 	host             = "unix:///var/run/docker.sock"
@@ -86,6 +87,19 @@ loki.process "traefik_access" {
 	stage.timestamp {
 		source = "start"
 		format = "RFC3339Nano"
+	}
+
+	// client="home" marks requests from the home public addresses (the CrowdSec whitelist), so
+	// a home user's 4xx can be told from Internet noise. The repo is public, so the addresses
+	// come from home-clients.sops.env as a regex over ClientHost; keep it in step with
+	// tn/edge/crowdsec/home-whitelist.sops.yaml. stage.match has no LogQL ip() filter, and its
+	// selector takes no raw strings, so the regex has no backslashes or quotes (`[.]` for a dot).
+	stage.match {
+		selector = "{logstream=\"access\"} |~ \"\\\"ClientHost\\\":\\\"(?:" + sys.env("HOME_CLIENT_REGEX") + ")\\\"\""
+
+		stage.static_labels {
+			values = {client = "home"}
+		}
 	}
 
 	forward_to = [loki.write.local.receiver]

@@ -792,7 +792,7 @@
     },
     {
       "type": "row",
-      "title": "Resources",
+      "title": "4xx (through Traefik routers)",
       "collapsed": false,
       "panels": [],
       "gridPos": {
@@ -802,6 +802,258 @@
         "y": 21
       },
       "id": 14
+    },
+    {
+      "type": "timeseries",
+      "title": "4xx by route kind",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (route_kind) (container_route_code:traefik_router_requests:rate10m{container=\"$container\", code=~\"4..\"})",
+          "legendFormat": "{{route_kind}}"
+        }
+      ],
+      "gridPos": {
+        "w": 8,
+        "h": 8,
+        "x": 0,
+        "y": 22
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 40,
+            "showPoints": "never",
+            "lineWidth": 1,
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "ui: the web UI (forward auth and CrowdSec answer here too); client: Client Paths; health: the Probe path; http: the redirect to https. A basic-auth Service's ui 401s are mostly its own Probe.",
+      "id": 15
+    },
+    {
+      "type": "timeseries",
+      "title": "4xx by router and code",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (router, code) (container_route_code:traefik_router_requests:rate10m{container=\"$container\", code=~\"4..\"})",
+          "legendFormat": "{{router}} {{code}}"
+        }
+      ],
+      "gridPos": {
+        "w": 8,
+        "h": 8,
+        "x": 8,
+        "y": 22
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "lineWidth": 1
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "401s on a -client-<protocol> router are failed sign-ins: a user's, or brute force. 403s are mostly the CrowdSec bouncer.",
+      "id": 16
+    },
+    {
+      "type": "timeseries",
+      "title": "Requests by route kind",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (route_kind, code_class) (container_route:traefik_router_requests:rate10m{container=\"$container\"})",
+          "legendFormat": "{{route_kind}} {{code_class}}"
+        }
+      ],
+      "gridPos": {
+        "w": 8,
+        "h": 8,
+        "x": 16,
+        "y": 22
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 40,
+            "showPoints": "never",
+            "lineWidth": 1,
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 17
+    },
+    {
+      "type": "logs",
+      "title": "4xx from home addresses",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{container=\"traefik\", logstream=\"access\", client=\"home\"} | json | DownstreamStatus >= 400 and DownstreamStatus < 500 and RouterName =~ \"$container-(https?|health|client-[a-z0-9]+)@.+\" and request_User_Agent !~ \"Blackbox-Exporter/.*\" | line_format \"{{.DownstreamStatus}} {{.RequestMethod}} {{.RequestPath}} via {{.RouterName}} ({{.request_User_Agent}})\"",
+          "legendFormat": ""
+        }
+      ],
+      "gridPos": {
+        "w": 16,
+        "h": 10,
+        "x": 0,
+        "y": 30
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false
+      },
+      "description": "A home user's failures, from the home public addresses (the CrowdSec whitelist; Alloy labels them client=home). Probes are excluded. Client IPs are only in the access log, never in metrics.",
+      "id": 18
+    },
+    {
+      "type": "timeseries",
+      "title": "CrowdSec decisions in effect",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (reason) (cs_active_decisions{origin=\"crowdsec\"})",
+          "legendFormat": "{{reason}}"
+        }
+      ],
+      "gridPos": {
+        "w": 8,
+        "h": 10,
+        "x": 16,
+        "y": 30
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 40,
+            "showPoints": "never",
+            "lineWidth": 1,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Host-wide bans from this Host's own scenarios (community blocklists excluded), for comparing Internet noise with the home 4xx beside it.",
+      "id": 19
+    },
+    {
+      "type": "row",
+      "title": "Resources",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "w": 24,
+        "h": 1,
+        "x": 0,
+        "y": 40
+      },
+      "id": 20
     },
     {
       "type": "timeseries",
@@ -825,7 +1077,7 @@
         "w": 8,
         "h": 8,
         "x": 0,
-        "y": 22
+        "y": 41
       },
       "fieldConfig": {
         "defaults": {
@@ -849,7 +1101,7 @@
         }
       },
       "description": "CPU cores in use (1 = one full core).",
-      "id": 15
+      "id": 21
     },
     {
       "type": "timeseries",
@@ -882,7 +1134,7 @@
         "w": 8,
         "h": 8,
         "x": 8,
-        "y": 22
+        "y": 41
       },
       "fieldConfig": {
         "defaults": {
@@ -905,7 +1157,7 @@
           "sort": "desc"
         }
       },
-      "id": 16
+      "id": 22
     },
     {
       "type": "timeseries",
@@ -938,7 +1190,7 @@
         "w": 8,
         "h": 8,
         "x": 16,
-        "y": 22
+        "y": 41
       },
       "fieldConfig": {
         "defaults": {
@@ -962,7 +1214,7 @@
         }
       },
       "description": "Disk I/O per container isn't attributable on ZFS; see the Host dashboard.",
-      "id": 17
+      "id": 23
     },
     {
       "type": "row",
@@ -973,9 +1225,9 @@
         "w": 24,
         "h": 1,
         "x": 0,
-        "y": 30
+        "y": 49
       },
-      "id": 18
+      "id": 24
     },
     {
       "type": "state-timeline",
@@ -999,7 +1251,7 @@
         "w": 12,
         "h": 6,
         "x": 0,
-        "y": 31
+        "y": 50
       },
       "fieldConfig": {
         "defaults": {
@@ -1052,7 +1304,7 @@
         }
       },
       "description": "Dependency Probes from this Service's configured URLs (prometheus/dependencies.yml).",
-      "id": 19
+      "id": 25
     },
     {
       "type": "state-timeline",
@@ -1076,7 +1328,7 @@
         "w": 12,
         "h": 6,
         "x": 12,
-        "y": 31
+        "y": 50
       },
       "fieldConfig": {
         "defaults": {
@@ -1128,7 +1380,7 @@
           "showLegend": false
         }
       },
-      "id": 20
+      "id": 26
     },
     {
       "type": "row",
@@ -1139,9 +1391,9 @@
         "w": 24,
         "h": 1,
         "x": 0,
-        "y": 37
+        "y": 56
       },
-      "id": 21
+      "id": 27
     },
     {
       "type": "table",
@@ -1168,7 +1420,7 @@
         "w": 12,
         "h": 6,
         "x": 0,
-        "y": 38
+        "y": 57
       },
       "fieldConfig": {
         "defaults": {
@@ -1250,7 +1502,7 @@
           }
         }
       ],
-      "id": 22
+      "id": 28
     },
     {
       "type": "table",
@@ -1277,7 +1529,7 @@
         "w": 12,
         "h": 6,
         "x": 12,
-        "y": 38
+        "y": 57
       },
       "fieldConfig": {
         "defaults": {
@@ -1337,7 +1589,7 @@
           }
         }
       ],
-      "id": 23
+      "id": 29
     },
     {
       "type": "row",
@@ -1348,9 +1600,9 @@
         "w": 24,
         "h": 1,
         "x": 0,
-        "y": 44
+        "y": 63
       },
-      "id": 24
+      "id": 30
     },
     {
       "type": "timeseries",
@@ -1374,7 +1626,7 @@
         "w": 24,
         "h": 6,
         "x": 0,
-        "y": 45
+        "y": 64
       },
       "fieldConfig": {
         "defaults": {
@@ -1400,7 +1652,7 @@
           "sort": "desc"
         }
       },
-      "id": 25
+      "id": 31
     },
     {
       "type": "logs",
@@ -1424,7 +1676,7 @@
         "w": 24,
         "h": 12,
         "x": 0,
-        "y": 51
+        "y": 70
       },
       "fieldConfig": {
         "defaults": {
@@ -1439,7 +1691,7 @@
         "enableLogDetails": true,
         "prettifyLogMessage": false
       },
-      "id": 26
+      "id": 32
     }
   ],
   "schemaVersion": 41,

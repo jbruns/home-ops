@@ -41,6 +41,28 @@ groups:
   - record: container:traefik_service_5xx:ratio10m
     expr: container:traefik_service_5xx:rate10m / container:traefik_service_requests:rate10m
 
+# HTTP status mix per router. Unlike service metrics, router metrics also count what a middleware
+# answers before the Service: forward auth's 302/401, the CrowdSec bouncer's 403. Router names
+# carry their kind (ADR 0006, enforced by validate.py): `<container>-https` is `ui`, `-http`,
+# `-health`, and `-client-<protocol>` is `client` (the protocol stays in `router`). 401s on
+# `client` routers are a user's or a brute-forcer's failed sign-in. Probes count too: a
+# basic-auth Service's `ui` 401s are mostly its own Probe.
+- name: traefik_routers
+  rules:
+  - record: container_route_code:traefik_router_requests:rate10m
+    expr: |
+      sum by (container, router, route_kind, code) (
+        label_replace(label_replace(label_replace(label_replace(
+          rate(traefik_router_requests_total{router=~".+-(https?|health|client-[a-z0-9]+)@.+"}[10m]),
+          "container", "$1", "router", "(.+)-(?:https?|health|client-[a-z0-9]+)@.+"),
+          "route_kind", "$1", "router", ".+-(https?|health|client)(?:-[a-z0-9]+)?@.+"),
+          "route_kind", "ui", "route_kind", "https"),
+          "router", "$1", "router", "(.+)@.+"))
+  - record: container_route:traefik_router_requests:rate10m
+    expr: |
+      sum by (container, router, route_kind, code_class) (
+        label_replace(container_route_code:traefik_router_requests:rate10m, "code_class", "${1}xx", "code", "(.).."))
+
 # Uptime and Availability (GLOSSARY.md). An Exposed Service is up while every one of its Probes
 # succeeds; any other Service while its health check reports healthy (container-health-exporter).
 # Containers with neither have no Uptime. Docker briefly renames a container it is recreating
