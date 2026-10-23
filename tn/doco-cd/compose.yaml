@@ -83,6 +83,12 @@ services:
       TZ: ${TZ}
       APPRISE_WORKER_COUNT: 1
       APPRISE_STATEFUL_MODE: disabled
+    # The image's VOLUME paths; stateless here (doco-cd sends the URLs with each /notify), so
+    # tmpfs rather than anonymous volumes (Baseline item: anonymous-volumes).
+    tmpfs:
+      - /attach:uid=1000,gid=100,mode=0700
+      - /config:uid=1000,gid=100,mode=0700
+      - /plugin:uid=1000,gid=100,mode=0700
     labels:
       tier: info
       startup-order: "3"
