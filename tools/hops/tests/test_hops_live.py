@@ -41,3 +41,10 @@ def test_logs_tail(capsys):
 def test_alerts_include_the_watchdog(capsys):
     report = hops_json(capsys, "alerts")
     assert "Watchdog" in {a["labels"].get("alertname") for a in report["alerts"]}
+
+
+def test_logs_loki_reads_history_oldest_first(capsys):
+    report = hops_json(capsys, "logs", "doco-cd/doco-cd", "--loki", "--since", "1d", "--limit", "5")
+    times = [line["time"] for line in report["lines"]]
+    assert times == sorted(times)
+    assert all(line["labels"]["service"] == "doco-cd" for line in report["lines"])

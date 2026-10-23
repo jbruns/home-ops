@@ -6,6 +6,7 @@ pytest collects tools/ together.
 import shlex
 import subprocess
 import textwrap
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -131,7 +132,8 @@ class FakeHost:
     """Stands in for the ssh process: records every argv and answers with canned output.
 
     `respond(*docker_args, stdout=...)` answers any call whose last pipeline command starts with
-    those docker arguments (and ends with `suffix`, if given); the latest matching response wins. Unanswered calls fail the test, so
+    those docker arguments (and ends with `suffix`, if given); the latest matching response wins.
+    `stdout` may be a function of the Call, for a fake that answers each request. Unanswered calls fail the test, so
     a test that expects no Host access needs no extra assertion beyond `calls == []`.
     """
 
@@ -139,7 +141,7 @@ class FakeHost:
         self.calls: list[Call] = []
         self._responses: list[tuple[tuple[str, ...], tuple[str, ...], int, str, str]] = []
 
-    def respond(self, *docker_args: str, suffix: tuple[str, ...] = (), stdout: str = "", stderr: str = "",
+    def respond(self, *docker_args: str, suffix: tuple[str, ...] = (), stdout: str | Callable[[Call], str] = "", stderr: str = "",
                 returncode: int = 0):
         self._responses.append((docker_args, tuple(suffix), returncode, stdout, stderr))
 
@@ -151,6 +153,7 @@ class FakeHost:
         last = tuple(call.docker[-1])
         for prefix, suffix, returncode, stdout, stderr in reversed(self._responses):
             if last[:len(prefix)] == prefix and last[len(last) - len(suffix):] == suffix:
+                stdout = stdout(call) if callable(stdout) else stdout
                 return Result(list(argv), returncode, stdout if capture else "", stderr if capture else "")
         raise AssertionError(f"unexpected Host call: {call.remote}")
 
