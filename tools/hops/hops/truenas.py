@@ -38,11 +38,15 @@ class TrueNASConfig:
     verify: bool = True  # TLS certificate and host name
 
 
+class Unavailable(ConfigError):
+    """This host has no TrueNAS configured for hops."""
+
+
 def load_config(repo_root: Path, env=None) -> TrueNASConfig:
     values = config.load_values(repo_root, env)
     missing = [k for k in ("TRUENAS_URL", "HOPS_TRUENAS_API_KEY") if not values.get(k)]
     if missing:
-        raise ConfigError(f"TrueNAS is not available on this host: missing {' and '.join(missing)}; "
+        raise Unavailable(f"TrueNAS is not available on this host: missing {' and '.join(missing)}; "
                           f"set it in {config.where(repo_root)}")
     url = urlsplit(values["TRUENAS_URL"])
     if url.scheme != "https" or not url.netloc:
@@ -66,9 +70,10 @@ Connect = Callable[..., Transport]  # connect(url, *, verify: bool, timeout: flo
 class TrueNASError(HopsError):
     """A TrueNAS method returned an error."""
 
-    def __init__(self, message: str, errname: str | None = None):
+    def __init__(self, message: str, errname: str | None = None, method: str | None = None):
         super().__init__(message)
         self.errname = errname  # e.g. EACCES, ENOENT
+        self.method = method
 
 
 class Client:
@@ -138,7 +143,7 @@ class Client:
         reason = data.get("reason") or error.get("message") or "unknown error"
         errname = data.get("errname")
         text = f"TrueNAS {method}: {errname + ': ' if errname else ''}{reason}".rstrip()
-        return TrueNASError(self._scrub(text), errname)
+        return TrueNASError(self._scrub(text), errname, method)
 
     def _scrub(self, text: str) -> str:
         return text.replace(self.cfg.api_key, REDACTED) if self.cfg.api_key else text
@@ -241,3 +246,4 @@ def redact(data, method: str = ""):
         return out
 
     return walk(data)
+

@@ -49,6 +49,11 @@ class Container:
     def digest(self) -> str | None:
         return Image.parse(self.image).digest
 
+    def bind_source(self, destination: str) -> str | None:
+        """The Host path bind-mounted at `destination` in the container, if any."""
+        return next((m.get("Source") for m in self.raw.get("Mounts") or []
+                     if m.get("Type") == "bind" and m.get("Destination") == destination), None)
+
     @property
     def running(self) -> bool:
         return self.status == "running"
