@@ -2,6 +2,7 @@
 
 CI runs `python3 -m pytest tools host` without installing hops, so this puts the package on sys.path.
 """
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -65,11 +66,16 @@ class Outcome:
 
 @pytest.fixture
 def hops(repo, runner, capsys):
-    """Run the hops CLI against the fixture repository and fake Host: hops("status", "--json")."""
+    """Run the hops CLI against the fixture repository and fake Host: hops("status", "--json").
+
+    TrueNAS is not configured unless `truenas=` passes a client (e.g. one on hops_fakes.FakeTrueNAS).
+    """
     from hops import cli
 
-    def run(*argv: str) -> Outcome:
-        ctx = cli.Context(repo_root=repo, runner=runner)
+    env = {k: v for k, v in os.environ.items() if k not in ("TRUENAS_URL", "HOPS_TRUENAS_API_KEY")}
+
+    def run(*argv: str, truenas=None) -> Outcome:
+        ctx = cli.Context(repo_root=repo, runner=runner, truenas=truenas, env=env)
         code = cli.main(list(argv), ctx=ctx)
         captured = capsys.readouterr()
         return Outcome(code, captured.out, captured.err)

@@ -1,14 +1,15 @@
 """hops strays [--apply [--volumes]]: list, or remove, what no Stack declares or uses."""
 import json
 
-from hops import config, docker, origin_main, output, strays
-from hops.errors import ConfigError, UsageError
+from hops import config, docker, origin_main, output, snapshots, strays
+from hops.errors import ConfigError, HopsError, UsageError
 
-HELP = "Stray containers, images, volumes and networks; --apply removes them"
+HELP = "Stray containers, images, volumes, networks and expired Rollback Snapshots; --apply removes them"
 DESCRIPTION = (HELP + ". Lists by default (against this checkout) and changes nothing. --apply fetches "
                "origin/main, classifies against it, and removes stopped Stray containers, then Stray images and "
                "networks; volumes, the only Strays that can hold data, only with --apply --volumes. Anything "
-               "whose ownership is unknown is listed but never removed.")
+               "whose ownership is unknown is listed but never removed. Expired Rollback Snapshots are listed "
+               "(through TrueNAS, when configured) and released only with hops snapshot release.")
 
 
 def register(subparsers) -> None:
@@ -38,6 +39,23 @@ def read_host(runner, declared) -> dict:
 
 def removable(report: dict, kind: str) -> list[dict]:
     return [e for e in report[kind] if not e["kept"]]
+
+
+SNAPSHOT_KEPT = "released only with hops snapshot release, once its change is verified"
+
+
+def expired_snapshots(ctx) -> tuple[list[dict] | None, str | None]:
+    """Rollback Snapshots past their release date, as Strays; or None and why they weren't checked."""
+    try:
+        found = snapshots.rollback_snapshots(ctx.truenas)
+    except ConfigError as exc:
+        return None, str(exc)
+    def row(r):
+        fields = r.to_json()
+        fields.pop("expired")  # true for every row here
+        return {"snapshot": fields.pop("name"), **fields, "kept": SNAPSHOT_KEPT, "removed": None}
+
+    return [row(r) for r in found if r.expired], None
 
 
 class Kept(str):
@@ -116,15 +134,20 @@ def print_report(report: dict, source: str, out) -> None:
         ("volumes", "Stray volumes (they can hold data):", ["VOLUME", "COMPOSE PROJECT", "NOTE"],
          lambda v: [v["volume"], v["stack"], note(v)]),
     ]
+    if report["snapshots"] is not None:
+        sections.append(("snapshots", "Expired Rollback Snapshots:", ["SNAPSHOT", "ISSUE", "EXPIRES", "SIZE"],
+                         lambda s: [s["snapshot"], s["issue"], s["expires"], output.size(s["size"])]))
     first = True
     out.write(f"Declared state: {source}\n\n")
-    if not any(report[k] for k in KINDS):
-        out.write("No Strays.\n")
+    if not any(report[k] for k in KINDS) and not report["snapshots"]:
+        out.write("No Strays" + (".\n" if report["snapshots"] is not None else " among Docker resources.\n"))
     for key, title, headers, row in sections:
         if report[key]:
             out.write(("" if first else "\n") + title + "\n")
             output.table(headers, [row(e) for e in report[key]], out)
             first = False
+    if report["snapshots"] is None:
+        out.write(f"\nRollback Snapshots not checked: {report['snapshots_unchecked']}\n")
 
 
 def note(entry: dict) -> str | None:
@@ -154,6 +177,13 @@ def run(args, ctx) -> int:
     if args.volumes and unknown:
         raise ConfigError(f"cannot remove volumes: declared volume names use variables ({', '.join(unknown)})")
     report = {"declared_from": source, **read_host(ctx.runner, declared)}
+    snapshots_ok = True
+    try:
+        report["snapshots"], report["snapshots_unchecked"] = expired_snapshots(ctx)
+    except HopsError as exc:  # TrueNAS failed: report the Docker Strays all the same, and fail
+        report["snapshots"], report["snapshots_unchecked"] = None, str(exc)
+        ctx.stderr.write(f"hops: error: Rollback Snapshots not checked: {exc}\n")
+        snapshots_ok = False
     say = (lambda _: None) if args.json else ctx.stdout.write
     if not args.json:
         print_report(report, said, ctx.stdout)
@@ -164,10 +194,13 @@ def run(args, ctx) -> int:
         ok = apply(report, ctx, args.volumes, say)
     if args.json:
         output.print_json(report, ctx.stdout)
-        return 0 if ok else 1
+        return 0 if ok and snapshots_ok else 1
     if not args.apply and any(report[k] for k in KINDS):
         ctx.stdout.write("\nNothing removed. hops strays --apply removes the Strays above not marked kept, except "
                          "volumes; add --volumes to remove those too.\n")
     elif args.apply and removable(report, "volumes") and not args.volumes:
         ctx.stdout.write("\nVolumes kept: add --volumes to remove them; they can hold data.\n")
-    return 0 if ok else 1
+    if report["snapshots"]:
+        ctx.stdout.write("\nRelease each expired Rollback Snapshot with hops snapshot release <snapshot> once its "
+                         "change is verified, or take a new one if it is still needed.\n")
+    return 0 if ok and snapshots_ok else 1

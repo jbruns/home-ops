@@ -4,9 +4,12 @@ When ownership is unknown, a resource is listed but never removed.
 """
 import json
 import subprocess
+from datetime import datetime, timezone
 
 import pytest
-from hops_fakes import container, git, write
+from hops_fakes import FakeSnapshots, container, git, rollback, snap, write
+
+from hops import snapshots
 
 # A Stack that names its volumes and networks: an external volume by name, one Compose names
 # vault_cache, the shared proxy network by name, and one Compose names vault_backend.
@@ -388,3 +391,49 @@ def test_live_list_never_calls_a_stacks_data_a_stray(capsys):
     assert not [v for v in report["volumes"] if v["volume"] in declared_volumes or v["stack"] in ctx.declared.stacks]
     assert not [c for c in report["containers"] if c["stack"] in ctx.declared.stacks and c["service"]
                 and ctx.declared.get(c["stack"], c["service"])]
+
+
+# Expired Rollback Snapshots (hops.snapshots, through TrueNAS)
+
+DOCKER = "luna/ix-apps/docker"
+
+
+@pytest.fixture
+def today(monkeypatch):
+    monkeypatch.setattr(snapshots, "now", lambda: datetime(2026, 10, 23, 12, tzinfo=timezone.utc))
+
+
+@pytest.mark.usefixtures("today")
+def test_strays_reports_expired_rollback_snapshots(hops, fake_host):
+    answer(fake_host)
+    pool = FakeSnapshots(rollback(f"{DOCKER}@hops-1-x", issue="1", expires="2026-10-22"),
+                         rollback(f"{DOCKER}@hops-2-x", issue="2", expires="2026-10-23"),
+                         snap(f"{DOCKER}@luna-2026-10-19_23-00"))
+    outcome = hops("strays", "--json", truenas=pool.client)
+    assert outcome.code == 0, outcome.err
+    report = json.loads(outcome.out)
+    assert report["snapshots"] == [
+        {"snapshot": f"{DOCKER}@hops-1-x", "dataset": DOCKER, "issue": "1", "expires": "2026-10-22", "size": 1024,
+         "kept": "released only with hops snapshot release, once its change is verified", "removed": None}]
+    assert report["snapshots_unchecked"] is None
+    text = hops("strays", truenas=pool.client).out
+    assert "Expired Rollback Snapshots:" in text and "hops-2-x" not in text
+
+
+@pytest.mark.usefixtures("host", "today")
+def test_strays_apply_never_releases_a_snapshot(hops):
+    pool = FakeSnapshots(rollback(f"{DOCKER}@hops-1-x", expires="2026-10-01"))
+    outcome = hops("strays", "--apply", "--json", truenas=pool.client)
+    assert outcome.code == 0, outcome.err
+    assert json.loads(outcome.out)["snapshots"][0]["removed"] is None
+    assert pool.called("pool.snapshot.delete") == []
+
+
+def test_strays_without_truenas_says_snapshots_were_not_checked(hops, fake_host):
+    answer(fake_host)
+    outcome = hops("strays", "--json")
+    assert outcome.code == 0, outcome.err
+    report = json.loads(outcome.out)
+    assert report["snapshots"] is None
+    assert report["snapshots_unchecked"].startswith("TrueNAS is not available on this host")
+    assert "Rollback Snapshots not checked: TrueNAS is not available" in hops("strays").out

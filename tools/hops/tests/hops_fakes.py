@@ -243,3 +243,55 @@ class FakeTrueNAS:
 
     def called(self) -> list[str]:
         return [r["method"] for r in self.requests]
+
+
+def prop(value, source="LOCAL") -> dict:
+    return {"value": str(value), "rawvalue": str(value), "source": source, "parsed": value}
+
+
+def snap(name: str, used: int = 1024, **user) -> dict:
+    dataset, short = name.split("@")
+    return {"id": name, "name": name, "dataset": dataset, "snapshot_name": short, "pool": "luna",
+            "type": "SNAPSHOT", "properties": {"used": prop(used, "NONE"), **user}}
+
+
+class FakeSnapshots:
+    """TrueNAS's pool.snapshot.* methods over an in-memory set of snapshots; `client` talks to it."""
+
+    def __init__(self, *found: dict):
+        self.snapshots = {s["id"]: s for s in found}
+        self.datasets = {"luna/ix-apps/docker", "luna/apps"}
+        self.server = FakeTrueNAS({
+            "pool.snapshot.query": self.query, "pool.snapshot.create": self.create,
+            "pool.snapshot.delete": self.delete, "zfs.resource.query": self.resources,
+        })
+        from hops import truenas
+
+        self.client = truenas.Client(truenas.TrueNASConfig("wss://tn.example/api/current", FakeTrueNAS.KEY),
+                                     connect=self.server.connect)
+
+    def query(self, filters, options):
+        assert options == {"extra": {"properties": ["used", "homeops:issue", "homeops:expires"]}}
+        return [s for s in self.snapshots.values() if all(s[k] == v for k, _, v in filters)]
+
+    def create(self, data):
+        name = f"{data['dataset']}@{data['name']}"
+        self.snapshots[name] = snap(name, 0, **{k: prop(v) for k, v in data["properties"].items()})
+        return self.snapshots[name]
+
+    def delete(self, name):
+        del self.snapshots[name]
+        return True
+
+    def resources(self, query):
+        missing = [p for p in query["paths"] if p not in self.datasets]
+        if missing:
+            raise FakeTrueNASError("EINVAL", f"[ENOENT] zfs.resource.query: {missing[0]!r}: not found")
+        return [{"name": p} for p in query["paths"]]
+
+    def called(self, method):
+        return [r["params"] for r in self.server.requests if r["method"] == method]
+
+
+def rollback(name, issue="637", expires="2026-10-30", **kw):
+    return snap(name, **{"homeops:issue": prop(issue), "homeops:expires": prop(expires)}, **kw)

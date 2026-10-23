@@ -279,11 +279,84 @@ a transport container on `metrics`:
 |---|---|
 | 0 | Success. `status` returns 0 even when Services are down; read the output for problems. |
 | 1 | A Host call failed (SSH unreachable, docker error, no container). `logs` returns `docker logs`' own exit code. |
-| 2 | Usage error before any Host call: bad arguments, unknown or ambiguous name, missing config |
+| 2 | Usage error before any Host call: bad arguments, unknown or ambiguous name, missing config. Also a refusal after a read: `snapshot release` of a snapshot that is not a Rollback Snapshot. |
 
 `exec` with a command and `db -e` return the remote command's own exit code.
 
 Errors go to stderr as `hops: error: …`, including with `--json`.
+
+## Rollback Snapshots
+
+A **Rollback Snapshot** (GLOSSARY, [ADR 0011](../../docs/adr/0011-restic-is-the-only-backup.md)) is a
+ZFS snapshot taken before a risky change, through TrueNAS (see [Configuration](#configuration)). It
+carries two ZFS user properties: `homeops:issue`, the issue or PR it serves, and `homeops:expires`,
+its release date. Each command takes `--json`; `take` and `release` take `--dry-run`, which checks
+everything and changes nothing.
+
+| Command | Class | What it does |
+|---|---|---|
+| `hops snapshot take --issue <n> [--dataset <ds>] [--expires YYYY-MM-DD \| --for <N>d\|<N>w]` | Runtime-reversible | Snapshots the dataset as `hops-<issue>-<UTC time>` (e.g. `hops-637-20261023T154705Z`) and prints its full name |
+| `hops snapshot list` | Read-only | Every Rollback Snapshot: issue, release date, size, and whether it has expired |
+| `hops snapshot release <name>` | Destructive | Destroys a Rollback Snapshot; refuses any other snapshot |
+
+- **Default dataset:** `luna/ix-apps/docker`. Docker's data-root on the Host is
+  `/mnt/.ix-apps/docker` (`docker info`'s DockerRootDir; TrueNAS's `docker.config` names
+  `luna/ix-apps` as the apps dataset), and every named volume lives under its `volumes/`. It has no
+  child datasets, so the snapshot is not recursive. Bind mounts elsewhere (`/mnt/andromeda/…`) are
+  not in it: snapshot their dataset with `--dataset`. TrueNAS hides `luna/ix-apps` from
+  `pool.dataset.query`; `take` checks the dataset exists with `zfs.resource.query`.
+- **Release date:** 7 days from today (UTC) by default; `--for 3d` or `--for 2w`, or a date with
+  `--expires`. A date already past is refused. A snapshot has **expired** once its release date is
+  earlier than today (UTC), so it can be released all of its last day. A missing or unreadable date
+  counts as expired.
+- **How the properties are set:** `pool.snapshot.create` with
+  `{"dataset", "name", "properties": {"homeops:issue": …, "homeops:expires": …}}` sets them at
+  creation, so a snapshot never exists without them. `take` then reads it back with
+  `pool.snapshot.query` and fails if they are missing. (`pool.snapshot.update` with
+  `user_properties_update` changes them later.) `take` first checks the name is free.
+- **What counts:** a snapshot whose own (`LOCAL`) `homeops:issue` or `homeops:expires` is set.
+  The name does not count, and a value inherited from a dataset does not either. So periodic-task
+  and TrueNAS system snapshots are never listed, reported or released: `release` refuses them
+  (exit 2) and deletes nothing.
+- **Listing** is one `pool.snapshot.query` over every pool, asking only for `used`,
+  `homeops:issue` and `homeops:expires` (`extra.properties`), which keeps it to about a second for
+  the Host's hundred-odd snapshots.
+- **Size** is the snapshot's `used`: the space only it holds, which releasing it frees. It starts
+  at 0 and grows as the dataset changes.
+- **`release <name>`** takes `<dataset>@<snapshot>` as `take` and `list` print it, or the bare
+  `<snapshot>` when exactly one Rollback Snapshot has it. It calls `pool.snapshot.delete`.
+- `hops strays` reports expired Rollback Snapshots ([Strays](#strays)).
+- In code, `hops.snapshots.rollback_snapshots(client, on=None)` returns the list for any
+  `hops.truenas.Client` as `RollbackSnapshot` records (`name`, `dataset`, `issue`, `expires`,
+  `size`, `expired`; `on` is the date `expired` is judged on, default today in UTC).
+
+### `snapshot … --json`
+
+```json
+{"snapshots": [{"name": "luna/ix-apps/docker@hops-637-20261023T154705Z", "dataset": "luna/ix-apps/docker",
+                "issue": "637", "expires": "2026-10-24", "size": 0, "expired": false}]}
+```
+
+That is `snapshot list --json`. `snapshot take --json` prints `{"snapshot": <one such record>,
+"would_take": null}`; with `--dry-run`, `"snapshot": null` and `"would_take"` holds `name`,
+`dataset`, `issue` and `expires`. `snapshot release --json` prints `{"snapshot": <record>,
+"released": true}` (`false` with `--dry-run`). `size` is bytes, `null` if TrueNAS gives none.
+
+### Risky changes
+
+Following [ADR 0011](../../docs/adr/0011-restic-is-the-only-backup.md): the stack-back restic
+repository is the only Backup, so do not copy data on the Host before a risky change (no `.bak`
+files, dated `pre-*` dumps or copied directories).
+
+1. Take a Rollback Snapshot: `hops snapshot take --issue <n>` (or `--dataset` for data outside
+   Docker's volumes). Name it in the issue or PR.
+2. Make the change and verify it. To roll back, restore from the snapshot (TrueNAS's snapshot
+   rollback or clone, or the files under the dataset's `.zfs/snapshot/<name>/`).
+3. Release it: `hops snapshot release <name>`. One left past its release date is a Stray.
+
+Where a snapshot cannot serve (data that must leave the Host, or a single file needed outside its
+dataset), record the copy in the issue or PR that made it, with a removal checkbox. The work is not
+done until it is ticked.
 
 ## JSON output
 
@@ -426,7 +499,8 @@ several Services, `container` is the `container_name` (else `null`), and all thr
 ## Strays
 
 `hops strays` lists the **Strays** (GLOSSARY) on the Host: containers, images, volumes and networks
-that no Stack declares or uses. It is read-only unless given `--apply`, and takes `--json`. The rule:
+that no Stack declares or uses, and Rollback Snapshots past their release date. It is read-only
+unless given `--apply`, and takes `--json`. The rule:
 **when ownership is unknown, a Stray is listed, marked `kept`, and never removed.**
 
 | Command | Effect |
@@ -469,6 +543,11 @@ What counts as a Stray:
   means.
 - **Network:** not owned or named by a declared Stack in the same way, not used by a kept
   container, and not one of Docker's defaults (`bridge`, `host`, `none`). Networks hold no data.
+- **Rollback Snapshot:** one that has expired (see [Rollback Snapshots](#rollback-snapshots)).
+  `--apply` never releases it; `hops snapshot release` does, once its change is verified. A
+  snapshot without its own `homeops:` properties is never reported. Without TrueNAS configured,
+  `strays` lists the rest and says the snapshots were not checked. If TrueNAS fails, it lists the
+  rest, prints the error, and exits 1.
 - **Never Strays:** TrueNAS Apps' resources (Compose projects or names starting `ix-`). Build cache
   is out of scope.
 
@@ -497,7 +576,13 @@ continue, and the exit code is 1.
     {"volume": "retired_data", "stack": "retired", "anonymous": false,
      "kept": "Compose project retired is no declared Stack: ownership unknown", "removed": null}
   ],
-  "networks": [{"network": "retired_default", "id": "…", "stack": "retired", "kept": null, "removed": null}]
+  "networks": [{"network": "retired_default", "id": "…", "stack": "retired", "kept": null, "removed": null}],
+  "snapshots": [
+    {"snapshot": "luna/ix-apps/docker@hops-637-20261023T154705Z", "dataset": "luna/ix-apps/docker",
+     "issue": "637", "expires": "2026-10-22", "size": 2813952,
+     "kept": "released only with hops snapshot release, once its change is verified", "removed": null}
+  ],
+  "snapshots_unchecked": null
 }
 ```
 
@@ -508,6 +593,8 @@ continue, and the exit code is 1.
   image's several tags), or `null`.
 - `refs`: the image's tags.
 - `removed`: `true` or `false` after an `--apply` that tried it, else `null`.
+- `snapshots`: expired Rollback Snapshots; `size` is bytes (`used`). `null` when they were not
+  checked, and then `snapshots_unchecked` says why (TrueNAS not configured, or its error).
 
 ## `bump`: pin a newer image through a PR
 
@@ -554,7 +641,8 @@ Tests replay recorded registry exchanges from `tests/fixtures/registry/`. To re-
 ## Adding a command
 
 - One module in `hops/commands/` per command. It exposes `register(subparsers)`, which adds a
-  parser and calls `set_defaults(func=run)`, where `run(args, ctx) -> int`. Modules are found
+  parser and calls `set_defaults(func=run)`, where `run(args, ctx) -> int`. A command with
+  subcommands (`truenas`, `snapshot`) sets a `run` function on each. Modules are found
   automatically.
 - `ctx.declared` (`hops.declared.Declared`) resolves names with `resolve(names)` or
   `resolve_one(name)`. Each `Service` has `tier`, `image` (repository, tag, digest), `container`
@@ -565,8 +653,9 @@ Tests replay recorded registry exchanges from `tests/fixtures/registry/`. To re-
   `attach(*args, tty=)` connects the terminal; interactive modes first call
   `hops.terminal.require_tty(what)`. `hops.docker` reads containers, and
   `hops.alertmanager.amtool` runs amtool.
-- `ctx.truenas` (`hops.truenas.Client`) is the only way to reach TrueNAS; everything
-  TrueNAS-specific stays in `hops/truenas.py`. `call(method, *params)` returns the result;
+- `ctx.truenas` (`hops.truenas.Client`) is the only way to reach TrueNAS; the connection, login,
+  errors and redaction stay in `hops/truenas.py`. A feature's TrueNAS calls live in its own module
+  that takes the client (`hops/snapshots.py`), so other commands can reuse them. `call(method, *params)` returns the result;
   `job(method, *params)` calls a method that starts a job and waits for the job's result (polling
   `core.get_jobs`). Errors raise `hops.truenas.TrueNASError` with its `errname` (e.g. `EACCES`).
   `truenas.redact(data, method)` masks credentials before printing. On a host without TrueNAS config,
@@ -584,5 +673,7 @@ python3 -m pytest tools/hops -m live        # read-only, against the real Host
 The `fake_host` fixture (`tests/conftest.py`) replaces the ssh process. It records each argv and
 answers with canned `docker` output. The `hops` fixture runs the CLI against a fixture repo.
 `hops_fakes.FakeTrueNAS` stands in for the TrueNAS WebSocket: pass its `connect` to
-`truenas.Client(..., connect=)` and its `methods` answer each JSON-RPC call. The
+`truenas.Client(..., connect=)` and its `methods` answer each JSON-RPC call.
+`hops_fakes.FakeSnapshots` builds on it with an in-memory set of snapshots; pass its `client` as
+`hops(..., truenas=)`. Tests fix today's date by patching `hops.snapshots.now`. The
 `live` suite is skipped unless selected with `-m live`. It must only ever read.
