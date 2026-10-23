@@ -518,7 +518,7 @@ without a note here. A field is `null` when the value is unknown or does not app
       "stack": "nextcloud",
       "service": "mariadb",
       "tier": "critical",
-      "container": "mariadb",
+      "container": "nextcloud-mariadb",
       "state": "running",
       "health": "healthy",
       "restart_count": 0,
@@ -551,7 +551,7 @@ without a note here. A field is `null` when the value is unknown or does not app
 
 ```json
 {
-  "stack": "nextcloud", "service": "mariadb", "container": "mariadb",
+  "stack": "nextcloud", "service": "mariadb", "container": "nextcloud-mariadb",
   "image": "mariadb:11.8.9@sha256:…", "state": "running", "health": "healthy",
   "started_at": "2026-10-21T20:00:00.000000000Z", "exit_code": 0, "oom_killed": false,
   "restart_count": 0,

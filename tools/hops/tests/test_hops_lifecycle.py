@@ -202,8 +202,8 @@ def test_stopping_traefik_silences_its_target_down_page():
 
 
 def test_stopping_a_datastore_silences_datastore_down():
-    found = stop_silences("nextcloud/mariadb", "mariadb")
-    assert silenced(found, alert("DatastoreDown", scrape_target("mysqld", datastore="mariadb")))
+    found = stop_silences("nextcloud/mariadb", "nextcloud-mariadb")
+    assert silenced(found, alert("DatastoreDown", scrape_target("mysqld", datastore="nextcloud-mariadb")))
     assert not silenced(found, alert("DatastoreDown", scrape_target("mysqld", datastore="vaultwarden-db")))
 
 
@@ -232,7 +232,8 @@ def test_stopping_traefik_silences_every_probe_its_own_missing_probe_no_longer_i
 
 
 def test_stopping_other_services_leaves_other_probes_paging():
-    for key, container in [("sonarr/sonarr", "sonarr"), ("edge/crowdsec", "crowdsec"), ("nextcloud/mariadb", "mariadb")]:
+    for key, container in [("sonarr/sonarr", "sonarr"), ("edge/crowdsec", "crowdsec"),
+                           ("nextcloud/mariadb", "nextcloud-mariadb")]:
         found = stop_silences(key, container)
         assert not silenced(found, probe_failed("vaultwarden", "vaultwarden", "vaultwarden")), key
 
@@ -241,7 +242,7 @@ def test_stopping_a_datastore_silences_the_services_in_its_stack_that_depend_on_
     found = stop_silences("vaultwarden/vaultwarden-db", "vaultwarden-db")
     assert silenced(found, probe_failed("vaultwarden", "vaultwarden", "vaultwarden"))
     assert silenced(found, alert("TargetDown", scrape_target("mysqld", datastore="vaultwarden-db")))
-    nextcloud = stop_silences("nextcloud/mariadb", "mariadb")
+    nextcloud = stop_silences("nextcloud/mariadb", "nextcloud-mariadb")
     assert silenced(nextcloud, probe_failed("nextcloud", "nextcloud", "nextcloud"))
     assert silenced(nextcloud, alert("ContainerDown", {"stack": "nextcloud", "service": "nextcloud-cron",
                                                        "name": "nextcloud-cron", "tier": "warning"}))

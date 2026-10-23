@@ -126,5 +126,5 @@ services:
 
 volumes:
   nextcloud_data:
-    name: home_nextcloud_data
+    name: nextcloud_data
     external: true

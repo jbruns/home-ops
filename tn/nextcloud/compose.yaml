@@ -1,5 +1,6 @@
 # NEXTCLOUD STACK (deployed by doco-cd)
-# Nextcloud with its Datastores. Startup order: mariadb and valkey healthy, then nextcloud and cron.
+# Nextcloud with its Datastores, whose containers are named nextcloud-<service> (ADR 0010).
+# Startup order: mariadb and valkey healthy, then nextcloud and cron.
 
 networks:
   # Traefik and the Exposed Services it routes to; owned by the edge Stack.

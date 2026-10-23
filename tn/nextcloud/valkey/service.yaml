@@ -2,13 +2,13 @@
 configs:
   valkey_conf:
     content: |
-      requirepass ${REDIS_PASSWORD}
+      requirepass ${VALKEY_PASSWORD}
       save ""
       appendonly no
       loglevel warning
-  redis_exporter_password:
+  valkey_exporter_password:
     content: |
-      {"redis://valkey:6379": "${REDIS_PASSWORD}"}
+      {"redis://valkey:6379": "${VALKEY_PASSWORD}"}
 
 services:
   # Nextcloud's memcache and file locking. Nothing here needs to survive a restart, so no persistence.
@@ -18,7 +18,7 @@ services:
       file: ../../_baseline.yaml
       service: baseline
     image: valkey/valkey:9.1.2-alpine@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11
-    container_name: valkey
+    container_name: nextcloud-valkey
     # The image's valkey user; the entrypoint skips its chown + su-exec when not root, so no caps.
     user: "999:1000"
     deploy:
@@ -46,13 +46,13 @@ services:
     networks:
       - default
 
-  redis-exporter:
+  valkey-exporter:
     # https://github.com/oliver006/redis_exporter
     extends:
       file: ../../_baseline.yaml
       service: baseline
     image: oliver006/redis_exporter:v1.90.0@sha256:a129504e65b87c54f79bc92f1afc403475e8ff646a3d7512de469904ceddf986
-    container_name: redis-exporter
+    container_name: nextcloud-valkey-exporter
     user: ${HOME_UID}:${HOME_GID}
     deploy:
       resources:
@@ -63,7 +63,7 @@ services:
       - REDIS_ADDR=redis://valkey:6379
       - REDIS_PASSWORD_FILE=/run/redis-password.json
     configs:
-      - source: redis_exporter_password
+      - source: valkey_exporter_password
         target: /run/redis-password.json
     depends_on:
       valkey:

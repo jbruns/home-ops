@@ -26,12 +26,12 @@ homeops_container_declared{stack="monitoring",service="node-exporter",name="node
 homeops_container_declared{stack="monitoring",service="prometheus",name="prometheus",tier="critical"} 1
 homeops_container_declared{stack="monitoring",service="restic-exporter",name="restic-exporter",tier="warning"} 1
 homeops_container_declared{stack="navidrome",service="navidrome",name="navidrome",tier="warning"} 1
-homeops_container_declared{stack="nextcloud",service="mariadb",name="mariadb",tier="critical"} 1
-homeops_container_declared{stack="nextcloud",service="mariadb-exporter",name="mariadb-exporter",tier="info"} 1
+homeops_container_declared{stack="nextcloud",service="mariadb",name="nextcloud-mariadb",tier="critical"} 1
+homeops_container_declared{stack="nextcloud",service="mariadb-exporter",name="nextcloud-mariadb-exporter",tier="info"} 1
 homeops_container_declared{stack="nextcloud",service="nextcloud",name="nextcloud",tier="critical"} 1
 homeops_container_declared{stack="nextcloud",service="nextcloud-cron",name="nextcloud-cron",tier="warning"} 1
-homeops_container_declared{stack="nextcloud",service="redis-exporter",name="redis-exporter",tier="info"} 1
-homeops_container_declared{stack="nextcloud",service="valkey",name="valkey",tier="critical"} 1
+homeops_container_declared{stack="nextcloud",service="valkey",name="nextcloud-valkey",tier="critical"} 1
+homeops_container_declared{stack="nextcloud",service="valkey-exporter",name="nextcloud-valkey-exporter",tier="info"} 1
 homeops_container_declared{stack="nextpvr",service="nextpvr",name="nextpvr",tier="warning"} 1
 homeops_container_declared{stack="open-webui",service="ollama",name="ollama",tier="info"} 1
 homeops_container_declared{stack="open-webui",service="open-webui",name="open-webui",tier="warning"} 1

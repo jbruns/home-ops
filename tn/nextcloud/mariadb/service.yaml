@@ -6,7 +6,7 @@ services:
       file: ../../_baseline.yaml
       service: baseline
     image: mariadb:11.8.9@sha256:f16d7a344413e519dff518f27bdb221388f84b0d274c97c4fb5f2cb0dc1b34fa
-    container_name: mariadb
+    container_name: nextcloud-mariadb
     # The image's mysql user; the entrypoint skips its chown + gosu when not root, so no caps.
     user: "999:999"
     deploy:
@@ -57,7 +57,7 @@ services:
       file: ../../_baseline.yaml
       service: baseline
     image: prom/mysqld-exporter:v0.20.0@sha256:abed8dac117b4ae5b70757f988e44795935b9a72c3b58d720c67ba688f8cb79e
-    container_name: mariadb-exporter
+    container_name: nextcloud-mariadb-exporter
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:9104/metrics"]
       interval: 30s
@@ -93,5 +93,5 @@ secrets:
 
 volumes:
   mariadb_data:
-    name: home_mariadb_data
+    name: nextcloud_mariadb_data
     external: true
