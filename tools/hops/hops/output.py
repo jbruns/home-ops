@@ -17,3 +17,14 @@ def table(headers: list[str], rows: list[list], file=None) -> None:
 
 def add_json_flag(parser) -> None:
     parser.add_argument("--json", action="store_true", help="print JSON (schema in tools/hops/README.md)")
+
+
+def size(n: int | None) -> str | None:
+    """Bytes in binary units, e.g. 6.1GiB."""
+    if n is None:
+        return None
+    for unit in ("B", "KiB", "MiB", "GiB"):
+        if n < 1024:
+            return f"{n}B" if unit == "B" else f"{n:.1f}{unit}"
+        n /= 1024
+    return f"{n:.1f}TiB"
