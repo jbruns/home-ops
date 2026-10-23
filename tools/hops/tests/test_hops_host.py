@@ -1,0 +1,165 @@
+"""hops host: pools, datasets, Docker usage and task status, from recorded TrueNAS and docker output."""
+import json
+from pathlib import Path
+
+import pytest
+from hops_fakes import FakeTrueNAS, FakeTrueNASError, container, write
+
+from hops import cli, truenas
+
+FIXTURES = Path(__file__).parent / "fixtures" / "host"
+RECORDED = json.loads((FIXTURES / "truenas.json").read_text())
+SYSTEM_DF = (FIXTURES / "system_df.jsonl").read_text()
+CFG = truenas.TrueNASConfig(url="wss://tn.example/api/current", api_key=FakeTrueNAS.KEY)
+SECRET = "fake-leaked-secret"
+
+STACK_BACK = {
+    "tn/ops/compose.yaml": """
+        services:
+          stack-back:
+            image: ghcr.io/lawndoc/stack-back:v1.5.4@sha256:4444
+            container_name: stack-back
+            labels: {tier: critical}
+            volumes:
+              - /var/run/docker.sock:/tmp/docker.sock:ro
+              - ${ZFS_POOL_ROOT_HDD}/docker-backups:/backups
+    """,
+}
+STACK_BACK_MOUNTS = [
+    {"Type": "bind", "Source": "/mnt/andromeda/docker-backups", "Destination": "/backups"},
+    {"Type": "bind", "Source": "/var/run/docker.sock", "Destination": "/tmp/docker.sock"},
+    {"Type": "volume", "Name": "common_backup_cache",
+     "Source": "/mnt/.ix-apps/docker/volumes/common_backup_cache/_data", "Destination": "/cache"},
+]
+
+
+def resource_query(options):
+    by_name = {d["name"]: d for d in RECORDED["zfs.resource.query"]}
+    return [by_name[p] for p in options["paths"]]
+
+
+def recorded_methods() -> dict:
+    return {
+        "pool.query": lambda *p: RECORDED["pool.query"],
+        "pool.snapshottask.query": lambda *p: RECORDED["pool.snapshottask.query"],
+        "cloudsync.query": lambda *p: RECORDED["cloudsync.query"],
+        "filesystem.statfs": lambda path: RECORDED["filesystem.statfs"][path],
+        "zfs.resource.query": resource_query,
+    }
+
+
+@pytest.fixture
+def server() -> FakeTrueNAS:
+    return FakeTrueNAS(recorded_methods())
+
+
+@pytest.fixture
+def host(fake_host, repo):
+    write(repo, STACK_BACK)
+    fake_host.respond("system", "df", stdout=SYSTEM_DF)
+    fake_host.respond("info", stdout='"/mnt/.ix-apps/docker"\n')
+    stack_back = container("stack-back", project="ops", service="stack-back")
+    stack_back["Mounts"] = STACK_BACK_MOUNTS
+    fake_host.respond("inspect", "stack-back", stdout=json.dumps([stack_back]))
+    return fake_host
+
+
+@pytest.fixture
+def run_host(repo, runner, host, server, capsys):
+    """hops host with the recorded TrueNAS; `env` holds settings, `truenas=False` leaves it unconfigured."""
+    def run(*argv, env=None, truenas_on=True):
+        client = truenas.Client(CFG, connect=server.connect) if truenas_on else None
+        ctx = cli.Context(repo_root=repo, runner=runner, truenas=client, env=env or {})
+        code = cli.main(["host", *argv], ctx=ctx)
+        captured = capsys.readouterr()
+        return code, captured.out, captured.err
+
+    return run
+
+
+def test_json_reports_pools_datasets_docker_and_tasks(run_host):
+    code, out, err = run_host("--json", env={"HOPS_HOST_DATASETS": "luna"})
+    assert (code, err) == (0, "")
+    report = json.loads(out)
+
+    assert report["pools"][1] == {
+        "name": "luna", "status": "ONLINE", "healthy": True, "size_bytes": 3831110828032,
+        "allocated_bytes": 588037693440, "free_bytes": 3243073134592, "used_percent": 15.3}
+    assert [(d["name"], d["roles"]) for d in report["datasets"]] == [
+        ("luna/ix-apps/docker", ["docker"]), ("andromeda/docker-backups", ["restic"]), ("luna", ["configured"])]
+    assert report["datasets"][1] == {
+        "name": "andromeda/docker-backups", "roles": ["restic"], "mountpoint": "/mnt/andromeda/docker-backups",
+        "used_bytes": 1836465068256, "available_bytes": 149728127125120, "snapshots_bytes": 0, "quota_bytes": None}
+    assert report["docker"][0] == {
+        "type": "images", "total": 107, "active": 50, "size": "61.48GB", "size_bytes": 61480000000,
+        "reclaimable": "36.53GB (59%)", "reclaimable_bytes": 36530000000, "reclaimable_percent": 59}
+    assert [d["type"] for d in report["docker"]] == ["images", "containers", "volumes", "build_cache"]
+    assert report["docker"][3]["reclaimable_percent"] is None
+    assert report["tasks"] == [
+        {"kind": "snapshot", "id": 1, "name": "luna-%Y-%m-%d_%H-%M", "source": "luna", "enabled": True,
+         "last_run": {"state": "FINISHED", "started_at": None, "finished_at": "2026-10-23T06:00:00Z"}},
+        {"kind": "cloudsync", "id": 3, "name": "Nightly restic repository", "source": "/mnt/andromeda/docker-backups",
+         "enabled": True,
+         "last_run": {"state": "SUCCESS", "started_at": "2026-10-23T11:00:01Z", "finished_at": "2026-10-23T11:00:23Z"}},
+    ]
+    assert report["notes"] == []
+
+
+def test_plain_output_has_a_section_each(run_host):
+    code, out, _ = run_host()
+    assert code == 0
+    for heading in ("Pools", "Datasets", "Docker", "Tasks"):
+        assert f"\n{heading}\n" in f"\n{out}"
+    assert "andromeda  ONLINE" in out and "436.5 TiB" in out  # pool size, binary units
+    assert "images" in out and "36.53GB (59%)" in out
+    assert "cloudsync  3" in out and "SUCCESS" in out
+
+
+def test_task_status_never_shows_credentials_scripts_or_job_output(run_host, server):
+    snapshot_task = dict(RECORDED["pool.snapshottask.query"][0], exclude=[SECRET],
+                         state={"state": "ERROR", "datetime": {"$date": 1792735200000}, "error": SECRET,
+                                "last_snapshot": SECRET})
+    cloud = dict(RECORDED["cloudsync.query"][0])
+    allowed = {"id", "description", "path", "enabled", "job"}
+    for field in set(cloud) - allowed:
+        cloud[field] = SECRET if not isinstance(cloud[field], dict) else {"type": "B2", "key": SECRET}
+    cloud["job"] = dict(cloud["job"], state="FAILED", error=SECRET, logs_excerpt=SECRET, exception=SECRET,
+                        result=SECRET, arguments=[SECRET], progress={"percent": 50, "description": SECRET})
+    server.methods["pool.snapshottask.query"] = lambda *p: [snapshot_task]
+    server.methods["cloudsync.query"] = lambda *p: [cloud]
+
+    for argv in ((), ("--json",)):
+        code, out, err = run_host(*argv)
+        assert code == 0
+        assert SECRET not in out + err
+    tasks = json.loads(out)["tasks"]
+    assert [t["last_run"]["state"] for t in tasks] == ["ERROR", "FAILED"]
+
+
+def test_configured_dataset_that_does_not_exist_is_a_note(run_host, server):
+    def query(options):
+        if options["paths"] == ["tank/gone"]:
+            raise FakeTrueNASError("EINVAL", "[ENOENT] zfs.resource.query: 'tank/gone': not found")
+        return resource_query(options)
+
+    server.methods["zfs.resource.query"] = query
+    code, out, _ = run_host("--json", env={"HOPS_HOST_DATASETS": "tank/gone, luna/ix-apps/docker"})
+    report = json.loads(out)
+    assert code == 0
+    assert [(d["name"], d["roles"]) for d in report["datasets"]] == [
+        ("luna/ix-apps/docker", ["docker", "configured"]), ("andromeda/docker-backups", ["restic"])]
+    assert any("tank/gone" in n for n in report["notes"])
+
+
+def test_without_truenas_only_docker_is_shown(run_host, host, server):
+    code, out, err = run_host("--json", truenas_on=False)
+    assert (code, err) == (0, "")
+    report = json.loads(out)
+    assert (report["pools"], report["datasets"], report["tasks"]) == (None, None, None)
+    assert len(report["docker"]) == 4
+    assert report["notes"] and "TrueNAS is not available on this host" in report["notes"][0]
+    assert server.requests == []
+    assert host.docker_calls == [["system", "df", "--format", "json"]]
+
+    code, out, _ = run_host(truenas_on=False)
+    assert "Docker" in out and "Pools" not in out and "TrueNAS is not available" in out

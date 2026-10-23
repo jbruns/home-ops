@@ -32,6 +32,7 @@ through `tools/declared-containers` in the same checkout. Without installing, ru
 | `TRUENAS_URL` | `.env` or environment (for TrueNAS commands) | |
 | `HOPS_TRUENAS_API_KEY` | `.env` or environment (for TrueNAS commands) | |
 | `HOPS_TRUENAS_INSECURE` | `.env` or environment | unset: TLS is verified |
+| `HOPS_HOST_DATASETS` | `.env` or environment: dataset names, comma- or space-separated, for `hops host` | |
 
 - **Repo root:** `git rev-parse --show-toplevel` of the current directory, if that checkout has a
   Stack root (`tn/`). Otherwise `hops` uses the checkout it was installed from. Names and pins come
@@ -50,7 +51,7 @@ through `tools/declared-containers` in the same checkout. Without installing, ru
   into the login message; errors print it as `[REDACTED]`. TLS is verified against the default CA
   bundle; `HOPS_TRUENAS_INSECURE=1` opts out for a self-signed certificate. `TRUENAS_URL` must not contain a user name or password. Without `TRUENAS_URL`
   and `HOPS_TRUENAS_API_KEY`, commands that need TrueNAS fail with "TrueNAS is not available on
-  this host" (exit 2).
+  this host" (exit 2); `hops host` shows its Docker section and prints that as a note instead.
 
 ## Targets
 
@@ -78,6 +79,7 @@ Every command in this table is **read-only**. Each takes `--json`.
 | `hops alerts` | Firing alerts (including silenced and inhibited ones) and active silences, from `amtool` in the alertmanager container |
 | `hops deploys [<stack>] [--status S] [--limit N]` | doco-cd's recent runs, newest first: when, trigger, status, the Stacks each run touched, and doco-cd's message (the error, or why it skipped: retry budget, pause). See [deploys](#deploys). |
 | `hops deploys <run-id>` | One run in detail |
+| `hops host` | Pools, key datasets, `docker system df`, and the last run of each periodic snapshot and Cloud Sync task (see [host](#host)) |
 | `hops truenas call <method> [json-param…]` | The result of one allowlisted TrueNAS read method (see [truenas call](#truenas-call)), as JSON with credentials redacted. For what other commands lack. |
 
 `alerts` authenticates without sending the password to this machine. The Host pipes Prometheus's
@@ -134,6 +136,30 @@ containers that have since been recreated or removed.
   ``deployment paused: `plex` ``. Runs whose targets were all paused or retry-suppressed are
   `skipped`, not `succeeded`.
 - An argument shaped like a run ID (a UUID) shows that run; an unknown one exits 1.
+
+### host
+
+`hops host` is the Host's hygiene at a glance, one section each:
+
+- **Pools:** name, status, health, size, allocated, free and percent used (`pool.query`).
+- **Datasets:** used, available, used by snapshots and quota of: the dataset holding Docker's
+  data-root (`docker info`'s `DockerRootDir`), the restic repository's (the bind mounts on a pool of
+  the Service running `lawndoc/stack-back`'s image), and each one named in `HOPS_HOST_DATASETS`. A
+  path becomes a dataset through `filesystem.statfs`; usage comes from `zfs.resource.query`, which,
+  unlike `pool.dataset.query`, also finds hidden datasets such as `ix-apps`. A dataset that cannot be
+  found is skipped with a note.
+- **Docker:** `docker system df`: images, containers, volumes and build cache, with what is
+  reclaimable.
+- **Tasks:** each periodic snapshot task and Cloud Sync task, with what it covers and its last run's
+  state and times. **Status only.** Cloud Sync tasks carry credentials, scripts, rclone arguments
+  and job logs, so `hops host` builds each task from named fields only (`id`, the naming schema or
+  description, the dataset or path, `enabled`, and the last run's state, start and finish). It
+  never prints a job's error or log: a failed run shows only as `FAILED` (Cloud Sync) or `ERROR`
+  (snapshot); read the details in the TrueNAS UI.
+
+SMART and disk health stay in Prometheus, which alerts on them. Without TrueNAS configured, only
+the Docker section is shown, with a note. These reads go through the internal TrueNAS client
+(`hops/truenas.py`); `truenas call`'s allowlist is unchanged.
 
 ### truenas call
 
@@ -496,6 +522,43 @@ several Services, `container` is the `container_name` (else `null`), and all thr
 `failed` or `skipped`. Timestamps are doco-cd's, with its UTC offset. `started_at` and
 `finished_at` are `null` until the run starts or ends.
 
+### `host --json`
+
+```json
+{
+  "pools": [
+    {"name": "luna", "status": "ONLINE", "healthy": true, "size_bytes": 3831110828032,
+     "allocated_bytes": 588037693440, "free_bytes": 3243073134592, "used_percent": 15.3}
+  ],
+  "datasets": [
+    {"name": "luna/ix-apps/docker", "roles": ["docker"], "mountpoint": "/mnt/.ix-apps/docker",
+     "used_bytes": 587504427008, "available_bytes": 3123889569792, "snapshots_bytes": 40587001856,
+     "quota_bytes": null}
+  ],
+  "docker": [
+    {"type": "images", "total": 107, "active": 50, "size": "61.48GB", "size_bytes": 61480000000,
+     "reclaimable": "36.53GB (59%)", "reclaimable_bytes": 36530000000, "reclaimable_percent": 59}
+  ],
+  "tasks": [
+    {"kind": "cloudsync", "id": 3, "name": "…", "source": "/mnt/andromeda/docker-backups", "enabled": true,
+     "last_run": {"state": "SUCCESS", "started_at": "2026-10-23T11:00:01Z", "finished_at": "2026-10-23T11:00:23Z"}}
+  ],
+  "notes": []
+}
+```
+
+- `pools`, `datasets` and `tasks` are `null` without TrueNAS; `notes` then says why. `notes` also
+  explains anything skipped (a configured dataset that does not exist, no stack-back container).
+- `roles`: `docker`, `restic` and/or `configured`. `quota_bytes` is `null` when there is no quota.
+- `docker`: one entry per `docker system df` type: `images`, `containers`, `volumes`,
+  `build_cache`. `size` and `reclaimable` are Docker's own text (decimal units); `*_bytes` parse
+  it, so they are rounded. `reclaimable_percent` is `null` when Docker prints none.
+- `tasks`: `kind` is `snapshot` (periodic snapshot task: `name` is its naming schema, `source` its
+  dataset) or `cloudsync` (`name` is its description, `source` its path). `last_run` is `null`
+  before the first run. Its `state` is TrueNAS's, e.g. `FINISHED`, `RUNNING`, `PENDING` or `ERROR`
+  for snapshot tasks and `SUCCESS`, `RUNNING`, `FAILED` or `ABORTED` for Cloud Sync. A snapshot task
+  records one time: `started_at` while `RUNNING`, else `finished_at`. Times are UTC.
+
 ## Strays
 
 `hops strays` lists the **Strays** (GLOSSARY) on the Host: containers, images, volumes and networks
@@ -658,7 +721,8 @@ Tests replay recorded registry exchanges from `tests/fixtures/registry/`. To re-
   that takes the client (`hops/snapshots.py`), so other commands can reuse them. `call(method, *params)` returns the result;
   `job(method, *params)` calls a method that starts a job and waits for the job's result (polling
   `core.get_jobs`). Errors raise `hops.truenas.TrueNASError` with its `errname` (e.g. `EACCES`).
-  `truenas.redact(data, method)` masks credentials before printing. On a host without TrueNAS config,
+  `truenas.redact(data, method)` masks credentials before printing. To show part of a TrueNAS
+  object, build the record from named fields, as `truenas.tasks` does, rather than filtering it. On a host without TrueNAS config,
   using `ctx.truenas` raises a ConfigError.
 - Raise `hops.errors.UsageError` for bad input (exit 2) and `HopsError` for failures (exit 1).
 
