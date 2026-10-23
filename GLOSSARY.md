@@ -105,10 +105,18 @@ A recorded, reasoned waiver of one Baseline item for one Service; an Exemption f
 _Avoid_: Override, exception
 
 **Stray**:
-A container, image, volume, or network on the Host that no Stack declares or uses. Data that belongs to a Stack is never a Stray, even while nothing uses it.
+A container, image, volume, or network on the Host that no Stack declares or uses, or a Rollback Snapshot past its release date. Data that belongs to a Stack is never a Stray, even while nothing uses it.
 _Avoid_: Ad-hoc, orphan, leftover
 
+**Rollback Snapshot**:
+A ZFS snapshot taken before a risky change, recording the change it serves and a release date, and released once the change is verified. It replaces hand-made copies of data on the Host; it is never a Backup.
+_Avoid_: .bak, pre-change copy, safety copy
+
 ## Reliability
+
+**Backup**:
+A restic snapshot of a Stack's volumes and database dumps, taken nightly by stack-back and copied offsite; the only authoritative copy of a Stack's data. An app's own scheduled backups are part of its state, not Backups.
+_Avoid_: Dump, archive, copy, .bak
 
 **Tier**:
 How much it matters when a Service is down: Critical, Warning, or Info.
