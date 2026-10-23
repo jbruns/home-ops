@@ -3,14 +3,16 @@ import json
 import re
 
 from hops import config, docker, hygiene, output, snapshots, truenas
-from hops.errors import HopsError
+from hops.errors import ConfigError, HopsError
 
 HELP = ("the Host's pools, key datasets, Docker disk usage, Rollback Snapshots, and snapshot and "
         "Cloud Sync task status")
 SETTING = "HOPS_HOST_DATASETS"
 # stack-back writes the restic repository to a bind mount; its image names the Service in any Stack.
 RESTIC_IMAGE = "lawndoc/stack-back"
-POOL_MOUNTS = "/mnt/"
+# Where that mount is in the container: RESTIC_REPOSITORY, which is encrypted in
+# tn/ops/stack-back.sops.env, so it is named here. Keep in step with tn/ops/stack-back/service.yaml.
+RESTIC_MOUNT = "/backups"
 DOCKER_TYPES = {"Images": "images", "Containers": "containers", "Local Volumes": "volumes",
                 "Build Cache": "build_cache"}
 # docker system df prints sizes with go-units' decimal suffixes, e.g. 61.48GB, 512kB, 0B.
@@ -53,8 +55,15 @@ def docker_usage(runner) -> list[dict]:
     return out
 
 
+def failed(exc: HopsError) -> str:
+    """A note's reason for a failed call. Never the error's text: TrueNAS can echo task scripts,
+    arguments or credentials in it."""
+    method = getattr(exc, "method", None)
+    return f"TrueNAS read failed ({method})" if method else "TrueNAS read failed"
+
+
 def restic_paths(ctx, notes: list[str]) -> list[str]:
-    """Where stack-back's container keeps the restic repository: its bind mounts on a pool."""
+    """Where stack-back's container keeps the restic repository: its bind mount at RESTIC_MOUNT."""
     services = [s for s in ctx.declared.services if s.image and s.image.repository.endswith(RESTIC_IMAGE)]
     if not services:
         notes.append(f"no Stack declares {RESTIC_IMAGE}; the restic dataset is not shown")
@@ -63,10 +72,14 @@ def restic_paths(ctx, notes: list[str]) -> list[str]:
     for service in services:
         try:
             found = docker.find(ctx.runner, service)
-        except HopsError as exc:
-            notes.append(f"restic dataset unknown: {exc}")
+        except HopsError:
+            notes.append(f"restic dataset unknown: no container found for {service.key}")
             continue
-        paths += [source for source in found.bind_sources if source.startswith(POOL_MOUNTS)]
+        source = found.bind_source(RESTIC_MOUNT)
+        if source:
+            paths.append(source)
+        else:
+            notes.append(f"restic dataset unknown: {service.key} has no bind mount at {RESTIC_MOUNT}")
     return paths
 
 
@@ -77,14 +90,18 @@ def datasets(ctx, client, notes: list[str]) -> list[dict]:
         if name and role not in roles.setdefault(name, []):
             roles[name].append(role)
 
-    root = json.loads(ctx.runner.docker("info", "--format", "{{json .DockerRootDir}}").stdout or "null")
+    try:
+        root = json.loads(ctx.runner.docker("info", "--format", "{{json .DockerRootDir}}").stdout or "null")
+    except HopsError:
+        root = None
+        notes.append("docker dataset unknown: docker info failed")
     wanted = [(root, "docker")] if root else []
     wanted += [(path, "restic") for path in restic_paths(ctx, notes)]
     for path, role in wanted:
         try:
             name = hygiene.dataset_at(client, path)
         except truenas.TrueNASError as exc:
-            notes.append(f"no dataset for {role} path {path}: {exc}")
+            notes.append(f"{role} dataset unknown: {failed(exc)}")
             continue
         if name:
             add(name, role)
@@ -97,7 +114,7 @@ def datasets(ctx, client, notes: list[str]) -> list[dict]:
         try:
             out.append({"name": name, "roles": role_list, **hygiene.dataset_usage(client, name)})
         except truenas.TrueNASError as exc:
-            notes.append(f"dataset {name} skipped: {exc}")
+            notes.append(f"dataset {name} skipped: {failed(exc)}")
     return out
 
 
@@ -126,7 +143,7 @@ def run(args, ctx) -> int:
               "tasks": None, "notes": notes}
     try:
         client = ctx.truenas
-    except HopsError as exc:  # truenas.Unavailable, or a malformed TRUENAS_URL
+    except ConfigError as exc:  # truenas.Unavailable, or a malformed TRUENAS_URL: hops's own text
         client = None
         notes.append(str(exc))
     sections = {"pools": hygiene.pools, "datasets": lambda c: datasets(ctx, c, notes),
@@ -135,9 +152,9 @@ def run(args, ctx) -> int:
         try:
             report[key] = read(client)
         except truenas.TrueNASError as exc:  # this read failed; the others may not
-            notes.append(f"{key} not shown: {exc}")
-        except HopsError as exc:  # e.g. TrueNAS unreachable: skip the rest rather than wait on each
-            notes.append(f"{key} and the sections after it not shown: {exc}")
+            notes.append(f"{key}: {failed(exc)}")
+        except HopsError:  # TrueNAS unreachable: skip the rest rather than wait on each
+            notes.append(f"{key} and the sections after it: TrueNAS unreachable")
             break
     if args.json:
         output.print_json(report, ctx.stdout)

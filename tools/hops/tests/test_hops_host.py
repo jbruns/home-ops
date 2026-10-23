@@ -195,15 +195,44 @@ def test_unreachable_truenas_still_shows_docker(run_host, server):
     report = json.loads(out)
     assert code == 0
     assert len(report["docker"]) == 4 and report["pools"] is None and report["tasks"] is None
-    assert report["notes"] == ["pools and the sections after it not shown: cannot reach TrueNAS at "
-                               "wss://tn.example/api/current: connection refused"]
+    assert report["notes"] == ["pools and the sections after it: TrueNAS unreachable"]
 
 
-def test_a_failed_read_skips_only_its_section(run_host, server):
-    def denied(*params):
-        raise FakeTrueNASError("EACCES", "Not authorized")
+@pytest.mark.parametrize("method", ["cloudsync.query", "pool.snapshottask.query"])
+def test_a_failed_read_skips_only_its_section_without_echoing_the_error(run_host, server, method):
+    def failing(*params):
+        raise FakeTrueNASError("EFAULT", f"rclone --b2-key {SECRET} failed; pre_script: echo {SECRET}")
 
-    server.methods["cloudsync.query"] = denied
-    report = json.loads(run_host("--json")[1])
+    server.methods[method] = failing
+    for argv in ((), ("--json",)):
+        code, out, err = run_host(*argv)
+        assert code == 0
+        assert SECRET not in out + err
+    report = json.loads(out)
     assert report["tasks"] is None and report["pools"] and report["rollback_snapshots"]
-    assert report["notes"] == ["tasks not shown: TrueNAS cloudsync.query: EACCES: Not authorized"]
+    assert report["notes"] == [f"tasks: TrueNAS read failed ({method})"]
+
+
+def test_dataset_errors_are_noted_without_their_text(run_host, server):
+    def failing(*params):
+        raise FakeTrueNASError("EINVAL", f"bad path {SECRET}")
+
+    server.methods["filesystem.statfs"] = failing
+    server.methods["zfs.resource.query"] = failing
+    code, out, err = run_host("--json", env={"HOPS_HOST_DATASETS": "luna"})
+    assert code == 0 and SECRET not in out + err
+    assert json.loads(out)["notes"] == [
+        "docker dataset unknown: TrueNAS read failed (filesystem.statfs)",
+        "restic dataset unknown: TrueNAS read failed (filesystem.statfs)",
+        "dataset luna skipped: TrueNAS read failed (zfs.resource.query)"]
+
+
+def test_restic_dataset_is_only_the_repository_mount(run_host, host):
+    stack_back = container("stack-back", project="ops", service="stack-back")
+    stack_back["Mounts"] = [
+        {"Type": "bind", "Source": "/mnt/andromeda/secrets/b2.env", "Destination": "/run/secrets/b2.env"},
+        *STACK_BACK_MOUNTS]
+    host.respond("inspect", "stack-back", stdout=json.dumps([stack_back]))
+    report = json.loads(run_host("--json")[1])
+    assert [(d["name"], d["roles"]) for d in report["datasets"]] == [
+        ("luna/ix-apps/docker", ["docker"]), ("andromeda/docker-backups", ["restic"])]

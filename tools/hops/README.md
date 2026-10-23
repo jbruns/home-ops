@@ -143,13 +143,14 @@ containers that have since been recreated or removed.
 
 - **Pools:** name, status, health, size, allocated, free and percent used (`pool.query`).
 - **Datasets:** used, available, used by snapshots and quota of: the dataset holding Docker's
-  data-root (`docker info`'s `DockerRootDir`), the restic repository's (the bind mounts on a pool of
-  the Service running `lawndoc/stack-back`'s image), and each one named in `HOPS_HOST_DATASETS`. A
+  data-root (`docker info`'s `DockerRootDir`), the restic repository's (the bind mount at `/backups`,
+  where `RESTIC_REPOSITORY` points, in the container of the Service running `lawndoc/stack-back`'s
+  image), and each one named in `HOPS_HOST_DATASETS`. A
   path becomes a dataset through `filesystem.statfs`; usage comes from `zfs.resource.query`, which,
   unlike `pool.dataset.query`, also finds hidden datasets such as `ix-apps`. A dataset that cannot be
   found is skipped with a note.
 - **Docker:** `docker system df`: images, containers, volumes and build cache, with what is
-  reclaimable.
+  reclaimable. Docker sizes every volume for this, so `hops host` takes about 30 s on the Host.
 - **Rollback Snapshots:** how many, their total size, and the expired ones, from the same listing
   as `hops snapshot list` (`hops.snapshots.rollback_snapshots`).
 - **Tasks:** each periodic snapshot task and Cloud Sync task, with what it covers and its last run's
@@ -161,7 +162,9 @@ containers that have since been recreated or removed.
 
 SMART and disk health stay in Prometheus, which alerts on them. Without TrueNAS configured, only
 the Docker section is shown, with a note. A TrueNAS read that fails leaves its section out with a
-note and the others still show; if TrueNAS is unreachable, every TrueNAS section is left out. The
+note and the others still show; if TrueNAS is unreachable, every TrueNAS section is left out. A
+note names the section and the method that failed (e.g. `tasks: TrueNAS read failed
+(cloudsync.query)`), never the error's text, which can echo a task's scripts or credentials. The
 reads are in `hops/hygiene.py`, through the internal TrueNAS client; `truenas call`'s allowlist is
 unchanged.
 

@@ -49,10 +49,10 @@ class Container:
     def digest(self) -> str | None:
         return Image.parse(self.image).digest
 
-    @property
-    def bind_sources(self) -> list[str]:
-        """The Host paths bind-mounted into the container."""
-        return [m["Source"] for m in self.raw.get("Mounts") or [] if m.get("Type") == "bind" and m.get("Source")]
+    def bind_source(self, destination: str) -> str | None:
+        """The Host path bind-mounted at `destination` in the container, if any."""
+        return next((m.get("Source") for m in self.raw.get("Mounts") or []
+                     if m.get("Type") == "bind" and m.get("Destination") == destination), None)
 
     @property
     def running(self) -> bool:
