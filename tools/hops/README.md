@@ -17,7 +17,7 @@ uv tool install -e tools/hops     # from the repo root; puts `hops` on PATH
 hops --help
 ```
 
-Python 3.11 or later, with PyYAML. The install must be editable (`-e`): `hops` reads Compose files
+Python 3.11 or later, with PyYAML and websocket-client (for TrueNAS). The install must be editable (`-e`): `hops` reads Compose files
 through `tools/declared-containers` in the same checkout. Without installing, run
 `PYTHONPATH=tools/hops python3 -m hops …`.
 
@@ -29,6 +29,9 @@ through `tools/declared-containers` in the same checkout. Without installing, ru
 | `HOPS_SSH_USER` | `.env` or environment | `homeops-agent` |
 | `HOPS_SSH_KEY` | `.env` or environment | `~/.ssh/homeops_agent_ed25519` |
 | `HOPS_STACK_ROOT` | environment | `tn` |
+| `TRUENAS_URL` | `.env` or environment (for TrueNAS commands) | |
+| `HOPS_TRUENAS_API_KEY` | `.env` or environment (for TrueNAS commands) | |
+| `HOPS_TRUENAS_INSECURE` | `.env` or environment | unset: TLS is verified |
 
 - **Repo root:** `git rev-parse --show-toplevel` of the current directory, if that checkout has a
   Stack root (`tn/`). Otherwise `hops` uses the checkout it was installed from. Names and pins come
@@ -40,6 +43,14 @@ through `tools/declared-containers` in the same checkout. Without installing, ru
   `BatchMode=yes`, so `hops` never prompts. Calls share one connection
   (`ControlMaster=auto`, `ControlPersist=10m`). The socket is under
   `${XDG_CACHE_HOME:-~/.cache}/hops/`.
+- **TrueNAS:** JSON-RPC 2.0 over a WebSocket at `wss://<TRUENAS_URL host>/api/current`, logged in
+  with `auth.login_with_api_key`. Never the REST API (`/api/v2.0`): it is deprecated and raises
+  alerts on the Host. `HOPS_TRUENAS_API_KEY` belongs to the `homeops-agent` TrueNAS user, whose
+  privilege roles are `READONLY_ADMIN`, `SNAPSHOT_WRITE` and `SNAPSHOT_DELETE`. The key goes only
+  into the login message; errors print it as `[REDACTED]`. TLS is verified against the default CA
+  bundle; `HOPS_TRUENAS_INSECURE=1` opts out for a self-signed certificate. `TRUENAS_URL` must not contain a user name or password. Without `TRUENAS_URL`
+  and `HOPS_TRUENAS_API_KEY`, commands that need TrueNAS fail with "TrueNAS is not available on
+  this host" (exit 2).
 
 ## Targets
 
@@ -67,6 +78,7 @@ Every command in this table is **read-only**. Each takes `--json`.
 | `hops alerts` | Firing alerts (including silenced and inhibited ones) and active silences, from `amtool` in the alertmanager container |
 | `hops deploys [<stack>] [--status S] [--limit N]` | doco-cd's recent runs, newest first: when, trigger, status, the Stacks each run touched, and doco-cd's message (the error, or why it skipped: retry budget, pause). See [deploys](#deploys). |
 | `hops deploys <run-id>` | One run in detail |
+| `hops truenas call <method> [json-param…]` | The result of one allowlisted TrueNAS read method (see [truenas call](#truenas-call)), as JSON with credentials redacted. For what other commands lack. |
 
 `alerts` authenticates without sending the password to this machine. The Host pipes Prometheus's
 Alertmanager password file (`/run/secrets/prometheus_password`) from the prometheus container
@@ -122,6 +134,42 @@ containers that have since been recreated or removed.
   ``deployment paused: `plex` ``. Runs whose targets were all paused or retry-suppressed are
   `skipped`, not `succeeded`.
 - An argument shaped like a run ID (a UUID) shows that run; an unknown one exits 1.
+
+### truenas call
+
+A passthrough for Host-hygiene reads that no other command covers, e.g.
+`hops truenas call pool.query '[["name","=","tank"]]' '{"order_by":["name"]}'`. Each
+`json-param` is one JSON value, passed as one positional parameter of the method. It fails
+closed: anything not listed here is refused (exit 2) before connecting.
+
+- **Read methods only:** `*.query`, `*.get_instance`, `*.config`, plus `system.info`,
+  `system.version`, `pool.dataset.details` and `alert.list`. The scoped key can create and delete
+  its own API keys, so `api_key.*` writes are refused like any other write.
+- **Allowed namespaces only.** The `*.query`/`*.get_instance`/`*.config` reads must be in one of:
+  `pool`, `pool.dataset`, `pool.snapshot`, `pool.snapshottask`, `pool.scrub`, `disk`, `boot`,
+  `boot.environment`, `replication`, `cloudsync` (tasks; `cloudsync.credentials` is refused),
+  `service` and `interface` (TrueNAS's API name for network interfaces). Each was checked against
+  TrueNAS 25.10's API schema for secret-bearing fields. Everything else is refused, for example
+  `alertservice` (webhook URLs), `snmp` (community strings), `tunable`, `user`, `group`,
+  `api_key`, `cronjob`, `ssh`, `app`, `virt` and `vm`. Widen the list here and in
+  `hops/commands/truenas.py` together, after checking the namespace's schema.
+- **Query options:** `order_by`, `count`, `get`, `offset` and `limit` only. `select` is refused: a
+  projection can drop the fields TrueNAS's own masking depends on (e.g. an alert service's `type`)
+  or rename a secret. Filter the output locally instead. `extra` is refused: it switches on
+  per-method data, such as `disk.query`'s SED passwords.
+- **Redaction**, as defense in depth behind the allowlist. A field whose name contains
+  `credential`, `key`, `pass`, `pwd`, `bindpw`, `secret`, `token`, `salt`, `hash` or `community` prints as `"[REDACTED]"` (`null` stays `null`). For
+  `cloudsync.credentials.*`, every field of `attributes`/`provider` except `type` is redacted too,
+  and for `kerberos.keytab.*` the keytab `file`. In every string, a URL's user name and password
+  print as `scheme://[REDACTED]@host…`. Fields holding user-written scripts, commands and
+  auxiliary config are redacted too, at any depth, when they hold a string or list: `command`,
+  `script`, `pre_script`, `post_script`, `args`, `extra`, `shutdowncmd`, `options`, `optionsupsd`,
+  `sudo_commands`, `sudo_commands_nopasswd`, `smb_options`, `auxsmbconf` and `cmdline`.
+- **Embedded jobs.** A task's `job` object (any dict under a `job` key, at any depth, e.g. in
+  `cloudsync.query` or `replication.query`) keeps only `id`, `method`, `state`,
+  `progress.percent`, `time_started` and `time_finished`; its other keys (`logs_excerpt`, `error`,
+  `exception`, `result`, `arguments`, …) are dropped, since they can echo what a script printed.
+- Output is the method's result as JSON, with or without `--json`.
 
 ### exec and db
 
@@ -517,6 +565,12 @@ Tests replay recorded registry exchanges from `tests/fixtures/registry/`. To re-
   `attach(*args, tty=)` connects the terminal; interactive modes first call
   `hops.terminal.require_tty(what)`. `hops.docker` reads containers, and
   `hops.alertmanager.amtool` runs amtool.
+- `ctx.truenas` (`hops.truenas.Client`) is the only way to reach TrueNAS; everything
+  TrueNAS-specific stays in `hops/truenas.py`. `call(method, *params)` returns the result;
+  `job(method, *params)` calls a method that starts a job and waits for the job's result (polling
+  `core.get_jobs`). Errors raise `hops.truenas.TrueNASError` with its `errname` (e.g. `EACCES`).
+  `truenas.redact(data, method)` masks credentials before printing. On a host without TrueNAS config,
+  using `ctx.truenas` raises a ConfigError.
 - Raise `hops.errors.UsageError` for bad input (exit 2) and `HopsError` for failures (exit 1).
 
 ## Test
@@ -528,5 +582,7 @@ python3 -m pytest tools/hops -m live        # read-only, against the real Host
 ```
 
 The `fake_host` fixture (`tests/conftest.py`) replaces the ssh process. It records each argv and
-answers with canned `docker` output. The `hops` fixture runs the CLI against a fixture repo. The
+answers with canned `docker` output. The `hops` fixture runs the CLI against a fixture repo.
+`hops_fakes.FakeTrueNAS` stands in for the TrueNAS WebSocket: pass its `connect` to
+`truenas.Client(..., connect=)` and its `methods` answer each JSON-RPC call. The
 `live` suite is skipped unless selected with `-m live`. It must only ever read.

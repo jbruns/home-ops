@@ -78,14 +78,22 @@ def read_env_file(path: Path) -> dict[str, str]:
     return values
 
 
-def load_host(repo_root: Path, env=None) -> HostConfig:
+def load_values(repo_root: Path, env=None) -> dict[str, str]:
+    """Settings by name: DEFAULTS, overridden by the first .env found, overridden by the environment."""
     env = dict(os.environ if env is None else env)
-    files = env_files(repo_root)
-    found = next((f for f in files if f.is_file()), None)
-    values = {**DEFAULTS, **(read_env_file(found) if found else {}), **env}
+    found = next((f for f in env_files(repo_root) if f.is_file()), None)
+    return {**DEFAULTS, **(read_env_file(found) if found else {}), **env}
+
+
+def where(repo_root: Path) -> str:
+    """Where a missing setting can go, for error messages."""
+    return "the environment or " + " or ".join(str(f) for f in env_files(repo_root))
+
+
+def load_host(repo_root: Path, env=None) -> HostConfig:
+    values = load_values(repo_root, env)
     if not values.get("TRUENAS_HOST"):
-        raise ConfigError("missing TRUENAS_HOST: set it in the environment or in "
-                          + " or ".join(str(f) for f in files))
+        raise ConfigError(f"missing TRUENAS_HOST: set it in {where(repo_root)}")
     home = values.get("HOME") or str(Path.home())
     cache = values.get("XDG_CACHE_HOME") or f"{home}/.cache"
     return HostConfig(

@@ -1,6 +1,7 @@
 """Read-only checks against the real Host. Skipped unless selected: python3 -m pytest tools/hops -m live
 
-Needs TRUENAS_HOST (repo-root .env or environment) and the agent SSH key. Never add a command
+Needs TRUENAS_HOST (repo-root .env or environment) and the agent SSH key; the TrueNAS test also needs
+TRUENAS_URL and HOPS_TRUENAS_API_KEY. Never add a command
 here that changes anything on the Host.
 """
 import json
@@ -55,3 +56,7 @@ def test_deploys_lists_doco_cds_runs(capsys):
     assert len(runs) <= 3
     if runs:  # empty right after doco-cd restarts
         assert hops_json(capsys, "deploys", runs[0]["job_id"])["job_id"] == runs[0]["job_id"]
+
+
+def test_truenas_system_info(capsys):
+    assert hops_json(capsys, "truenas", "call", "system.info")["version"]

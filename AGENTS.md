@@ -26,6 +26,7 @@ SSH and API access to the Host comes from the gitignored repo-root `.env`; see `
 Reach the Host through `hops` (install with `uv tool install -e tools/hops`; read
 `tools/hops/README.md` before first use), with `--json` when you parse its output. It changes
 runtime state only; declared state changes through a PR (ADR 0001). For anything `hops --help`
-lacks, use read-only `ssh … sudo -n docker …`.
+lacks, use read-only `ssh … sudo -n docker …`. Reach TrueNAS through `hops` too (`hops truenas
+call <method>` for reads it lacks), never with the REST API or `curl` to `/api/v2.0`.
 
 When an agent runs `hops bump`, pass its co-author line with `--trailer` (see `tools/hops/README.md`).
