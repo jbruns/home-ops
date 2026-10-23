@@ -17,9 +17,11 @@ Use the five default triage labels. Before triaging issues, read `docs/agents/tr
 
 Single-context: root `GLOSSARY.md` and `docs/adr/`. Before exploring the codebase, read `docs/agents/domain.md`.
 
-### Repo-root `.env`
+### Secrets
 
-SSH and API access to the Host comes from the gitignored repo-root `.env`; see `.env.example` for its keys. Never print, log or commit its values, and never edit `.env` (only @jbruns does).
+SSH and API access to the Host comes from the gitignored repo-root `.env`; see `.env.example` for its keys. Only @jbruns edits `.env`.
+
+Keep every secret value out of tool output, logs and commits, whether it comes from `.env`, a decrypted SOPS file or the Host. Read a secret file by key name (`sops -d <file> | cut -d= -f1`). Compare values by exit code or hash. Pipe a new secret from a script straight into `sops set` and its consumer. Read TrueNAS only through `hops truenas call`, which refuses and redacts methods that return credentials.
 
 ### Host access
 
