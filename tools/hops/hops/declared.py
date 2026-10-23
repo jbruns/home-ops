@@ -158,12 +158,6 @@ class Declared:
             found.update((s.key, s) for s in matches)
         return list(found.values())
 
-    def stack(self, name: str) -> list[Service]:
-        """The Services of the Stack called `name`."""
-        if name not in self.stacks:
-            raise ResolveError(f"unknown Stack {name!r}{self._suggest(name, self.stacks)}")
-        return self.stacks[name]
-
     def resolve_one(self, name: str) -> Service:
         """One Service: stack/service, a unique bare Service name, or a Stack that has only one."""
         return self._one(name, allow_stack=True)

@@ -112,14 +112,16 @@ containers that have since been recreated or removed.
 - **History is in doco-cd's memory only**: 7 days, at most 50 runs per trigger, and lost when
   doco-cd restarts. An empty list says so. For older history, use `hops logs --loki doco-cd`.
 - `<stack>` keeps the runs whose targets include that Stack; the filtering happens here, over the
-  200 runs doco-cd returns at most. `--status` (`failed`, `succeeded`, `running`, `skipped`) is
-  the run's status, filtered by doco-cd. `--limit` (default 20) applies after both.
+  200 runs doco-cd returns at most. The name is not checked against this checkout, since doco-cd
+  may remember a Stack the repo has since removed. `--status` (`failed`, `succeeded`, `running`,
+  `skipped`, `accepted`) is the run's status, filtered by doco-cd. `--limit` (default 20) applies
+  after both.
 - doco-cd records one message per run, not per Stack. A failure or skip names the Stacks it
   concerns, e.g. `deployment failed: failed to deploy stack ownfoil: …`,
   `deployment retry suppressed for ownfoil (default): budget_exhausted`, or
   ``deployment paused: `plex` ``. Runs whose targets were all paused or retry-suppressed are
   `skipped`, not `succeeded`.
-- An unknown Stack fails before the Host is touched (exit 2); an unknown run ID exits 1.
+- An argument shaped like a run ID (a UUID) shows that run; an unknown one exits 1.
 
 ### exec and db
 

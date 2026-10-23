@@ -6,7 +6,7 @@ from hops import config, doco, output
 from hops.errors import UsageError
 
 HELP = "doco-cd's recent runs: when, trigger, status, the Stacks each touched, and why one failed or skipped"
-STATUSES = ["failed", "succeeded", "running", "skipped"]
+STATUSES = ["failed", "succeeded", "running", "skipped", "accepted"]
 RUN_ID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
 FETCH = 200  # doco-cd's maximum page; Stacks are filtered here, so fetch everything it keeps
 NOTE = ("doco-cd keeps run history in memory only: 7 days, at most 50 runs per trigger, "
@@ -20,7 +20,7 @@ def register(subparsers) -> None:
         HELP + ". Read-only. " + NOTE + ". Decrypts the API key with sops on this machine and sends it on "
         "stdin to a container on the metrics network, which calls doco-cd."))
     p.add_argument("target", nargs="?", metavar="stack|run-id",
-                   help="only runs that touched this Stack, or one run in detail")
+                   help="only runs that touched this Stack (as doco-cd names it), or one run in detail")
     p.add_argument("--status", choices=STATUSES, help="only runs with this status")
     p.add_argument("--limit", type=int, metavar="N", help=f"show at most N runs (default {DEFAULT_LIMIT})")
     output.add_json_flag(p)
@@ -59,8 +59,6 @@ def run(args, ctx) -> int:
     limit = DEFAULT_LIMIT if args.limit is None else args.limit
     if limit <= 0:
         raise UsageError("--limit must be a positive number")
-    if stack:
-        ctx.declared.stack(stack)
 
     via = doco.transport(ctx.runner, ctx.declared, [])
     key = doco.api_key(ctx.repo_root, config.stack_root_name(ctx.env))
@@ -76,8 +74,9 @@ def run(args, ctx) -> int:
         output.print_json({"runs": runs}, ctx.stdout)
         return 0
     if not runs:
+        undeclared = f" ({stack} is not a Stack in this checkout.)" if stack and stack not in ctx.declared.stacks else ""
         ctx.stdout.write(f"No runs{' for ' + stack if stack else ''}"
-                         f"{' with status ' + args.status if args.status else ''}. {NOTE}.\n")
+                         f"{' with status ' + args.status if args.status else ''}.{undeclared} {NOTE}.\n")
         return 0
     output.table(["CREATED", "RUN", "TRIGGER", "STATUS", "STACKS", "MESSAGE"], [
         [when(r["created_at"]), r["job_id"], r["trigger"], r["status"], stacks_cell(r["stacks"]),

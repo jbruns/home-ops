@@ -122,14 +122,14 @@ def get(runner: Runner, via: str, path: str, key: str, timeout: int = 30):
     """GET `path` from doco-cd, from container `via`; returns the parsed JSON body of a 2xx answer.
     A 404 raises NotFound."""
     code, status, body = send(runner, via, "GET", path, key, timeout)
-    if code == 404:
-        raise NotFound(f"doco-cd answered {status} for {path.split('?')[0]}: {error_message(body)}")
+    endpoint = path.split("?")[0]
     if not 200 <= code < 300:
-        raise HopsError(f"doco-cd answered {status} for {path.split('?')[0]}: {error_message(body)}")
+        raise (NotFound if code == 404 else HopsError)(
+            f"doco-cd answered {status} for {endpoint}: {error_message(body)}")
     try:
         return json.loads(body)
     except json.JSONDecodeError:
-        raise HopsError(f"doco-cd answered {path.split('?')[0]} with something other than JSON") from None
+        raise HopsError(f"doco-cd answered {endpoint} with something other than JSON") from None
 
 
 class NotFound(HopsError):
