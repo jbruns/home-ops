@@ -85,8 +85,8 @@ scrape_configs:
     static_configs:
       - targets: ['nextcloud-mariadb-exporter:9104']
         labels: {container: nextcloud-mariadb-exporter, datastore: nextcloud-mariadb, stack: nextcloud, tier: info}
-      - targets: ['vaultwarden-db-exporter:9104']
-        labels: {container: vaultwarden-db-exporter, datastore: vaultwarden-db, stack: vaultwarden, tier: info}
+      - targets: ['vaultwarden-mariadb-exporter:9104']
+        labels: {container: vaultwarden-mariadb-exporter, datastore: vaultwarden-mariadb, stack: vaultwarden, tier: info}
 
   # MONITORING STACK
   - job_name: prometheus
