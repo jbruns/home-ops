@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from hops_fakes import FakeTrueNAS, FakeTrueNASError, container, rollback, snap, write
 
 from hops import cli, snapshots, truenas
+from hops.errors import HopsError
 
 FIXTURES = Path(__file__).parent / "fixtures" / "host"
 RECORDED = json.loads((FIXTURES / "truenas.json").read_text())
@@ -135,13 +136,14 @@ def test_plain_output_has_a_section_each(run_host):
 
 
 def test_task_status_never_shows_credentials_scripts_or_job_output(run_host, server):
-    snapshot_task = dict(RECORDED["pool.snapshottask.query"][0], exclude=[SECRET],
-                         state={"state": "ERROR", "datetime": {"$date": 1792735200000}, "error": SECRET,
-                                "last_snapshot": SECRET})
-    cloud = dict(RECORDED["cloudsync.query"][0])
-    allowed = {"id", "description", "path", "enabled", "job"}
-    for field in set(cloud) - allowed:
-        cloud[field] = SECRET if not isinstance(cloud[field], dict) else {"type": "B2", "key": SECRET}
+    def seeded(task, allowed):
+        return {k: v if k in allowed else SECRET if not isinstance(v, dict) else {"type": "B2", "key": SECRET}
+                for k, v in task.items()}
+
+    snapshot_task = seeded(RECORDED["pool.snapshottask.query"][0], {"id", "naming_schema", "dataset", "enabled"})
+    snapshot_task["state"] = {"state": "ERROR", "datetime": {"$date": 1792735200000}, "error": SECRET,
+                              "last_snapshot": SECRET}
+    cloud = seeded(RECORDED["cloudsync.query"][0], {"id", "description", "path", "enabled", "job"})
     cloud["job"] = dict(cloud["job"], state="FAILED", error=SECRET, logs_excerpt=SECRET, exception=SECRET,
                         result=SECRET, arguments=[SECRET], progress={"percent": 50, "description": SECRET})
     server.methods["pool.snapshottask.query"] = lambda *p: [snapshot_task]
@@ -182,3 +184,26 @@ def test_without_truenas_only_docker_is_shown(run_host, host, server):
 
     code, out, _ = run_host(truenas_on=False)
     assert "Docker" in out and "Pools" not in out and "TrueNAS is not available" in out
+
+
+def test_unreachable_truenas_still_shows_docker(run_host, server):
+    def unreachable(url, *, verify, timeout):
+        raise HopsError(f"cannot reach TrueNAS at {url}: connection refused")
+
+    server.connect = unreachable
+    code, out, _ = run_host("--json")
+    report = json.loads(out)
+    assert code == 0
+    assert len(report["docker"]) == 4 and report["pools"] is None and report["tasks"] is None
+    assert report["notes"] == ["pools and the sections after it not shown: cannot reach TrueNAS at "
+                               "wss://tn.example/api/current: connection refused"]
+
+
+def test_a_failed_read_skips_only_its_section(run_host, server):
+    def denied(*params):
+        raise FakeTrueNASError("EACCES", "Not authorized")
+
+    server.methods["cloudsync.query"] = denied
+    report = json.loads(run_host("--json")[1])
+    assert report["tasks"] is None and report["pools"] and report["rollback_snapshots"]
+    assert report["notes"] == ["tasks not shown: TrueNAS cloudsync.query: EACCES: Not authorized"]

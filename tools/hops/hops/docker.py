@@ -50,6 +50,11 @@ class Container:
         return Image.parse(self.image).digest
 
     @property
+    def bind_sources(self) -> list[str]:
+        """The Host paths bind-mounted into the container."""
+        return [m["Source"] for m in self.raw.get("Mounts") or [] if m.get("Type") == "bind" and m.get("Source")]
+
+    @property
     def running(self) -> bool:
         return self.status == "running"
 

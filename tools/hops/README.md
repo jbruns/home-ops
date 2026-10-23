@@ -160,8 +160,10 @@ containers that have since been recreated or removed.
   (snapshot); read the details in the TrueNAS UI.
 
 SMART and disk health stay in Prometheus, which alerts on them. Without TrueNAS configured, only
-the Docker section is shown, with a note. These reads go through the internal TrueNAS client
-(`hops/truenas.py`); `truenas call`'s allowlist is unchanged.
+the Docker section is shown, with a note. A TrueNAS read that fails leaves its section out with a
+note and the others still show; if TrueNAS is unreachable, every TrueNAS section is left out. The
+reads are in `hops/hygiene.py`, through the internal TrueNAS client; `truenas call`'s allowlist is
+unchanged.
 
 ### truenas call
 
@@ -557,7 +559,8 @@ several Services, `container` is the `container_name` (else `null`), and all thr
 ```
 
 - `pools`, `datasets`, `rollback_snapshots` and `tasks` are `null` without TrueNAS; `notes` then says why. `notes` also
-  explains anything skipped (a configured dataset that does not exist, no stack-back container).
+  explains anything skipped (a configured dataset that does not exist, no stack-back container, a
+  TrueNAS read that failed, which leaves its section `null`).
 - `roles`: `docker`, `restic` and/or `configured`. `quota_bytes` is `null` when there is no quota.
 - `docker`: one entry per `docker system df` type: `images`, `containers`, `volumes`,
   `build_cache`. `size` and `reclaimable` are Docker's own text (decimal units); `*_bytes` parse
@@ -733,7 +736,7 @@ Tests replay recorded registry exchanges from `tests/fixtures/registry/`. To re-
   `job(method, *params)` calls a method that starts a job and waits for the job's result (polling
   `core.get_jobs`). Errors raise `hops.truenas.TrueNASError` with its `errname` (e.g. `EACCES`).
   `truenas.redact(data, method)` masks credentials before printing. To show part of a TrueNAS
-  object, build the record from named fields, as `truenas.tasks` does, rather than filtering it. On a host without TrueNAS config,
+  object, build the record from named fields, as `hops/hygiene.py` does, rather than filtering it. On a host without TrueNAS config,
   using `ctx.truenas` raises a ConfigError.
 - Raise `hops.errors.UsageError` for bad input (exit 2) and `HopsError` for failures (exit 1).
 
