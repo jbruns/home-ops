@@ -312,7 +312,7 @@ a transport container on `metrics`:
 |---|---|
 | 0 | Success. `status` returns 0 even when Services are down; read the output for problems. |
 | 1 | A Host call failed (SSH unreachable, docker error, no container). `logs` returns `docker logs`' own exit code. |
-| 2 | Usage error before any Host call: bad arguments, unknown or ambiguous name, missing config. Also a refusal after a read: `snapshot release` of a snapshot that is not a Rollback Snapshot. |
+| 2 | Usage error before any Host call: bad arguments, unknown or ambiguous name, missing config. Also a refusal after a read: `snapshot release` of a snapshot that is not a Rollback Snapshot, or `volume move` with a precondition that fails. |
 
 `exec` with a command and `db -e` return the remote command's own exit code.
 
@@ -390,6 +390,118 @@ files, dated `pre-*` dumps or copied directories).
 Where a snapshot cannot serve (data that must leave the Host, or a single file needed outside its
 dataset), record the copy in the issue or PR that made it, with a removal checkbox. The work is not
 done until it is ticked.
+
+## Renaming a volume
+
+Docker cannot rename a volume ([ADR 0010](../../docs/adr/0010-volumes-named-for-their-stack.md)).
+`hops volume move` does the runtime half of a rename; the declared half is the PR changing the
+volume's `name:`.
+
+```sh
+hops volume move <old> <new> --issue <n> [--take-snapshot] [--dry-run] [--json]
+```
+
+Class: **Destructive**. It removes `<old>` and the stopped containers that reference it.
+
+**Preconditions.** It refuses (exit 2) before changing anything unless all of these hold:
+
+- Both names match Docker's `[a-zA-Z0-9][a-zA-Z0-9_.-]+`, checked before any Host call.
+- `<old>` exists. Each existing volume uses the `local` driver with no driver options (so no
+  `o=bind`), and its `Mountpoint` is `<DockerRootDir>/volumes/<name>/_data`. The volumes
+  directory comes from `docker info`.
+- Every container that mounts `<old>` is stopped (`created`, `exited` or `dead`). Each is either
+  a declared Service's container or labelled `startup-order=skip`. Any other container is left
+  to you: `hops` does not know who owns it. No container that mounts `<new>` is running.
+- `<new>` does not exist, or it is empty.
+- `<old>/_data` and `<new>/_data` are on the filesystem of the volumes directory: one ZFS
+  dataset, so `rename(2)` can move them.
+- An unexpired Rollback Snapshot for `--issue <n>` exists of that dataset (`luna/ix-apps/docker` on
+  the Host). The dataset is read from the move container's `/proc/self/mountinfo`, not assumed.
+  ZFS must have created the snapshot strictly after the last container on `<old>` stopped, so it
+  holds the data at rest. Both times come from the Host's clock: the snapshot's `creation` and
+  Docker's `FinishedAt`, never the time in the snapshot's name. ZFS keeps `creation` to the
+  second, so a snapshot created in the second of the stop is refused too. A snapshot taken while
+  the Stack was still running is refused. `--take-snapshot` takes one instead, released by
+  default in 7 days.
+  There is no override. Without TrueNAS configured, `volume move` refuses, because a rename moves a
+  Stack's only live copy of its data (ADR 0011).
+- `<new>` should be named `<stack>_[<service>_]<purpose>` for a declared Stack. If it isn't,
+  `hops` prints a warning and goes on.
+
+**Mechanism.** `--dry-run` stops after the checks.
+
+1. If `--take-snapshot` is given, take the Rollback Snapshot.
+2. Run `docker volume create <new>`, unless the volume exists.
+3. Check the containers on both volumes again. It stops here, before anything moves, if any
+   container has been active since the first checks (a Deploy of the Stack, say): one that is
+   new, is running, or whose `StartedAt` or `FinishedAt` changed (it ran and exited again).
+4. Start one container that bind-mounts Docker's volumes directory once, at `/volumes`. The
+   container is
+   `docker run --rm --label startup-order=skip --log-driver none --network none --pull never
+   --read-only --user 0:0 --cap-drop ALL --cap-add CHOWN,DAC_OVERRIDE,FOWNER` of the python
+   image pinned for `monitoring/dependencies-render`, the same image `logs --loki` uses.
+   Its script first gives `<new>/_data` the owner and mode of `<old>/_data`. Then it calls
+   `os.rename` on every top-level entry of `<old>/_data`, dotfiles included, into `<new>/_data`.
+   Each entry moves instantly within one filesystem and keeps its ownership, permissions and
+   times. A symlink is renamed, never followed. Names are passed as arguments, never through a
+   shell, so spaces and newlines are safe. An entry already in `<new>` stops the move. Before
+   the move, a read-only run of the same container checks the preconditions above.
+5. Check the containers again, the same way. If one was active during the move, it stops there,
+   exits 1 and cleans up nothing. Stop that container first, then look at both volumes.
+6. Check that `<old>/_data` is empty and `<new>/_data` holds as many top-level entries as `<old>`
+   did.
+7. `docker rm` (never forced) the stopped containers that reference `<old>`. Docker will not
+   remove a volume while any container references it, even a stopped one. This is runtime
+   state: the Deploy after merge recreates them with the new name, since their volume changed.
+8. Read `<old>/_data` again. If it is not empty, `hops` keeps `<old>`, exits 1 and reports how
+   many entries each volume holds. Otherwise `docker volume rm <old>`.
+9. Print the next steps.
+
+**If it fails part-way**, it stops and exits 1. The message reports how many top-level entries
+each volume holds and names the Rollback Snapshot. It never rolls anything back on its own.
+A failure while removing names the containers already removed. If the move container outlives
+its 600-second ssh timeout, it may still be renaming; it carries the label
+`hops.volume-move=<old>`. Look, then either finish the move by hand or restore from the snapshot
+(see [Risky changes](#risky-changes)).
+
+### Runbook
+
+1. **PR:** change the volume's `name:` in every Stack that declares it, including any
+   Stack that mounts it as `external`. Keep `external: true`. If `validate.py` has an allowlist of old
+   volume names (ADR 0010), remove the old name from it. Do not merge yet.
+2. **Stop** the Stack(s) for longer than the change will take:
+   `hops stop <stack> --for 1h` (with `--force` for a Critical Stack).
+3. **Snapshot** after stopping, so the snapshot is consistent:
+   `hops snapshot take --issue <n> --for 1w`. Or pass `--take-snapshot` in the next step.
+4. **Move:** run `hops volume move <old> <new> --issue <n> --dry-run`, then run it again without
+   `--dry-run`. Until the move has finished, merge nothing that touches the Stack: doco-cd
+   Deploys a Stack whenever a commit changes it, which would start it on the volume mid-move.
+   `hops` will not pause Deploys: doco-cd's `pause: true` is a deploy setting in
+   `.doco-cd.yml`, which is declared state and covers every Stack. If a Deploy of the Stack may
+   still be pending (a recent merge, or a doco-cd retry), check `hops deploys <stack>` first
+   and wait for it to finish.
+5. **Merge** the PR. doco-cd Deploys the Stack and recreates its containers on `<new>`
+   (`hops deploys <stack>` shows the run).
+6. **Verify:** `hops status <stack>`, and check that the Stack works as before.
+7. **Release** the snapshot: `hops snapshot release <name>`.
+
+### `volume move --json`
+
+```json
+{"old": "home_mariadb_data", "new": "nextcloud_mariadb_data", "issue": "638",
+ "dataset": "luna/ix-apps/docker", "entries": 4,
+ "snapshot": {"name": "luna/ix-apps/docker@hops-638-20261023T160541Z", "…": "…"}, "would_take": null,
+ "created_new": true,
+ "containers": [{"container": "mariadb", "id": "…", "state": "exited", "service": "nextcloud/mariadb",
+                 "deliberate": false}],
+ "warnings": [], "dry_run": false, "moved": true}
+```
+
+`snapshot` is a record as in [`snapshot … --json`](#snapshot----json). With `--dry-run` and
+`--take-snapshot`, `snapshot` is `null` and `would_take` holds what would be taken. `entries` is
+how many top-level entries `<old>` held. `containers` are the stopped containers that reference
+`<old>`, which the move removes. Their `service` is the declared Service, or `null`. `moved` is
+`false` with `--dry-run`.
 
 ## JSON output
 
