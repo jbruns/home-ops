@@ -6,14 +6,17 @@ environment variable (MYSQL_PWD, REDISCLI_AUTH, PGPASSWORD), so it is in no proc
 the Host either. An -e SQL statement travels on stdin. Valkey's REPL exits 0 at the end of stdin
 even after an error, so each -e line runs as its own `valkey-cli -e <args…>`, which exits
 non-zero when the command fails.
+
+`hops db [<datastore>] --users` compares a MariaDB Datastore's live accounts (mysql.user) with
+its homeops.db.users label, through the same in-container login.
 """
 import re
 import shlex
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from hops import docker, terminal
-from hops.errors import UsageError
+from hops import docker, output, terminal
+from hops.errors import HopsError, UsageError
 
 HELP = "the Datastore's own client (MariaDB, Valkey, Postgres), interactive or one statement with -e"
 
@@ -68,17 +71,29 @@ VALKEY_READ_SUBCOMMANDS = {
 }
 
 
+USERS_LABEL = "homeops.db.users"
+# Accounts the image creates for itself: its locked system account and healthcheck.sh's user.
+SYSTEM_USERS = {"mariadb.sys@localhost", "healthcheck@localhost", "healthcheck@127.0.0.1", "healthcheck@::1"}
+# HEX: the batch client escapes tab, newline, NUL and backslash in what it prints.
+USERS_QUERY = "SELECT HEX(User), HEX(Host) FROM mysql.user\n"
+
+
 def register(subparsers) -> None:
     p = subparsers.add_parser(
         "db", help=HELP,
         description=HELP + ". Without -e it is Disruptive: it needs a TTY (ssh -t, docker exec -it). "
         "Credentials are read inside the container and never reach this machine.")
-    p.add_argument("datastore", help="a Datastore Service: stack/service, or a unique Service name")
+    p.add_argument("datastore", nargs="?",
+                   help="a Datastore Service: stack/service, or a unique Service name "
+                        f"(with --users, omit it to check every Datastore labelled {USERS_LABEL})")
     p.add_argument("-e", dest="statement", metavar="STATEMENT",
                    help="run one statement non-interactively (Valkey: one command per line) and print the result")
     p.add_argument("--write", action="store_true",
                    help="allow an -e statement that does not start with SELECT, SHOW, EXPLAIN or DESCRIBE "
                         "(Valkey: a read command)")
+    p.add_argument("--users", action="store_true",
+                   help=f"compare a MariaDB Datastore's users with its {USERS_LABEL} label; exit 1 on drift")
+    output.add_json_flag(p)
     p.set_defaults(func=run)
 
 
@@ -146,7 +161,94 @@ def config_file(service) -> str:
     return next((w for w in words if w.endswith(".conf")), "")
 
 
+def declared_users(service) -> list[str]:
+    """The label's user@host entries, host lowercased as MariaDB stores it; a UsageError names the first
+    malformed one."""
+    raw = service.labels.get(USERS_LABEL)
+    if raw is None:
+        raise UsageError(f"{service.key} has no {USERS_LABEL} label")
+    users = []
+    for entry in raw.split(","):
+        user, at, host = entry.strip().rpartition("@")
+        host = host.lower()
+        if not (at and user and host) or any(c.isspace() for c in entry.strip()):
+            raise UsageError(f"{service.key}: {USERS_LABEL} entry {entry.strip()!r} is not user@host "
+                             "(the label is a comma-separated list of user@host)")
+        if f"{user}@{host}" in users:
+            raise UsageError(f"{service.key}: {USERS_LABEL} lists {user}@{host} twice")
+        users.append(f"{user}@{host}")
+    return users
+
+
+def _users_target(service) -> list[str]:
+    if service.datastore is None:
+        raise UsageError(f"{service.key} is not a Datastore (a MariaDB, Valkey or Postgres image)")
+    if service.datastore != "mariadb":
+        raise UsageError(f"--users checks MariaDB Datastores only; {service.key} is {service.datastore} "
+                         "(Postgres and Valkey are out of scope)")
+    return declared_users(service)
+
+
+def live_users(ctx, service) -> list[str]:
+    script = ["sh", "-c", MARIADB, "hops-db", ""]
+    result = ctx.runner.docker("exec", "-i", docker.container_ref(ctx.runner, service), *script,
+                               "--batch", "--skip-column-names", input=USERS_QUERY, check=False)
+    if result.returncode:
+        raise HopsError(f"{service.key}: reading mysql.user failed: {result.stderr.strip()}")
+    try:
+        rows = [[bytes.fromhex(field) for field in line.split("\t")] for line in result.stdout.splitlines() if line]
+    except ValueError:
+        rows = None
+    if rows is None or any(len(row) != 2 for row in rows):
+        raise HopsError(f"{service.key}: unexpected mysql.user output: {result.stdout.strip()!r}")
+    return sorted(f"{_text(user)}@{_text(host)}" for user, host in rows)
+
+
+def _text(raw: bytes) -> str:
+    try:
+        return raw.decode()
+    except UnicodeDecodeError:
+        return raw.decode("latin-1")
+
+
+def run_users(args, ctx) -> int:
+    if args.statement is not None or args.write:
+        raise UsageError("--users cannot be combined with -e or --write")
+    if args.datastore:
+        services = [ctx.declared.resolve_one(args.datastore)]
+    else:
+        services = [s for s in ctx.declared.services if USERS_LABEL in s.labels]
+        if not services:
+            raise UsageError(f"no Datastore carries a {USERS_LABEL} label")
+    targets = [(s, _users_target(s)) for s in services]  # every label checks out before the Host
+    reports = []
+    for service, declared in targets:
+        live = live_users(ctx, service)
+        checked = [u for u in live if u not in SYSTEM_USERS]
+        wanted = [u for u in declared if u not in SYSTEM_USERS]
+        reports.append({
+            "stack": service.stack, "service": service.name, "container": service.container,
+            "declared": declared, "live": live,
+            "unexpected": [u for u in checked if u not in wanted],
+            "missing": sorted(u for u in wanted if u not in checked),
+        })
+    drift = any(r["unexpected"] or r["missing"] for r in reports)
+    if args.json:
+        output.print_json({"datastores": reports, "drift": drift}, ctx.stdout)
+    else:
+        output.table(["DATASTORE", "UNEXPECTED", "MISSING"],
+                     [[f"{r['stack']}/{r['service']}", ", ".join(r["unexpected"]) or None,
+                       ", ".join(r["missing"]) or None] for r in reports], ctx.stdout)
+    return 1 if drift else 0
+
+
 def run(args, ctx) -> int:
+    if args.users:
+        return run_users(args, ctx)
+    if args.datastore is None:
+        raise UsageError("name a Datastore (only --users checks them all)")
+    if args.json:
+        raise UsageError("--json only applies to --users")
     if args.write and args.statement is None:
         raise UsageError("--write only applies to a statement given with -e")
     service = ctx.declared.resolve_one(args.datastore)

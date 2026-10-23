@@ -30,6 +30,8 @@ services:
     environment:
       # https://mariadb.com/kb/en/mariadb-server-docker-official-image-environment-variables/
       - MARIADB_ROOT_PASSWORD_FILE=/run/secrets/mariadb_root_password
+      # root only via the local socket (hops db logs in that way); no root@% on a fresh init.
+      - MARIADB_ROOT_HOST=localhost
     # MARIADB_USER/PASSWORD: the read-only account stack-back dumps with.
     env_file:
       - ./backup_cred.sops.env
@@ -40,6 +42,11 @@ services:
       tier: critical
       startup-order: "1"
       stack-back.mariadb: true
+      # Expected users, checked by hops db --users (the image's mariadb.sys and healthcheck are implied):
+      # root@localhost: admin, local socket only. exporter@%: mysqld-exporter, see mariadb-exporter.
+      # backupuser@%: stack-back dumps (backup_cred.sops.env).
+      # nextclouduser@%: Nextcloud's own login (config.php dbuser), created by its installer.
+      homeops.db.users: "root@localhost,exporter@%,backupuser@%,nextclouduser@%"
 
     volumes:
       - mariadb_data:/var/lib/mysql

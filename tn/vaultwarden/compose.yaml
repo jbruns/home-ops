@@ -105,6 +105,8 @@ services:
       start_interval: 5s
     environment:
       - MARIADB_ROOT_PASSWORD_FILE=/run/secrets/vaultwarden_mariadb_root_password
+      # root only via the local socket (hops db logs in that way); no root@% on a fresh init.
+      - MARIADB_ROOT_HOST=localhost
     # MARIADB_DATABASE/USER/PASSWORD: Vaultwarden's own account (created on first init);
     # stack-back dumps with it too.
     env_file:
@@ -116,6 +118,10 @@ services:
       tier: critical
       startup-order: "1"
       stack-back.mariadb: true
+      # Expected users, checked by hops db --users (the image's mariadb.sys and healthcheck are implied):
+      # root@localhost: admin, local socket only. exporter@%: mysqld-exporter, see mariadb-exporter.
+      # vaultwardenuser@%: Vaultwarden's own login; stack-back dumps with it too (mariadb.sops.env).
+      homeops.db.users: "root@localhost,exporter@%,vaultwardenuser@%"
 
     volumes:
       - mariadb_data:/var/lib/mysql

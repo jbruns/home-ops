@@ -214,6 +214,7 @@ closed: anything not listed here is refused (exit 2) before connecting.
 | `hops exec <service>` | An interactive shell (bash if the image has one, else sh) via `ssh -t` and `docker exec -it` | Disruptive: needs a TTY |
 | `hops db <datastore>` | The Datastore's own client, interactive: `mariadb` as root, `valkey-cli`, or `psql` | Disruptive: needs a TTY |
 | `hops db <datastore> -e "<statement>"` | One statement, non-interactive (for agents); prints the client's output and returns its exit code | Read-only, or `--write` |
+| `hops db [<datastore>] --users [--json]` | Compares a MariaDB Datastore's live users with its `homeops.db.users` label; without a Datastore, every labelled one. Exit 1 on drift | Read-only |
 
 - **Interactive modes refuse without a TTY on stdin** (exit 2), so an agent cannot open a session
   that waits for input. Agents use `exec` with a command, or `db -e`.
@@ -240,8 +241,19 @@ closed: anything not listed here is refused (exit 2) before connecting.
   not a security boundary.** It does not parse SQL: `SELECT … INTO OUTFILE`, `SELECT` of a
   function with side effects, or Postgres `EXPLAIN ANALYZE DELETE …` all pass without `--write`.
   Leading comments and any backslash (client commands such as `\!`, `\g`, `\copy`) need `--write`.
-- Output is the client's own, not JSON: MariaDB prints tab-separated rows with a header, Valkey
-  prints raw replies, `psql` prints its aligned table.
+- Without `--users`, output is the client's own, not JSON: MariaDB prints tab-separated rows with
+  a header, Valkey prints raw replies, `psql` prints its aligned table.
+- **`--users`** checks a MariaDB Datastore's accounts against its declared ones. The label lists
+  them as comma-separated `user@host` (the host is after the last `@` and, as MariaDB keeps it,
+  compared lowercase; the user keeps its case), e.g.
+  `homeops.db.users: "root@localhost,exporter@%"`; the comment above it says why each exists. It
+  reads `mysql.user` through the same in-container root login and reports **unexpected** users
+  (live, not declared) and **missing** ones (declared, not live). The image's own
+  `mariadb.sys@localhost` and `healthcheck@{localhost,127.0.0.1,::1}` are always ignored. Exit 0
+  when every checked Datastore matches, 1 on drift. Exit 2, before the Host is touched, for a named
+  Datastore without the label, a label that is malformed (an empty entry, no user or host,
+  whitespace, a duplicate), a labelled Service that is not MariaDB (Postgres and Valkey are out of
+  scope), `--users` with `-e` or `--write`, or no Datastore without `--users`.
 
 ## Lifecycle commands
 
@@ -316,7 +328,8 @@ a transport container on `metrics`:
 | 1 | A Host call failed (SSH unreachable, docker error, no container). `logs` returns `docker logs`' own exit code. |
 | 2 | Usage error before any Host call: bad arguments, unknown or ambiguous name, missing config. Also a refusal after a read: `snapshot release` of a snapshot that is not a Rollback Snapshot, or `volume move` with a precondition that fails. |
 
-`exec` with a command and `db -e` return the remote command's own exit code.
+`exec` with a command and `db -e` return the remote command's own exit code. `db --users` returns 1 when
+a Datastore's users differ from its label.
 
 Errors go to stderr as `hops: error: …`, including with `--json`.
 
@@ -699,6 +712,30 @@ several Services, `container` is the `container_name` (else `null`), and all thr
   before the first run. Its `state` is TrueNAS's, e.g. `FINISHED`, `RUNNING`, `PENDING` or `ERROR`
   for snapshot tasks and `SUCCESS`, `RUNNING`, `FAILED` or `ABORTED` for Cloud Sync. A snapshot task
   records one time: `started_at` while `RUNNING`, else `finished_at`. Times are UTC.
+
+### `db --users --json`
+
+```json
+{
+  "datastores": [
+    {
+      "stack": "vaultwarden", "service": "mariadb", "container": "vaultwarden-mariadb",
+      "declared": ["root@localhost", "exporter@%", "vaultwardenuser@%"],
+      "live": ["exporter@%", "healthcheck@127.0.0.1", "…", "root@%", "root@localhost", "vaultwardenuser@%"],
+      "unexpected": ["root@%"],
+      "missing": []
+    }
+  ],
+  "drift": true
+}
+```
+
+- `datastores`: one entry for each checked Datastore, in Stack then Service order.
+- `declared`: the label's entries, in its order, hosts lowercased. `live`: every `user@host` in
+  `mysql.user` (read as hex and decoded as UTF-8, else Latin-1, so no client escaping), sorted, the
+  ignored system accounts included.
+- `unexpected`, `missing`: the drift, sorted, without the ignored system accounts.
+- `drift`: `true` when any Datastore has unexpected or missing users (the exit code is then 1).
 
 ## Strays
 
