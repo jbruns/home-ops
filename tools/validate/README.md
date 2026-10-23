@@ -66,8 +66,12 @@ The image config is fetched anonymously from its registry (Docker Hub, GHCR, lsc
 and other standard registries) by the pinned digest. For an index, the `linux/amd64` image is
 used. Results are cached by digest in `${XDG_CACHE_HOME:-~/.cache}/home-ops/validate/image-volumes/`;
 CI restores that cache keyed on the digests in `tn/` and `templates/`. Rate limits and server
-errors are retried twice. After that, a registry failure fails the check and names the image. An
-image without a digest is skipped with a warning (it already fails the digest item).
+errors are retried twice. After that, a registry failure fails the check and names the image.
+validate cannot inspect an image without a digest, or a Service whose `platform:` is not
+`linux/amd64`. Such a Service fails unless it carries a `baseline.exempt.anonymous-volumes` reason,
+and a digest Exemption alone does not cover it. A Service with `volumes_from` always fails, because
+validate does not follow what it inherits. Services behind a Compose profile are checked too
+(`--profile '*'`).
 
 ## Monitoring checks
 

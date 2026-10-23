@@ -15,8 +15,10 @@ Subcommands:
               tn/_baseline.yaml meets the Baseline or carries a baseline.exempt.<item> reason, and its
               routers follow ADR 0006 (names, health and Client Paths, Protected Probes). Every image
               VOLUME path (read from the registry by digest, cached) has a mount at that exact path
-              (Baseline item anonymous-volumes); every top-level volume has a name of its Stack
-              (or LEGACY_VOLUMES) and is external or labelled homeops.regenerable (ADR 0010)
+              (Baseline item anonymous-volumes; no digest or a platform other than linux/amd64 needs
+              its Exemption, and volumes_from fails); Services behind any profile are checked. Every
+              top-level volume has a name of its Stack (or LEGACY_VOLUMES) and is external or
+              labelled homeops.regenerable (ADR 0010)
   isolation   tn/doco-cd and tn/_baseline.yaml changes ship in their own PR
   monitoring  full config checks and behavioral rule tests with the images the Stacks deploy;
               Grafana provisioning boots, dashboard generator parity and PromQL/LogQL checks
@@ -344,9 +346,17 @@ def middlewares(labels: dict, router: str) -> list[str]:
     return [m.strip().split("@")[0] for m in raw.split(",") if m.strip()]
 
 
-def baseline_problems(name: str, svc: dict, uncovered: list[str] | None = None) -> tuple[list[str], list[str]]:
+@dataclass(frozen=True)
+class Uninspectable:
+    """Why validate cannot read a Service's image VOLUME paths; the item then needs an Exemption."""
+    why: str
+
+
+def baseline_problems(name: str, svc: dict, uncovered: list[str] | Uninspectable | None = None
+                      ) -> tuple[list[str], list[str]]:
     """Problems with one Baseline Service, and its Exemptions for the audit report. `uncovered` holds
-    the image's VOLUME paths with no mount; None when they could not be read (reported elsewhere)."""
+    the image's VOLUME paths with no mount, or why they cannot be inspected; None when the registry
+    could not be read (reported on its own)."""
     labels = svc.get("labels") or {}
     problems, exemptions = [], []
     for key, reason in labels.items():
@@ -354,11 +364,14 @@ def baseline_problems(name: str, svc: dict, uncovered: list[str] | None = None) 
             problems.append(f"{name}: {key} names no Baseline item ({', '.join(EXEMPT_ITEMS)})")
     checks = {item: met(svc) for item, met in BASELINE_ITEMS.items()}
     if uncovered is not None:
-        checks[ANONYMOUS_VOLUMES] = not uncovered
+        checks[ANONYMOUS_VOLUMES] = not isinstance(uncovered, Uninspectable) and not uncovered
     for item, met in checks.items():
         reason = str(labels.get(EXEMPT_PREFIX + item, "")).strip()
         if met and EXEMPT_PREFIX + item in labels:
             problems.append(f"{name}: stale Exemption {EXEMPT_PREFIX}{item}; the Service meets it")
+        elif not met and not reason and isinstance(uncovered, Uninspectable) and item == ANONYMOUS_VOLUMES:
+            problems.append(f"{name}: cannot inspect image VOLUMEs {uncovered.why}; mount each VOLUME path "
+                            f"and add a {EXEMPT_PREFIX}{item} reason")
         elif not met and not reason:
             detail = f" (image VOLUME paths with no mount: {', '.join(uncovered)})" if item == ANONYMOUS_VOLUMES else ""
             problems.append(f"{name}: misses Baseline item {item!r} without a {EXEMPT_PREFIX}{item} reason{detail}")
@@ -366,6 +379,8 @@ def baseline_problems(name: str, svc: dict, uncovered: list[str] | None = None) 
             exemptions.append(f"{name}: {item}: {reason}")
     for target in declared_anonymous(svc):
         problems.append(f"{name}: volume at {target} has no source (an anonymous volume); name it, bind it or make it a tmpfs")
+    if svc.get("volumes_from"):
+        problems.append(f"{name}: volumes_from unsupported by validate; mount the volumes by name instead")
     return problems + router_problems(svc.get("container_name") or name, labels), exemptions
 
 
@@ -418,7 +433,7 @@ def volume_labels(volume: dict) -> dict:
     labels = volume.get("labels") or {}
     if isinstance(labels, list):
         return dict(str(entry).partition("=")[::2] for entry in labels)
-    return labels
+    return {key: "" if value is None else value for key, value in labels.items()}
 
 
 def volume_problems(stack: str, volumes: dict, stack_names: set[str]) -> list[str]:
@@ -571,7 +586,7 @@ def check_compose() -> None:
                 for ref in sensitive_refs(compose):
                     if ref.is_relative_to(work) and not ref.exists():
                         ref.write_text("")
-            r = subprocess.run(["docker", "compose", "config", "--format", "json"], cwd=stack, capture_output=True, text=True)
+            r = subprocess.run(["docker", "compose", "--profile", "*", "config", "--format", "json"], cwd=stack, capture_output=True, text=True)
             noise = [line for line in r.stderr.splitlines() if line.strip()]
             template = stack.name.startswith("_template-")
             # Read before rendering, so a Stack that fails to render still declares its volumes.
@@ -631,13 +646,16 @@ def check_compose() -> None:
         print(f"  Exemption {x}")
 
 
-def anonymous_volume_check(stack: str, name: str, svc: dict, registry: Registry, read: dict, src: Path) -> list[str] | None:
-    """The Service's image VOLUME paths with no mount, or None when they cannot be read: a registry
-    failure fails the check by name, and an image without a digest has nothing to fetch by."""
+def anonymous_volume_check(stack: str, name: str, svc: dict, registry: Registry, read: dict,
+                           src: Path) -> list[str] | Uninspectable | None:
+    """The Service's image VOLUME paths with no mount; Uninspectable when validate cannot read them
+    (no digest, or another platform); None after a registry failure, which fails by image name."""
     image = str(svc.get("image", ""))
     if "@sha256:" not in image:
-        warn(f"{stack}: {name}: {image} has no digest, so its VOLUME paths are not checked")
-        return None
+        return Uninspectable("without a digest")
+    platform = svc.get("platform")
+    if platform and platform != "/".join(PLATFORM):
+        return Uninspectable(f"for platform {platform} (validate reads only {'/'.join(PLATFORM)})")
     if image not in read:
         try:
             read[image] = image_volumes(image, registry)

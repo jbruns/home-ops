@@ -125,6 +125,31 @@ def test_baseline_rejects_declared_anonymous_volume(validate):
     assert problems == ["app: volume at /data has no source (an anonymous volume); name it, bind it or make it a tmpfs"]
 
 
+def test_uninspectable_image_needs_an_anonymous_volumes_exemption(validate, tmp_path):
+    # A digest Exemption must not hide the anonymous-volume item.
+    svc = {**BASELINE_SVC, "image": "nginx:1", "labels": {"baseline.exempt.digest": "built locally"}}
+    uncovered = validate.anonymous_volume_check("app", "web", svc, None, {}, tmp_path)
+    problems, _ = validate.baseline_problems("web", svc, uncovered)
+    assert problems == ["web: cannot inspect image VOLUMEs without a digest; mount each VOLUME path and add a "
+                        "baseline.exempt.anonymous-volumes reason"]
+    svc["labels"]["baseline.exempt.anonymous-volumes"] = "image declares none"
+    assert validate.baseline_problems("web", svc, uncovered) == (
+        [], ["web: digest: built locally", "web: anonymous-volumes: image declares none"])
+
+
+def test_anonymous_volume_check_supports_only_linux_amd64(validate, tmp_path):
+    svc = {"image": APPRISE, "platform": "linux/arm64"}
+    uncovered = validate.anonymous_volume_check("app", "web", svc, None, {}, tmp_path)
+    problems, _ = validate.baseline_problems("web", {**BASELINE_SVC, **svc}, uncovered)
+    assert problems == ["web: cannot inspect image VOLUMEs for platform linux/arm64 (validate reads only "
+                        "linux/amd64); mount each VOLUME path and add a baseline.exempt.anonymous-volumes reason"]
+
+
+def test_baseline_rejects_volumes_from(validate):
+    problems, _ = validate.baseline_problems("web", {**BASELINE_SVC, "volumes_from": ["db"]}, uncovered=[])
+    assert problems == ["web: volumes_from unsupported by validate; mount the volumes by name instead"]
+
+
 def test_uncovered_image_volumes_need_a_mount_at_the_exact_path(validate):
     svc = {
         "volumes": [
@@ -150,6 +175,9 @@ VOLUME_STACKS = {"app", "edge", "monitoring"}
     ({"log": {"name": "edge_traefik_log", "external": True}}, []),
     ({"old": {"name": "media_app_config", "external": True}}, []),
     ({"data": {"external": True}}, ["app: volume data has no explicit name:"]),
+    ({"cache": {"name": "app_cache", "labels": {"homeops.regenerable": None}}},
+     ["app: volume app_cache must be external: true (it holds data) or carry a homeops.regenerable label "
+      "saying what regenerates it"]),
     ({"data": None}, ["app: volume data has no explicit name:",
                       "app: volume data must be external: true (it holds data) or carry a homeops.regenerable label "
                       "saying what regenerates it"]),
@@ -506,6 +534,20 @@ def test_compose_reports_every_rule(validate, repo, capsys, monkeypatch):
     assert "media_web_config" not in out
     assert "compose ok: monitoring" not in out
     assert "Baseline: " in capsys.readouterr().out
+
+
+@pytest.mark.skipif(not docker_compose_available(), reason="needs docker compose")
+def test_compose_checks_profile_gated_services(validate, repo, monkeypatch):
+    monkeypatch.setattr(validate, "REGISTRY_HTTP", Replay("dockerhub"))
+    monkeypatch.setattr(validate, "LEGACY_VOLUMES", set())
+    compose_fixture(repo, WEB + """
+        profiles: [debug]
+        labels: {startup-order: "2"}
+        tmpfs: [/attach, /config, /plugin]
+        volumes: [/scratch]
+    """)
+    validate.check_compose()
+    assert "web: volume at /scratch has no source (an anonymous volume)" in messages(validate)
 
 
 @pytest.mark.skipif(not docker_compose_available(), reason="needs docker compose")
