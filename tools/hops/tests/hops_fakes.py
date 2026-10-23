@@ -187,3 +187,59 @@ def container(name: str, *, project: str | None = None, service: str | None = No
         "Config": {"Image": image, "Labels": labels},
         "HostConfig": {"Memory": memory},
     }
+
+
+class FakeTrueNASError(Exception):
+    """Raised by a FakeTrueNAS handler to answer with a TrueNAS method error."""
+
+    def __init__(self, errname: str, reason: str):
+        super().__init__(reason)
+        self.errname, self.reason = errname, reason
+
+
+class FakeTrueNAS:
+    """The TrueNAS JSON-RPC endpoint, as the transport `hops.truenas.Client(connect=...)` uses.
+
+    `methods` maps a method name to a handler called with the request's params. It answers with the
+    handler's return value, or with a method error when the handler raises FakeTrueNASError. Every
+    request is recorded in `requests`; `notifications` are sent before each answer.
+    """
+
+    KEY = "fake-truenas-key"
+
+    def __init__(self, methods: dict | None = None):
+        self.methods = {"auth.login_with_api_key": lambda key: key == self.KEY, **(methods or {})}
+        self.requests: list[dict] = []
+        self.connects: list[dict] = []
+        self.notifications: list[dict] = []
+        self.outbox: list[str] = []
+        self.closed = False
+
+    def connect(self, url, *, verify, timeout):
+        self.connects.append({"url": url, "verify": verify, "timeout": timeout})
+        return self
+
+    def send(self, text: str) -> None:
+        import json
+
+        req = json.loads(text)
+        self.requests.append(req)
+        self.outbox += [json.dumps(n) for n in self.notifications]
+        handler = self.methods.get(req["method"])
+        try:
+            if handler is None:
+                raise FakeTrueNASError("ENOENT", f"Method {req['method']!r} not found")
+            answer = {"result": handler(*req["params"])}
+        except FakeTrueNASError as exc:
+            answer = {"error": {"code": -32001, "message": "Method call error",
+                                "data": {"error": 2, "errname": exc.errname, "reason": exc.reason}}}
+        self.outbox.append(json.dumps({"jsonrpc": "2.0", "id": req["id"], **answer}))
+
+    def recv(self) -> str:
+        return self.outbox.pop(0)
+
+    def close(self) -> None:
+        self.closed = True
+
+    def called(self) -> list[str]:
+        return [r["method"] for r in self.requests]

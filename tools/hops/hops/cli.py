@@ -9,6 +9,8 @@ from hops import commands, config
 from hops.declared import Declared
 from hops.errors import HopsError
 from hops.runner import Runner
+from hops.truenas import Client as TrueNASClient
+from hops.truenas import load_config as load_truenas
 
 DESCRIPTION = """\
 Ops and diagnostics for the Host, over SSH. hops changes runtime state only; declared state
@@ -20,8 +22,8 @@ Targets: stack/service; a bare Service name when unique; a bare Stack name for a
 class Context:
     """What a command needs, each built on first use: a name error never reads .env or opens SSH."""
 
-    def __init__(self, *, repo_root: Path | None = None, runner: Runner | None = None, env=None,
-                 stdout=None, stderr=None):
+    def __init__(self, *, repo_root: Path | None = None, runner: Runner | None = None,
+                 truenas: TrueNASClient | None = None, env=None, stdout=None, stderr=None):
         self.env = os.environ if env is None else env
         self.stdout = stdout or sys.stdout
         self.stderr = stderr or sys.stderr
@@ -29,6 +31,8 @@ class Context:
             self.repo_root = repo_root
         if runner is not None:
             self.runner = runner
+        if truenas is not None:
+            self.truenas = truenas
 
     @cached_property
     def repo_root(self) -> Path:
@@ -41,6 +45,11 @@ class Context:
     @cached_property
     def runner(self) -> Runner:
         return Runner(config.load_host(self.repo_root, self.env))
+
+    @cached_property
+    def truenas(self) -> TrueNASClient:
+        """The Host's TrueNAS middleware; a ConfigError when this host has none configured."""
+        return TrueNASClient(load_truenas(self.repo_root, self.env))
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -64,3 +73,6 @@ def main(argv: list[str] | None = None, *, ctx: Context | None = None) -> int:
         # Python flushes stdout again at exit; point it at devnull so that flush cannot fail.
         os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
         return 0
+    finally:
+        if "truenas" in vars(ctx):
+            ctx.truenas.close()
