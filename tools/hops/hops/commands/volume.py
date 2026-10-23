@@ -6,8 +6,10 @@ stopped containers that still reference <old> (the Deploy after merge recreates 
 name), and removes <old>. A Rollback Snapshot (ADR 0011) of the dataset holding the volumes is
 required. If anything fails part-way it stops, reports both volumes' state, and rolls nothing back.
 """
+from datetime import datetime, timezone
+
 from hops import output, snapshots, strays, volumes
-from hops.errors import ConfigError, HopsError, UsageError
+from hops.errors import ConfigError, HopsError, HostTimeout, UsageError
 
 HELP = "rename a volume: move its contents into a new volume, then remove the old one"
 
@@ -36,10 +38,13 @@ def refuse(message: str) -> None:
     raise UsageError(f"refusing to move: {message}")
 
 
+def declared_service(declared, c):
+    """The declared Service a container is, by its Compose labels or its container name; else None."""
+    return declared.by_compose_labels(c.labels) or next((s for s in declared.services if s.container == c.name), None)
+
+
 def describe(declared, c) -> dict:
-    """A container referencing <old>, with the declared Service it is (by Compose labels or container_name)."""
-    service = declared.by_compose_labels(c.labels) or next(
-        (s for s in declared.services if s.container == c.name), None)
+    service = declared_service(declared, c)
     return {"container": c.name, "id": c.id, "state": c.status, "service": service.key if service else None,
             "deliberate": strays.deliberate(c)}
 
@@ -51,7 +56,7 @@ def check_users(ctx, old: str, new: str) -> list:
     if running:
         refuse(f"{', '.join(running)} still mount{'s' if len(running) == 1 else ''} {old}; "
                "stop the Stack first with hops stop <stack> --for <duration>")
-    unknown = [c.name for c in on_old if strays.undeclared(ctx.declared, c) and not strays.deliberate(c)]
+    unknown = [c.name for c in on_old if not declared_service(ctx.declared, c) and not strays.deliberate(c)]
     if unknown:
         refuse(f"stopped container {', '.join(unknown)} mounts {old} but is no declared Service and not "
                "labelled startup-order=skip, so hops will not remove it; remove it yourself first")
@@ -69,19 +74,43 @@ def truenas(ctx):
         raise UsageError(f"refusing to move: a rename needs a Rollback Snapshot (ADR 0011), and {exc}") from None
 
 
-def snapshot_plan(ctx, args, dataset: str):
-    """The covering Rollback Snapshot (a record), or with --take-snapshot the plan for one (a dict)."""
+def last_stop(containers) -> tuple[datetime, str] | None:
+    """When the last of the containers stopped (to the second, as snapshot names have it), and which."""
+    stops = []
+    for c in containers:
+        try:
+            at = datetime.strptime(c.finished_at[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+        stops.append((at, c.name))
+    return max(stops, default=None)
+
+
+def snapshot_plan(ctx, args, dataset: str, on_old):
+    """The covering Rollback Snapshot (a record), or with --take-snapshot the plan for one (a dict).
+
+    A covering snapshot was taken after every container on <old> stopped, so it holds data at rest."""
     client = truenas(ctx)
     if args.take_snapshot:
         at = snapshots.now()
         return snapshots.plan_take(client, args.issue, dataset, snapshots.expiry(None, None, at.date()), at)
+    take = (f"take one now the Stack is stopped (hops snapshot take --issue {args.issue} --dataset {dataset}) "
+            "or pass --take-snapshot")
     found = [s for s in snapshots.rollback_snapshots(client)
              if s.issue == args.issue and s.dataset == dataset and not s.expired]
     if not found:
-        refuse(f"no unexpired Rollback Snapshot of {dataset} (which holds the volumes) for issue #{args.issue}; "
-               f"take one after stopping the Stack (hops snapshot take --issue {args.issue} --dataset {dataset}) "
-               "or pass --take-snapshot")
-    return found[-1]
+        refuse(f"no unexpired Rollback Snapshot of {dataset} (which holds the volumes) for issue #{args.issue}; {take}")
+    stop = last_stop(on_old)
+
+    def after_stop(s) -> bool:
+        taken = snapshots.taken_at(s.name)
+        return taken is not None and taken >= stop[0]
+    fresh = [s for s in found if after_stop(s)] if stop else found
+    if not fresh:
+        refuse(f"{', '.join(s.name for s in found)} {'was' if len(found) == 1 else 'were'} not taken after {stop[1]} "
+               f"stopped ({stop[0]:%Y-%m-%d %H:%M:%S}Z), so {'it' if len(found) == 1 else 'they'} may hold data "
+               f"mid-write; {take}")
+    return fresh[-1]
 
 
 def state(ctx, image: str, directory: str, old: str, new: str, probe=None) -> str:
@@ -102,8 +131,7 @@ def run_move(args, ctx) -> int:
     volumes.check_name(new)
     if old == new:
         raise UsageError("old and new are the same volume")
-    if not args.issue.isdigit():
-        raise UsageError(f"--issue {args.issue!r} is not an issue number")
+    snapshots.check_issue(args.issue)
     image = volumes.image(ctx.declared)
     warnings = [w for w in [volumes.convention(ctx.declared, new)] if w]
     for w in warnings:
@@ -131,15 +159,14 @@ def run_move(args, ctx) -> int:
         refuse(f"{directory} is on {probe.fstype or 'an unknown filesystem'}, not a ZFS dataset, "
                "so no Rollback Snapshot can cover it")
     dataset = probe.source
-    snap = snapshot_plan(ctx, args, dataset)
+    snap = snapshot_plan(ctx, args, dataset, on_old)
 
     report = {"old": old, "new": new, "issue": args.issue, "dataset": dataset, "entries": probe.old["entries"],
               "snapshot": None, "would_take": None, "created_new": new_volume is None,
               "containers": [describe(ctx.declared, c) for c in on_old], "warnings": warnings, "dry_run": args.dry_run,
               "moved": False}
     if isinstance(snap, dict):
-        report["would_take"] = {"name": f"{snap['dataset']}@{snap['name']}", "dataset": snap["dataset"],
-                                "issue": args.issue, "expires": snap["properties"][snapshots.EXPIRES]}
+        report["would_take"] = snapshots.would_take(snap)
     else:
         report["snapshot"] = snap.to_json()
     if args.dry_run:
@@ -167,18 +194,25 @@ def run_move(args, ctx) -> int:
             stopped(f"docker volume create {new}", problem)
     try:
         moved = volumes.move(ctx.runner, image, directory, old, new)
+    except HostTimeout as exc:
+        stopped("the move", f"{exc}; its container (label {volumes.LABEL}={old}) may still be running on the "
+                "Host, so wait for it to exit before trusting what follows")
     except HopsError as exc:
         stopped("the move", str(exc))
     if moved.error:
         stopped("the move", f"{moved.error} after {moved.moved} of {probe.old['entries']} entries", moved)
     if moved.old is None or moved.new is None or moved.old["entries"] or moved.new["entries"] != probe.old["entries"]:
         stopped("checking the move", f"expected {old} empty and {probe.old['entries']} entries in {new}", moved)
+    removed = []
     try:
-        if on_old:
-            ctx.runner.docker("rm", *(c.id for c in on_old))
+        for c in on_old:
+            ctx.runner.docker("rm", c.id)
+            removed.append(c.name)
         ctx.runner.docker("volume", "rm", old)
     except HopsError as exc:
-        stopped(f"removing {old}", str(exc), moved)
+        left = [c.name for c in on_old if c.name not in removed]
+        stopped(f"removing {old}", f"{exc} (containers removed: {', '.join(removed) or 'none'}; "
+                f"still there: {', '.join(left) or 'none'})", moved)
     report["moved"] = True
     return finish(ctx, args, report)
 

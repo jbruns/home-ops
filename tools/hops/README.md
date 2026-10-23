@@ -417,7 +417,10 @@ Class: **Destructive**. It removes `<old>` and the stopped containers that refer
   dataset, so `rename(2)` can move them.
 - An unexpired Rollback Snapshot for `--issue <n>` exists of that dataset (`luna/ix-apps/docker` on
   the Host). The dataset is read from the move container's `/proc/self/mountinfo`, not assumed.
-  `--take-snapshot` takes one instead, released by default in 7 days.
+  The snapshot must have been taken (by the time in its `hops-<issue>-<UTC time>` name) no earlier
+  than the second the last container on `<old>` stopped, so it holds the data at rest. A snapshot
+  taken while the Stack was still running is refused. `--take-snapshot` takes one instead,
+  released by default in 7 days.
   There is no override. Without TrueNAS configured, `volume move` refuses, because a rename moves a
   Stack's only live copy of its data (ADR 0011).
 - `<new>` should be named `<stack>_[<service>_]<purpose>` for a declared Stack. If it isn't,
@@ -448,8 +451,10 @@ Class: **Destructive**. It removes `<old>` and the stopped containers that refer
 
 **If it fails part-way**, it stops and exits 1. The message reports how many top-level entries
 each volume holds and names the Rollback Snapshot. It never rolls anything back on its own.
-Look, then either finish the move by hand or restore from the snapshot (see
-[Risky changes](#risky-changes)).
+A failure while removing names the containers already removed. If the move container outlives
+its 600-second ssh timeout, it may still be renaming; it carries the label
+`hops.volume-move=<old>`. Look, then either finish the move by hand or restore from the snapshot
+(see [Risky changes](#risky-changes)).
 
 ### Runbook
 

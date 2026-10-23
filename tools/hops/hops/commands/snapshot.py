@@ -46,13 +46,12 @@ def run_take(args, ctx) -> int:
     at = snapshots.now()
     expires = snapshots.expiry(args.expires, args.duration, at.date())
     plan = snapshots.plan_take(ctx.truenas, args.issue, args.dataset, expires, at)
-    full = f"{plan['dataset']}@{plan['name']}"
     if args.dry_run:
+        pending = snapshots.would_take(plan)
         if args.json:
-            output.print_json({"snapshot": None, "would_take": {"name": full, "dataset": plan["dataset"],
-                                                                 "issue": args.issue, "expires": expires}}, ctx.stdout)
+            output.print_json({"snapshot": None, "would_take": pending}, ctx.stdout)
         else:
-            ctx.stdout.write(f"Would take {full} (issue #{args.issue}, release by {expires}). Nothing taken.\n")
+            ctx.stdout.write(f"Would take {pending['name']} (issue #{args.issue}, release by {expires}). Nothing taken.\n")
         return 0
     taken = snapshots.take(ctx.truenas, plan)
     if args.json:

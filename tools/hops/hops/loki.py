@@ -99,11 +99,11 @@ def rfc3339(ns: int) -> str:
     return datetime.fromtimestamp(seconds, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S") + f".{frac:09d}Z"
 
 
-def transport_image(declared: Declared) -> str:
+def transport_image(declared: Declared, purpose: str = "logs --loki runs its image to reach Loki") -> str:
+    """The python image the monitoring Stack pins, present on the Host; hops runs it for ad-hoc work."""
     service = declared.get(*TRANSPORT)
     if not service or not service.image:
-        raise HopsError(f"{'/'.join(TRANSPORT)} is not declared with a pinned image; "
-                        "hops logs --loki runs its image to reach Loki")
+        raise HopsError(f"{'/'.join(TRANSPORT)} is not declared with a pinned image; hops {purpose}")
     return service.image.ref
 
 

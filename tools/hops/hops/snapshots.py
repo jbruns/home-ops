@@ -114,10 +114,20 @@ def snapshot_name(issue: str, at: datetime) -> str:
     return f"{PREFIX}{issue}-{at.strftime('%Y%m%dT%H%M%SZ')}"
 
 
-def plan_take(client, issue: str, dataset: str, expires: str, at: datetime) -> dict:
-    """What `take` would create, after checking the dataset exists and the name is free."""
+def check_issue(issue: str) -> None:
     if not re.fullmatch(r"\d+", issue):
         raise UsageError(f"--issue {issue!r} is not an issue number")
+
+
+def taken_at(name: str) -> datetime | None:
+    """When `take` made the snapshot, from its name (hops-<issue>-<UTC time>); None for any other name."""
+    m = re.fullmatch(rf"{PREFIX}\d+-(\d{{8}}T\d{{6}}Z)", name.split("@", 1)[-1])
+    return datetime.strptime(m[1], "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc) if m else None
+
+
+def plan_take(client, issue: str, dataset: str, expires: str, at: datetime) -> dict:
+    """What `take` would create, after checking the dataset exists and the name is free."""
+    check_issue(issue)
     try:
         found = client.call("zfs.resource.query", {"paths": [dataset], "properties": []})
     except TrueNASError as exc:  # TrueNAS raises for a path that does not exist
@@ -128,6 +138,12 @@ def plan_take(client, issue: str, dataset: str, expires: str, at: datetime) -> d
     if find(client, f"{dataset}@{name}"):
         raise HopsError(f"snapshot {dataset}@{name} already exists")
     return {"dataset": dataset, "name": name, "properties": {ISSUE: issue, EXPIRES: expires}}
+
+
+def would_take(plan: dict) -> dict:
+    """A plan as `--dry-run --json` prints it: name, dataset, issue and expires."""
+    return {"name": f"{plan['dataset']}@{plan['name']}", "dataset": plan["dataset"],
+            "issue": plan["properties"][ISSUE], "expires": plan["properties"][EXPIRES]}
 
 
 def take(client, plan: dict) -> RollbackSnapshot:

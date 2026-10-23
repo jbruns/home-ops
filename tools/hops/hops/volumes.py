@@ -14,7 +14,7 @@ import json
 import re
 from dataclasses import dataclass
 
-from hops import docker, loki
+from hops import docker, loki, strays
 from hops.declared import Declared
 from hops.docker import Container
 from hops.errors import HopsError, UsageError
@@ -155,7 +155,7 @@ def local_problem(volume: dict, directory: str) -> str | None:
 def run(runner: Runner, image: str, directory: str, mode: str, old: str, new: str):
     """SCRIPT in a throwaway container that mounts `directory` at ROOT (read-only for `check`)."""
     return runner.docker(
-        "run", "--rm", "--label", "startup-order=skip", "--label", f"{LABEL}={old}",
+        "run", "--rm", "--label", f"{strays.DELIBERATE_LABEL}={strays.DELIBERATE_VALUE}", "--label", f"{LABEL}={old}",
         "--log-driver", "none", "--network", "none", "--pull", "never", "--read-only",
         "--user", "0:0", "--cap-drop", "ALL", "--cap-add", "CHOWN", "--cap-add", "DAC_OVERRIDE",
         "--cap-add", "FOWNER",
@@ -182,12 +182,7 @@ def move(runner: Runner, image: str, directory: str, old: str, new: str) -> Prob
 
 
 def image(declared: Declared) -> str:
-    """The python image the monitoring Stack pins (as for logs --loki), present on the Host."""
-    service = declared.get(*loki.TRANSPORT)
-    if not service or not service.image:
-        raise HopsError(f"{'/'.join(loki.TRANSPORT)} is not declared with a pinned image; "
-                        "hops volume move runs its image")
-    return service.image.ref
+    return loki.transport_image(declared, "volume move runs its image")
 
 
 def users(runner: Runner, name: str) -> list[Container]:
