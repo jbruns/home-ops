@@ -145,9 +145,11 @@ A passthrough for reads that no other command covers, e.g.
   `system.version` and `pool.dataset.details`, and refuses everything else (exit 2) before
   connecting. The scoped key can create and delete its own API keys, so `api_key.*` writes are
   refused like any other write.
-- **Redaction.** A field whose name contains `credential`, `key`, `password`, `passwd`,
-  `passphrase`, `secret`, `token` or `salt` prints as `"[REDACTED]"` (`null` stays `null`). For
-  `cloudsync.credentials.*`, every field of `attributes`/`provider` except `type` is redacted too.
+- **Redaction.** A field whose name contains `credential`, `key`, `pass`, `pwd`, `bindpw`,
+  `secret`, `token`, `salt` or `hash` prints as `"[REDACTED]"` (`null` stays `null`). For
+  `cloudsync.credentials.*`, every field of `attributes`/`provider` except `type` is redacted too,
+  and for `kerberos.keytab.*` the keytab `file`. Free-form values, such as an app's settings from
+  `app.config`, are only redacted where their names match.
 - Output is the method's result as JSON, with or without `--json`.
 
 ### exec and db
@@ -548,7 +550,7 @@ Tests replay recorded registry exchanges from `tests/fixtures/registry/`. To re-
   TrueNAS-specific stays in `hops/truenas.py`. `call(method, *params)` returns the result;
   `job(method, *params)` calls a method that starts a job and waits for the job's result (polling
   `core.get_jobs`). Errors raise `hops.truenas.TrueNASError` with its `errname` (e.g. `EACCES`).
-  `truenas.redact(data)` masks credentials before printing. On a host without TrueNAS config,
+  `truenas.redact(data, method)` masks credentials before printing. On a host without TrueNAS config,
   using `ctx.truenas` raises a ConfigError.
 - Raise `hops.errors.UsageError` for bad input (exit 2) and `HopsError` for failures (exit 1).
 

@@ -7,10 +7,10 @@ raises alerts on the Host.
   Host has no TrueNAS for hops, and commands that need one fail with a ConfigError.
 - `Client(cfg).call(method, *params)` returns the method's result; `Client(cfg).job(...)` calls a
   method that starts a job and waits for the job's result. The client connects and logs in on first
-  use; use it as a context manager to close the connection.
+  use; `close()` ends the connection.
 - The API key travels only inside the login message: never in an argv or a log, and it is replaced
   by [REDACTED] in every error hops raises.
-- `redact(data)` masks credential-looking fields in results before they are printed.
+- `redact(data, method)` masks credential-looking fields in a method's result before it is printed.
 """
 import itertools
 import json
@@ -76,12 +76,6 @@ class Client:
         self._ids = itertools.count(1)
         self._ws: Transport | None = None
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        self.close()
-
     def close(self) -> None:
         if self._ws is not None:
             ws, self._ws = self._ws, None
@@ -122,11 +116,14 @@ class Client:
             self._ws.send(json.dumps({"jsonrpc": "2.0", "id": rid, "method": method, "params": params}))
             while True:  # skip notifications and anything else not answering this request
                 msg = json.loads(self._ws.recv())
-                if msg.get("id") == rid:
+                if isinstance(msg, dict) and msg.get("id") == rid:
                     break
         except HopsError as exc:
             self.close()
             raise type(exc)(self._scrub(f"{method}: {exc}")) from None
+        except ValueError:
+            self.close()
+            raise HopsError(f"TrueNAS {method}: the answer is not JSON") from None
         if "error" in msg:
             raise self._error(method, msg["error"])
         return msg.get("result")
@@ -181,28 +178,30 @@ def websocket_connect(url: str, *, verify: bool, timeout: float) -> Transport:
 
 
 # A field is a credential when its name contains one of these (case-insensitive).
-SECRET_NAMES = ("credential", "key", "password", "passwd", "passphrase", "secret", "token", "salt")
-# Fields holding a cloud credential's settings, where every value but `type` may be a secret.
+SECRET_NAMES = ("credential", "key", "pass", "pwd", "bindpw", "secret", "token", "salt", "hash")
+# Fields holding a cloud credential's settings (cloudsync.credentials.*): all but `type` may be secret.
 PROVIDER_FIELDS = ("attributes", "provider")
 
 
-def redact(data, *, provider: bool = False):
-    """A copy of a TrueNAS result with credential-looking values replaced by [REDACTED].
+def redact(data, method: str = ""):
+    """A copy of `method`'s result with credential-looking values replaced by [REDACTED]."""
+    provider = method.startswith("cloudsync.credentials.")
+    secret = SECRET_NAMES + (("file",) if method.startswith("kerberos.keytab.") else ())
 
-    `provider=True` (for cloudsync.credentials.*) also masks every field of a credential's
-    `attributes`/`provider` except its `type`.
-    """
-    if isinstance(data, list):
-        return [redact(v, provider=provider) for v in data]
-    if not isinstance(data, dict):
-        return data
-    out = {}
-    for k, v in data.items():
-        name = str(k).lower()
-        if v is not None and any(s in name for s in SECRET_NAMES):
-            out[k] = REDACTED
-        elif provider and name in PROVIDER_FIELDS and isinstance(v, dict):
-            out[k] = {pk: pv if pk == "type" else REDACTED for pk, pv in v.items()}
-        else:
-            out[k] = redact(v, provider=provider)
-    return out
+    def walk(x):
+        if isinstance(x, list):
+            return [walk(v) for v in x]
+        if not isinstance(x, dict):
+            return x
+        out = {}
+        for k, v in x.items():
+            name = str(k).lower()
+            if v is not None and any(s in name for s in secret):
+                out[k] = REDACTED
+            elif provider and name in PROVIDER_FIELDS and isinstance(v, dict):
+                out[k] = {pk: pv if pk == "type" else REDACTED for pk, pv in v.items()}
+            else:
+                out[k] = walk(v)
+        return out
+
+    return walk(data)

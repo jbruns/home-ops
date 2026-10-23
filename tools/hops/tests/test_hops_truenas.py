@@ -172,6 +172,17 @@ def test_call_redacts_credentials(hops_tn, server):
         {"id": 2, "name": "b2", "provider": {"type": "B2", "account": "[REDACTED]", "key": "[REDACTED]"}}]
 
 
+@pytest.mark.parametrize("method, result, shown", [
+    ("ups.config", {"monuser": "upsmon", "monpwd": "pw"}, {"monuser": "upsmon", "monpwd": "[REDACTED]"}),
+    ("mail.config", {"user": "me", "pass": "pw"}, {"user": "me", "pass": "[REDACTED]"}),
+    ("kerberos.keytab.query", [{"name": "k", "file": "a2V5"}], [{"name": "k", "file": "[REDACTED]"}]),
+])
+def test_call_redacts_secrets_with_terse_names(hops_tn, server, method, result, shown):
+    server.methods[method] = lambda: result
+    _, out, _ = hops_tn("truenas", "call", method)
+    assert json.loads(out) == shown
+
+
 def test_call_without_truenas_config_fails_clearly(repo, capsys):
     ctx = cli.Context(repo_root=repo, env={"HOME": "/h"})
     assert cli.main(["truenas", "call", "system.info"], ctx=ctx) == 2

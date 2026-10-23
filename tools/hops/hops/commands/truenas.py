@@ -9,6 +9,7 @@ HELP = "read-only TrueNAS middleware calls (JSON-RPC), for what other hops comma
 # Read methods by name: TrueNAS's conventions for reads, plus reads that don't follow them.
 READ_SUFFIXES = (".query", ".get_instance", ".config")
 READ_METHODS = {"system.info", "system.version", "pool.dataset.details"}
+READS = ", ".join(f"*{m}" for m in READ_SUFFIXES) + ", " + ", ".join(sorted(READ_METHODS))
 METHOD = re.compile(r"[a-z0-9_]+(\.[a-z0-9_]+)+")
 
 
@@ -17,9 +18,8 @@ def register(subparsers) -> None:
     sub = p.add_subparsers(dest="truenas_command", metavar="<command>", required=True)
     call = sub.add_parser(
         "call", help="call a read method and print its result, with credentials redacted",
-        description="Call a TrueNAS read method: *.query, *.get_instance, *.config, or "
-                    + ", ".join(sorted(READ_METHODS)) + ". Every other method is refused before "
-                    "anything is sent. Credential-looking fields are printed as " + truenas.REDACTED + ".")
+        description=f"Call a TrueNAS read method ({READS}). Every other method is refused before "
+                    f"anything is sent. Credential-looking fields are printed as {truenas.REDACTED}.")
     call.add_argument("method", help="e.g. system.info or pool.query")
     call.add_argument("params", nargs="*", metavar="json-param",
                       help='one JSON value per positional parameter, e.g. \'[["name","=","tank"]]\'')
@@ -33,8 +33,7 @@ def is_read(method: str) -> bool:
 
 def run(args, ctx) -> int:
     if not is_read(args.method):
-        raise UsageError(f"{args.method} is not a read method; hops truenas call only reads "
-                         f"(*.query, *.get_instance, *.config, {', '.join(sorted(READ_METHODS))})")
+        raise UsageError(f"{args.method} is not a read method; hops truenas call only reads ({READS})")
     params = []
     for text in args.params:
         try:
@@ -42,6 +41,5 @@ def run(args, ctx) -> int:
         except json.JSONDecodeError as exc:
             raise UsageError(f"parameter is not JSON: {text!r} ({exc.msg})") from None
     result = ctx.truenas.call(args.method, *params)
-    output.print_json(truenas.redact(result, provider=args.method.startswith("cloudsync.credentials.")),
-                      ctx.stdout)
+    output.print_json(truenas.redact(result, args.method), ctx.stdout)
     return 0

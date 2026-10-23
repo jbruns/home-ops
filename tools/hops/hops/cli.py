@@ -51,6 +51,11 @@ class Context:
         """The Host's TrueNAS middleware; a ConfigError when this host has none configured."""
         return TrueNASClient(load_truenas(self.repo_root, self.env))
 
+    def close(self) -> None:
+        """End connections a command opened."""
+        if "truenas" in vars(self):  # built (cached_property stores it on the instance)
+            self.truenas.close()
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="hops", description=DESCRIPTION,
@@ -74,5 +79,4 @@ def main(argv: list[str] | None = None, *, ctx: Context | None = None) -> int:
         os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
         return 0
     finally:
-        if "truenas" in vars(ctx):
-            ctx.truenas.close()
+        ctx.close()
