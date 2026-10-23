@@ -78,7 +78,7 @@ Every command in this table is **read-only**. Each takes `--json`.
 | `hops alerts` | Firing alerts (including silenced and inhibited ones) and active silences, from `amtool` in the alertmanager container |
 | `hops deploys [<stack>] [--status S] [--limit N]` | doco-cd's recent runs, newest first: when, trigger, status, the Stacks each run touched, and doco-cd's message (the error, or why it skipped: retry budget, pause). See [deploys](#deploys). |
 | `hops deploys <run-id>` | One run in detail |
-| `hops truenas call <method> [json-param…]` | The result of one TrueNAS read method, as JSON with credentials redacted. For what other commands lack. |
+| `hops truenas call <method> [json-param…]` | The result of one allowlisted TrueNAS read method (see [truenas call](#truenas-call)), as JSON with credentials redacted. For what other commands lack. |
 
 `alerts` authenticates without sending the password to this machine. The Host pipes Prometheus's
 Alertmanager password file (`/run/secrets/prometheus_password`) from the prometheus container
@@ -137,23 +137,28 @@ containers that have since been recreated or removed.
 
 ### truenas call
 
-A passthrough for reads that no other command covers, e.g.
-`hops truenas call pool.query '[["name","=","tank"]]' '{"select":["name","status"]}'`. Each
-`json-param` is one JSON value, passed as one positional parameter of the method.
+A passthrough for Host-hygiene reads that no other command covers, e.g.
+`hops truenas call pool.query '[["name","=","tank"]]' '{"order_by":["name"]}'`. Each
+`json-param` is one JSON value, passed as one positional parameter of the method. It fails
+closed: anything not listed here is refused (exit 2) before connecting.
 
-- **Read methods only.** It accepts `*.query`, `*.get_instance`, `*.config`, `system.info`,
-  `system.version` and `pool.dataset.details`, and refuses everything else (exit 2) before
-  connecting. The scoped key can create and delete its own API keys, so `api_key.*` writes are
-  refused like any other write.
-- **No free-form settings.** `app.*`, `virt.*` and `vm.*` are refused too: their results hold
-  app configuration, instance environment and VM arguments, where a secret can sit under any name.
-- **Query options.** A JSON object parameter may only use TrueNAS's query options (`extra`,
-  `order_by`, `select`, `count`, `get`, `offset`, `limit`, `force_sql_filters`), and `select`
-  takes field names only: a `[field, alias]` pair could print a secret under a harmless name.
-  Redaction then goes by the source field name (`select: ["provider.key"]` prints
-  `{"provider": {"key": "[REDACTED]"}}`).
-- **Redaction.** A field whose name contains `credential`, `key`, `pass`, `pwd`, `bindpw`,
-  `secret`, `token`, `salt` or `hash` prints as `"[REDACTED]"` (`null` stays `null`). For
+- **Read methods only:** `*.query`, `*.get_instance`, `*.config`, plus `system.info`,
+  `system.version`, `pool.dataset.details` and `alert.list`. The scoped key can create and delete
+  its own API keys, so `api_key.*` writes are refused like any other write.
+- **Allowed namespaces only.** The `*.query`/`*.get_instance`/`*.config` reads must be in one of:
+  `pool`, `pool.dataset`, `pool.snapshot`, `pool.snapshottask`, `pool.scrub`, `disk`, `boot`,
+  `boot.environment`, `replication`, `cloudsync` (tasks; `cloudsync.credentials` is refused),
+  `service` and `interface` (TrueNAS's API name for network interfaces). Each was checked against
+  TrueNAS 25.10's API schema for secret-bearing fields. Everything else is refused, for example
+  `alertservice` (webhook URLs), `snmp` (community strings), `tunable`, `user`, `group`,
+  `api_key`, `cronjob`, `ssh`, `app`, `virt` and `vm`. Widen the list here and in
+  `hops/commands/truenas.py` together, after checking the namespace's schema.
+- **Query options:** `order_by`, `count`, `get`, `offset` and `limit` only. `select` is refused: a
+  projection can drop the fields TrueNAS's own masking depends on (e.g. an alert service's `type`)
+  or rename a secret. Filter the output locally instead. `extra` is refused: it switches on
+  per-method data, such as `disk.query`'s SED passwords.
+- **Redaction**, as defense in depth behind the allowlist. A field whose name contains
+  `credential`, `key`, `pass`, `pwd`, `bindpw`, `secret`, `token`, `salt`, `hash` or `community` prints as `"[REDACTED]"` (`null` stays `null`). For
   `cloudsync.credentials.*`, every field of `attributes`/`provider` except `type` is redacted too,
   and for `kerberos.keytab.*` the keytab `file`. In every string, a URL's user name and password
   print as `scheme://[REDACTED]@host…`. Fields holding user-written scripts, commands and

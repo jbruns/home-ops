@@ -182,7 +182,8 @@ def websocket_connect(url: str, *, verify: bool, timeout: float) -> Transport:
 
 
 # A field is a credential when its name contains one of these (case-insensitive).
-SECRET_NAMES = ("credential", "key", "pass", "pwd", "bindpw", "secret", "token", "salt", "hash")
+SECRET_NAMES = ("credential", "key", "pass", "pwd", "bindpw", "secret", "token", "salt", "hash",
+                "community")
 # Fields (exact names, from TrueNAS's API schema) holding user-written scripts, commands, command
 # arguments or auxiliary config, which can hold a secret in any form. Masked when a string or list.
 FREE_TEXT = {

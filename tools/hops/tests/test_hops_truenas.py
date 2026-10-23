@@ -118,6 +118,13 @@ def test_plain_http_url_is_refused(tmp_path):
         truenas.load_config(tmp_path, env={"TRUENAS_URL": "http://tn.example", "HOPS_TRUENAS_API_KEY": KEY})
 
 
+def test_url_with_userinfo_is_refused_without_echoing_it(tmp_path):
+    with pytest.raises(ConfigError) as exc:
+        truenas.load_config(tmp_path, env={"TRUENAS_URL": "https://admin:hunter2@tn.example",
+                                           "HOPS_TRUENAS_API_KEY": KEY})
+    assert "user" in str(exc.value) and "hunter2" not in str(exc.value) and "admin" not in str(exc.value)
+
+
 # hops truenas call
 
 def test_call_prints_the_result_as_json(hops_tn):
@@ -128,15 +135,26 @@ def test_call_prints_the_result_as_json(hops_tn):
 
 def test_call_passes_json_params(hops_tn, server):
     server.methods["pool.query"] = lambda filters, options: [{"name": "tank"}]
-    code, out, _ = hops_tn("truenas", "call", "pool.query", '[["name","=","tank"]]', '{"select":["name"]}')
+    code, out, _ = hops_tn("truenas", "call", "pool.query", '[["name","=","tank"]]', '{"order_by":["name"],"limit":1}')
     assert code == 0
-    assert server.requests[-1]["params"] == [[["name", "=", "tank"]], {"select": ["name"]}]
+    assert server.requests[-1]["params"] == [[["name", "=", "tank"]], {"order_by": ["name"], "limit": 1}]
 
 
 def test_bad_json_param_is_a_usage_error(hops_tn, server):
     code, _, err = hops_tn("truenas", "call", "pool.query", "[name]")
     assert code == 2 and "not JSON" in err
     assert server.requests == []
+
+
+@pytest.mark.parametrize("method", [
+    "pool.query", "pool.get_instance", "pool.dataset.query", "pool.dataset.details", "pool.snapshot.query",
+    "pool.snapshottask.query", "pool.scrub.query", "disk.query", "boot.environment.query", "replication.query",
+    "cloudsync.query", "service.query", "interface.query", "alert.list", "system.info", "system.version",
+])
+def test_call_accepts_reads_in_allowed_namespaces(hops_tn, server, method):
+    server.methods[method] = lambda *params: []
+    code, _, err = hops_tn("truenas", "call", method)
+    assert (code, err) == (0, "")
 
 
 @pytest.mark.parametrize("method", [
@@ -151,36 +169,44 @@ def test_call_refuses_anything_but_a_read(hops_tn, server, method):
     assert server.connects == []  # refused before connecting
 
 
+@pytest.mark.parametrize("method", [
+    "alertservice.query", "snmp.config", "tunable.query", "user.query", "group.query", "api_key.query",
+    "cronjob.query", "ssh.config", "cloudsync.credentials.query", "app.query", "vm.query", "mail.config",
+    "network.configuration.config", "replication.config.config", "alert.query",
+])
+def test_call_refuses_namespaces_off_the_allowlist(hops_tn, server, method):
+    code, out, err = hops_tn("truenas", "call", method)
+    assert code == 2 and out == ""
+    assert "allowlist" in err and "README" in err
+    assert server.connects == []
+
+
+@pytest.mark.parametrize("options", [
+    '{"select": ["attributes.url"]}',  # drops `type`, which defeats TrueNAS's own masking
+    '{"select": [["provider.key", "name"]]}',  # renames a secret
+    '{"select": []}',
+    '{"extra": {"passwords": true}}',  # disk.query: include SED passwords
+    '{"selct": ["name"]}',
+])
+def test_call_refuses_projections_and_unknown_query_options(hops_tn, server, options):
+    code, out, err = hops_tn("truenas", "call", "disk.query", "[]", options)
+    assert code == 2 and out == ""
+    assert "query option" in err
+    assert server.connects == []
+
+
 def test_call_redacts_credentials(hops_tn, server):
     server.methods["cloudsync.query"] = lambda: [{
         "id": 1, "path": "/mnt/tank/a", "encryption_password": "pw", "encryption_salt": "salt",
         "credentials": {"id": 2, "provider": {"type": "B2", "account": "acct", "key": "k"}},
-        "attributes": {"bucket": "b", "folder": "/x"},
-        "api_key": None,
+        "attributes": {"bucket": "b", "folder": "/x"}, "pre_script": "run-backup.sh", "api_key": None,
     }]
-    server.methods["cloudsync.credentials.query"] = lambda: [
-        {"id": 2, "name": "b2", "provider": {"type": "B2", "account": "acct", "key": "k"}}]
-
     _, out, _ = hops_tn("truenas", "call", "cloudsync.query", "--json")
     assert json.loads(out) == [{
         "id": 1, "path": "/mnt/tank/a", "encryption_password": "[REDACTED]", "encryption_salt": "[REDACTED]",
-        "credentials": "[REDACTED]", "attributes": {"bucket": "b", "folder": "/x"},
+        "credentials": "[REDACTED]", "attributes": {"bucket": "b", "folder": "/x"}, "pre_script": "[REDACTED]",
         "api_key": None,
     }]
-    _, out, _ = hops_tn("truenas", "call", "cloudsync.credentials.query", "--json")
-    assert json.loads(out) == [
-        {"id": 2, "name": "b2", "provider": {"type": "B2", "account": "[REDACTED]", "key": "[REDACTED]"}}]
-
-
-@pytest.mark.parametrize("method, result, shown", [
-    ("ups.config", {"monuser": "upsmon", "monpwd": "pw"}, {"monuser": "upsmon", "monpwd": "[REDACTED]"}),
-    ("mail.config", {"user": "me", "pass": "pw"}, {"user": "me", "pass": "[REDACTED]"}),
-    ("kerberos.keytab.query", [{"name": "k", "file": "a2V5"}], [{"name": "k", "file": "[REDACTED]"}]),
-])
-def test_call_redacts_secrets_with_terse_names(hops_tn, server, method, result, shown):
-    server.methods[method] = lambda: result
-    _, out, _ = hops_tn("truenas", "call", method)
-    assert json.loads(out) == shown
 
 
 def test_call_without_truenas_config_fails_clearly(repo, capsys):
@@ -189,84 +215,46 @@ def test_call_without_truenas_config_fails_clearly(repo, capsys):
     assert "TrueNAS is not available on this host" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("params", [
-    ['[]', '{"select": [["provider.key", "name"]]}'],  # alias: would print the key as `name`
-    ['[]', '{"select": ["id", ["provider.key", "name"]]}'],
-    ['[]', '{"select": [["name"]]}'],
-    ['[]', '{"selct": ["name"]}'],  # not a query option: fail closed
-    ['2', '{"select": [["provider.key", "name"]]}'],
+# redact: defense in depth behind the allowlist
+
+@pytest.mark.parametrize("method, result, shown", [
+    ("ups.config", {"monuser": "upsmon", "monpwd": "pw"}, {"monuser": "upsmon", "monpwd": "[REDACTED]"}),
+    ("mail.config", {"user": "me", "pass": "pw"}, {"user": "me", "pass": "[REDACTED]"}),
+    ("snmp.config", {"location": "rack", "community": "public"}, {"location": "rack", "community": "[REDACTED]"}),
+    ("alertservice.query", [{"attributes": {"snmp": {"community": "c"}}}],
+     [{"attributes": {"snmp": {"community": "[REDACTED]"}}}]),
+    ("kerberos.keytab.query", [{"name": "k", "file": "a2V5"}], [{"name": "k", "file": "[REDACTED]"}]),
+    ("cloudsync.credentials.query", [{"name": "b2", "provider": {"type": "B2", "account": "a", "key": "k"}}],
+     [{"name": "b2", "provider": {"type": "B2", "account": "[REDACTED]", "key": "[REDACTED]"}}]),
 ])
-def test_call_refuses_query_options_that_rename_fields(hops_tn, server, params):
-    code, out, err = hops_tn("truenas", "call", "cloudsync.credentials.query", *params)
-    assert code == 2 and out == ""
-    assert "query option" in err
-    assert server.connects == []
+def test_redact_secrets_with_terse_names(method, result, shown):
+    assert truenas.redact(result, method) == shown
 
 
-def test_call_allows_plain_select_and_redacts_by_source_field(hops_tn, server):
-    server.methods["cloudsync.credentials.query"] = lambda filters, options: [
-        {"provider": {"key": "k"}, "name": "b2"}]
-    code, out, _ = hops_tn("truenas", "call", "cloudsync.credentials.query", "[]",
-                           '{"select": ["name", "provider.key"], "order_by": ["name"], "limit": 1}')
-    assert code == 0
-    assert json.loads(out) == [{"provider": {"key": "[REDACTED]"}, "name": "b2"}]
-
-
-def test_call_redacts_userinfo_in_any_url(hops_tn, server):
-    server.methods["network.configuration.config"] = lambda: {
+def test_redact_userinfo_in_any_url():
+    assert truenas.redact({
         "httpproxy": "http://user:p%40ss@proxy.lan:3128",
         "nested": [{"mirrors": ["https://bob:pw@reg.example/v2", "https://reg.example/v2"]}],
         "note": "see https://a@b.example and ftp://x:y@z/",
-    }
-    _, out, _ = hops_tn("truenas", "call", "network.configuration.config")
-    assert json.loads(out) == {
+    }) == {
         "httpproxy": "http://[REDACTED]@proxy.lan:3128",
         "nested": [{"mirrors": ["https://[REDACTED]@reg.example/v2", "https://reg.example/v2"]}],
         "note": "see https://[REDACTED]@b.example and ftp://[REDACTED]@z/",
     }
 
 
-@pytest.mark.parametrize("method", ["app.query", "app.config", "app.get_instance", "virt.instance.query",
-                                    "virt.global.config", "vm.query", "vm.device.query"])
-def test_call_refuses_methods_with_free_form_config(hops_tn, server, method):
-    code, out, err = hops_tn("truenas", "call", method)
-    assert code == 2 and out == ""
-    assert "free-form" in err
-    assert server.connects == []
-
-
-def test_url_with_userinfo_is_refused_without_echoing_it(tmp_path):
-    with pytest.raises(ConfigError) as exc:
-        truenas.load_config(tmp_path, env={"TRUENAS_URL": "https://admin:hunter2@tn.example",
-                                           "HOPS_TRUENAS_API_KEY": KEY})
-    assert "user" in str(exc.value) and "hunter2" not in str(exc.value) and "admin" not in str(exc.value)
-
-
-def test_call_redacts_user_written_scripts_and_commands_at_any_depth(hops_tn, server):
-    server.methods["cloudsync.query"] = lambda: [{
+def test_redact_user_written_scripts_and_commands_at_any_depth():
+    assert truenas.redact([{
         "id": 1, "pre_script": "run-backup.sh", "post_script": "", "args": "--b2-key x",
         "job": {"state": "SUCCESS", "description": None},
-    }]
-    server.methods["cronjob.query"] = lambda: [{"id": 2, "command": "backup --password x", "user": "root"}]
-    server.methods["initshutdownscript.query"] = lambda: [{"id": 3, "command": None, "script": "/mnt/a.sh"}]
-    server.methods["user.query"] = lambda: [{"username": "u", "sudo_commands": ["/bin/x"],
-                                             "sudo_commands_nopasswd": []}]
-    server.methods["rsynctask.query"] = lambda: [{"id": 4, "extra": ["--rsh=ssh -i k"]}]
-    server.methods["ups.config"] = lambda: {"shutdowncmd": "/bin/off", "options": "x", "optionsupsd": "y"}
-    server.methods["smb.config"] = lambda: {"smb_options": "z", "netbiosname": "tn"}
-    server.methods["sharing.smb.query"] = lambda: [{"name": "s", "auxsmbconf": "z"}]
-
-    def show(method):
-        return json.loads(hops_tn("truenas", "call", method)[1])
-
-    assert show("cloudsync.query") == [{
+        "tasks": [{"command": "backup --password x", "script": "/mnt/a.sh", "extra": ["--rsh=ssh -i k"],
+                   "sudo_commands": ["/bin/x"], "sudo_commands_nopasswd": [], "shutdowncmd": "/bin/off",
+                   "options": "x", "optionsupsd": "y", "smb_options": "z", "auxsmbconf": "z", "cmdline": None}],
+    }]) == [{
         "id": 1, "pre_script": "[REDACTED]", "post_script": "[REDACTED]", "args": "[REDACTED]",
-        "job": {"state": "SUCCESS", "description": None}}]
-    assert show("cronjob.query") == [{"id": 2, "command": "[REDACTED]", "user": "root"}]
-    assert show("initshutdownscript.query") == [{"id": 3, "command": None, "script": "[REDACTED]"}]
-    assert show("user.query") == [{"username": "u", "sudo_commands": "[REDACTED]",
-                                   "sudo_commands_nopasswd": "[REDACTED]"}]
-    assert show("rsynctask.query") == [{"id": 4, "extra": "[REDACTED]"}]
-    assert show("ups.config") == {"shutdowncmd": "[REDACTED]", "options": "[REDACTED]", "optionsupsd": "[REDACTED]"}
-    assert show("smb.config") == {"smb_options": "[REDACTED]", "netbiosname": "tn"}
-    assert show("sharing.smb.query") == [{"name": "s", "auxsmbconf": "[REDACTED]"}]
+        "job": {"state": "SUCCESS", "description": None},
+        "tasks": [{"command": "[REDACTED]", "script": "[REDACTED]", "extra": "[REDACTED]",
+                   "sudo_commands": "[REDACTED]", "sudo_commands_nopasswd": "[REDACTED]",
+                   "shutdowncmd": "[REDACTED]", "options": "[REDACTED]", "optionsupsd": "[REDACTED]",
+                   "smb_options": "[REDACTED]", "auxsmbconf": "[REDACTED]", "cmdline": None}],
+    }]
