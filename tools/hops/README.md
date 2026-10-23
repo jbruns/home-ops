@@ -48,7 +48,7 @@ through `tools/declared-containers` in the same checkout. Without installing, ru
   alerts on the Host. `HOPS_TRUENAS_API_KEY` belongs to the `homeops-agent` TrueNAS user, whose
   privilege roles are `READONLY_ADMIN`, `SNAPSHOT_WRITE` and `SNAPSHOT_DELETE`. The key goes only
   into the login message; errors print it as `[REDACTED]`. TLS is verified against the default CA
-  bundle; `HOPS_TRUENAS_INSECURE=1` opts out for a self-signed certificate. Without `TRUENAS_URL`
+  bundle; `HOPS_TRUENAS_INSECURE=1` opts out for a self-signed certificate. `TRUENAS_URL` must not contain a user name or password. Without `TRUENAS_URL`
   and `HOPS_TRUENAS_API_KEY`, commands that need TrueNAS fail with "TrueNAS is not available on
   this host" (exit 2).
 
@@ -145,11 +145,19 @@ A passthrough for reads that no other command covers, e.g.
   `system.version` and `pool.dataset.details`, and refuses everything else (exit 2) before
   connecting. The scoped key can create and delete its own API keys, so `api_key.*` writes are
   refused like any other write.
+- **No free-form settings.** `app.*`, `virt.*` and `vm.*` are refused too: their results hold
+  app configuration, instance environment and VM arguments, where a secret can sit under any name.
+- **Query options.** A JSON object parameter may only use TrueNAS's query options (`extra`,
+  `order_by`, `select`, `count`, `get`, `offset`, `limit`, `force_sql_filters`), and `select`
+  takes field names only: a `[field, alias]` pair could print a secret under a harmless name.
+  Redaction then goes by the source field name (`select: ["provider.key"]` prints
+  `{"provider": {"key": "[REDACTED]"}}`).
 - **Redaction.** A field whose name contains `credential`, `key`, `pass`, `pwd`, `bindpw`,
   `secret`, `token`, `salt` or `hash` prints as `"[REDACTED]"` (`null` stays `null`). For
   `cloudsync.credentials.*`, every field of `attributes`/`provider` except `type` is redacted too,
-  and for `kerberos.keytab.*` the keytab `file`. Free-form values, such as an app's settings from
-  `app.config`, are only redacted where their names match.
+  and for `kerberos.keytab.*` the keytab `file`. In every string, a URL's user name and password
+  print as `scheme://[REDACTED]@host…`. Other free-form strings (e.g. a cron job's command) are
+  printed as they are.
 - Output is the method's result as JSON, with or without `--json`.
 
 ### exec and db

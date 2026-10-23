@@ -187,3 +187,56 @@ def test_call_without_truenas_config_fails_clearly(repo, capsys):
     ctx = cli.Context(repo_root=repo, env={"HOME": "/h"})
     assert cli.main(["truenas", "call", "system.info"], ctx=ctx) == 2
     assert "TrueNAS is not available on this host" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("params", [
+    ['[]', '{"select": [["provider.key", "name"]]}'],  # alias: would print the key as `name`
+    ['[]', '{"select": ["id", ["provider.key", "name"]]}'],
+    ['[]', '{"select": [["name"]]}'],
+    ['[]', '{"selct": ["name"]}'],  # not a query option: fail closed
+    ['2', '{"select": [["provider.key", "name"]]}'],
+])
+def test_call_refuses_query_options_that_rename_fields(hops_tn, server, params):
+    code, out, err = hops_tn("truenas", "call", "cloudsync.credentials.query", *params)
+    assert code == 2 and out == ""
+    assert "query option" in err
+    assert server.connects == []
+
+
+def test_call_allows_plain_select_and_redacts_by_source_field(hops_tn, server):
+    server.methods["cloudsync.credentials.query"] = lambda filters, options: [
+        {"provider": {"key": "k"}, "name": "b2"}]
+    code, out, _ = hops_tn("truenas", "call", "cloudsync.credentials.query", "[]",
+                           '{"select": ["name", "provider.key"], "order_by": ["name"], "limit": 1}')
+    assert code == 0
+    assert json.loads(out) == [{"provider": {"key": "[REDACTED]"}, "name": "b2"}]
+
+
+def test_call_redacts_userinfo_in_any_url(hops_tn, server):
+    server.methods["network.configuration.config"] = lambda: {
+        "httpproxy": "http://user:p%40ss@proxy.lan:3128",
+        "nested": [{"mirrors": ["https://bob:pw@reg.example/v2", "https://reg.example/v2"]}],
+        "note": "see https://a@b.example and ftp://x:y@z/",
+    }
+    _, out, _ = hops_tn("truenas", "call", "network.configuration.config")
+    assert json.loads(out) == {
+        "httpproxy": "http://[REDACTED]@proxy.lan:3128",
+        "nested": [{"mirrors": ["https://[REDACTED]@reg.example/v2", "https://reg.example/v2"]}],
+        "note": "see https://[REDACTED]@b.example and ftp://[REDACTED]@z/",
+    }
+
+
+@pytest.mark.parametrize("method", ["app.query", "app.config", "app.get_instance", "virt.instance.query",
+                                    "virt.global.config", "vm.query", "vm.device.query"])
+def test_call_refuses_methods_with_free_form_config(hops_tn, server, method):
+    code, out, err = hops_tn("truenas", "call", method)
+    assert code == 2 and out == ""
+    assert "free-form" in err
+    assert server.connects == []
+
+
+def test_url_with_userinfo_is_refused_without_echoing_it(tmp_path):
+    with pytest.raises(ConfigError) as exc:
+        truenas.load_config(tmp_path, env={"TRUENAS_URL": "https://admin:hunter2@tn.example",
+                                           "HOPS_TRUENAS_API_KEY": KEY})
+    assert "user" in str(exc.value) and "hunter2" not in str(exc.value) and "admin" not in str(exc.value)

@@ -14,6 +14,7 @@ raises alerts on the Host.
 """
 import itertools
 import json
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -45,6 +46,9 @@ def load_config(repo_root: Path, env=None) -> TrueNASConfig:
     url = urlsplit(values["TRUENAS_URL"])
     if url.scheme != "https" or not url.netloc:
         raise ConfigError("TRUENAS_URL must be an https:// URL, e.g. https://truenas.example")
+    if "@" in url.netloc:
+        raise ConfigError("TRUENAS_URL must not contain a user name or password; "
+                          "hops logs in with HOPS_TRUENAS_API_KEY")
     return TrueNASConfig(url=f"wss://{url.netloc}/api/current", api_key=values["HOPS_TRUENAS_API_KEY"],
                          verify=values.get("HOPS_TRUENAS_INSECURE", "") not in ("1", "true", "yes"))
 
@@ -108,7 +112,7 @@ class Client:
             raise type(exc)(self._scrub(str(exc))) from None
         if self._rpc("auth.login_with_api_key", [self.cfg.api_key]) is not True:
             self.close()
-            raise HopsError(f"TrueNAS at {self.cfg.url} rejected HOPS_TRUENAS_API_KEY")
+            raise HopsError(self._scrub(f"TrueNAS at {self.cfg.url} rejected HOPS_TRUENAS_API_KEY"))
 
     def _rpc(self, method: str, params: list):
         rid = next(self._ids)
@@ -179,16 +183,21 @@ def websocket_connect(url: str, *, verify: bool, timeout: float) -> Transport:
 
 # A field is a credential when its name contains one of these (case-insensitive).
 SECRET_NAMES = ("credential", "key", "pass", "pwd", "bindpw", "secret", "token", "salt", "hash")
+# A URL's user name and password, e.g. http://user:pass@proxy:3128, in any string.
+URL_USERINFO = re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://)[^/\s?#]*@")
 # Fields holding a cloud credential's settings (cloudsync.credentials.*): all but `type` may be secret.
 PROVIDER_FIELDS = ("attributes", "provider")
 
 
 def redact(data, method: str = ""):
-    """A copy of `method`'s result with credential-looking values replaced by [REDACTED]."""
+    """A copy of `method`'s result with credential-looking values, and URL userinfo in any string,
+    replaced by [REDACTED]."""
     provider = method.startswith("cloudsync.credentials.")
     secret = SECRET_NAMES + (("file",) if method.startswith("kerberos.keytab.") else ())
 
     def walk(x):
+        if isinstance(x, str):
+            return URL_USERINFO.sub(rf"\1{REDACTED}@", x)
         if isinstance(x, list):
             return [walk(v) for v in x]
         if not isinstance(x, dict):
