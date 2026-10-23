@@ -56,5 +56,5 @@ volumes:
     external: true
   # Owned by the edge Stack
   traefik_log:
-    name: common_traefik_log
+    name: edge_traefik_log
     external: true

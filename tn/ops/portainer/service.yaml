@@ -57,5 +57,5 @@ services:
 
 volumes:
   portainer_data:
-    name: common_portainer_data
+    name: ops_portainer_data
     external: true

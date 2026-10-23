@@ -41,5 +41,6 @@ services:
 
 volumes:
   backup_cache:
-    name: common_backup_cache
-    external: true
+    name: ops_stack-back_cache
+    labels:
+      homeops.regenerable: "restic rebuilds its cache from the repository"
