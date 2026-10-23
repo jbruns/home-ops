@@ -67,4 +67,4 @@ def test_host_reports_pools_datasets_and_tasks(capsys):
     assert report["pools"] and all(p["status"] for p in report["pools"])
     assert {"docker", "restic"} <= {r for d in report["datasets"] for r in d["roles"]}
     assert {d["type"] for d in report["docker"]} >= {"images", "volumes"}
-    assert report["tasks"] is not None
+    assert report["rollback_snapshots"]["count"] >= 0 and report["tasks"] is not None

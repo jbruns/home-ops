@@ -3,15 +3,22 @@ import json
 from pathlib import Path
 
 import pytest
-from hops_fakes import FakeTrueNAS, FakeTrueNASError, container, write
+from datetime import datetime, timezone
 
-from hops import cli, truenas
+from hops_fakes import FakeTrueNAS, FakeTrueNASError, container, rollback, snap, write
+
+from hops import cli, snapshots, truenas
 
 FIXTURES = Path(__file__).parent / "fixtures" / "host"
 RECORDED = json.loads((FIXTURES / "truenas.json").read_text())
 SYSTEM_DF = (FIXTURES / "system_df.jsonl").read_text()
 CFG = truenas.TrueNASConfig(url="wss://tn.example/api/current", api_key=FakeTrueNAS.KEY)
 SECRET = "fake-leaked-secret"
+SNAPSHOTS = [
+    snap("luna/ix-apps/docker@luna-2026-10-22_23-00", used=4096),  # periodic: not a Rollback Snapshot
+    rollback("luna/ix-apps/docker@hops-637-20261015T120000Z", issue="637", expires="2026-10-22", used=3 * 2**30),
+    rollback("andromeda/media@hops-669-20261023T150000Z", issue="669", expires="2026-10-30", used=2**30),
+]
 
 STACK_BACK = {
     "tn/ops/compose.yaml": """
@@ -45,7 +52,13 @@ def recorded_methods() -> dict:
         "cloudsync.query": lambda *p: RECORDED["cloudsync.query"],
         "filesystem.statfs": lambda path: RECORDED["filesystem.statfs"][path],
         "zfs.resource.query": resource_query,
+        "pool.snapshot.query": lambda *p: SNAPSHOTS,
     }
+
+
+@pytest.fixture(autouse=True)
+def clock(monkeypatch):
+    monkeypatch.setattr(snapshots, "now", lambda: datetime(2026, 10, 23, 15, 0, tzinfo=timezone.utc))
 
 
 @pytest.fixture
@@ -95,6 +108,10 @@ def test_json_reports_pools_datasets_docker_and_tasks(run_host):
         "reclaimable": "36.53GB (59%)", "reclaimable_bytes": 36530000000, "reclaimable_percent": 59}
     assert [d["type"] for d in report["docker"]] == ["images", "containers", "volumes", "build_cache"]
     assert report["docker"][3]["reclaimable_percent"] is None
+    assert report["rollback_snapshots"] == {
+        "count": 2, "size_bytes": 4 * 2**30,
+        "expired": [{"name": "luna/ix-apps/docker@hops-637-20261015T120000Z", "dataset": "luna/ix-apps/docker",
+                     "issue": "637", "expires": "2026-10-22", "size": 3 * 2**30, "expired": True}]}
     assert report["tasks"] == [
         {"kind": "snapshot", "id": 1, "name": "luna-%Y-%m-%d_%H-%M", "source": "luna", "enabled": True,
          "last_run": {"state": "FINISHED", "started_at": None, "finished_at": "2026-10-23T06:00:00Z"}},
@@ -108,11 +125,13 @@ def test_json_reports_pools_datasets_docker_and_tasks(run_host):
 def test_plain_output_has_a_section_each(run_host):
     code, out, _ = run_host()
     assert code == 0
-    for heading in ("Pools", "Datasets", "Docker", "Tasks"):
+    for heading in ("Pools", "Datasets", "Docker", "Rollback Snapshots", "Tasks"):
         assert f"\n{heading}\n" in f"\n{out}"
     assert "andromeda  ONLINE" in out and "436.5 TiB" in out  # pool size, binary units
     assert "images" in out and "36.53GB (59%)" in out
     assert "cloudsync  3" in out and "SUCCESS" in out
+    assert "2 Rollback Snapshots, 4.0 GiB; 1 expired:" in out
+    assert "luna/ix-apps/docker@hops-637-20261015T120000Z  637    2026-10-22  3.0 GiB" in out
 
 
 def test_task_status_never_shows_credentials_scripts_or_job_output(run_host, server):
@@ -155,7 +174,7 @@ def test_without_truenas_only_docker_is_shown(run_host, host, server):
     code, out, err = run_host("--json", truenas_on=False)
     assert (code, err) == (0, "")
     report = json.loads(out)
-    assert (report["pools"], report["datasets"], report["tasks"]) == (None, None, None)
+    assert (report["pools"], report["datasets"], report["rollback_snapshots"], report["tasks"]) == (None,) * 4
     assert len(report["docker"]) == 4
     assert report["notes"] and "TrueNAS is not available on this host" in report["notes"][0]
     assert server.requests == []

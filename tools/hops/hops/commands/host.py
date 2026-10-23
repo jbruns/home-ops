@@ -2,10 +2,11 @@
 import json
 import re
 
-from hops import config, docker, output, truenas
+from hops import config, docker, output, snapshots, truenas
 from hops.errors import HopsError
 
-HELP = "the Host's pools, key datasets, Docker disk usage, and snapshot and Cloud Sync task status"
+HELP = ("the Host's pools, key datasets, Docker disk usage, Rollback Snapshots, and snapshot and "
+        "Cloud Sync task status")
 SETTING = "HOPS_HOST_DATASETS"
 # stack-back writes the restic repository to a bind mount; its image names the Service in any Stack.
 RESTIC_IMAGE = "lawndoc/stack-back"
@@ -94,6 +95,12 @@ def datasets(ctx, client, notes: list[str]) -> list[dict]:
     return out
 
 
+def rollback_summary(client) -> dict:
+    found = snapshots.rollback_snapshots(client)
+    return {"count": len(found), "size_bytes": sum(s.size or 0 for s in found),
+            "expired": [s.to_json() for s in found if s.expired]}
+
+
 def human(n: int | None) -> str | None:
     if n is None:
         return None
@@ -105,7 +112,8 @@ def human(n: int | None) -> str | None:
 
 def run(args, ctx) -> int:
     notes: list[str] = []
-    report = {"pools": None, "datasets": None, "docker": docker_usage(ctx.runner), "tasks": None, "notes": notes}
+    report = {"pools": None, "datasets": None, "docker": docker_usage(ctx.runner), "rollback_snapshots": None,
+              "tasks": None, "notes": notes}
     try:
         client = ctx.truenas
     except truenas.Unavailable as exc:
@@ -114,6 +122,7 @@ def run(args, ctx) -> int:
     if client is not None:
         report["pools"] = truenas.pools(client)
         report["datasets"] = datasets(ctx, client, notes)
+        report["rollback_snapshots"] = rollback_summary(client)
         report["tasks"] = truenas.tasks(client)
     if args.json:
         output.print_json(report, ctx.stdout)
@@ -125,22 +134,31 @@ def run(args, ctx) -> int:
 def show(report: dict, out) -> None:
     sections = []
     if report["pools"] is not None:
-        sections.append(("Pools", ["POOL", "STATUS", "SIZE", "ALLOCATED", "FREE", "USED"], [
+        sections.append(("Pools", None, ["POOL", "STATUS", "SIZE", "ALLOCATED", "FREE", "USED"], [
             [p["name"], p["status"], human(p["size_bytes"]), human(p["allocated_bytes"]), human(p["free_bytes"]),
              None if p["used_percent"] is None else f"{p['used_percent']}%"] for p in report["pools"]]))
     if report["datasets"] is not None:
-        sections.append(("Datasets", ["DATASET", "ROLE", "USED", "AVAILABLE", "SNAPSHOTS", "QUOTA"], [
+        sections.append(("Datasets", None, ["DATASET", "ROLE", "USED", "AVAILABLE", "SNAPSHOTS", "QUOTA"], [
             [d["name"], ",".join(d["roles"]), human(d["used_bytes"]), human(d["available_bytes"]),
              human(d["snapshots_bytes"]), human(d["quota_bytes"])] for d in report["datasets"]]))
-    sections.append(("Docker", ["TYPE", "TOTAL", "ACTIVE", "SIZE", "RECLAIMABLE"], [
+    sections.append(("Docker", None, ["TYPE", "TOTAL", "ACTIVE", "SIZE", "RECLAIMABLE"], [
         [d["type"], d["total"], d["active"], d["size"], d["reclaimable"]] for d in report["docker"]]))
+    rollback = report["rollback_snapshots"]
+    if rollback is not None:
+        summary = (f"{rollback['count']} Rollback Snapshots, {human(rollback['size_bytes'])}; "
+                 f"{len(rollback['expired'])} expired" + (":" if rollback["expired"] else ""))
+        sections.append(("Rollback Snapshots", summary, ["NAME", "ISSUE", "EXPIRES", "SIZE"], [
+            [s["name"], s["issue"], s["expires"], human(s["size"])] for s in rollback["expired"]]))
     if report["tasks"] is not None:
-        sections.append(("Tasks", ["KIND", "ID", "NAME", "SOURCE", "ENABLED", "LAST RUN", "STARTED", "FINISHED"], [
+        sections.append(("Tasks", None, ["KIND", "ID", "NAME", "SOURCE", "ENABLED", "LAST RUN", "STARTED", "FINISHED"], [
             [t["kind"], t["id"], t["name"], t["source"], "yes" if t["enabled"] else "no",
              *([t["last_run"]["state"], t["last_run"]["started_at"], t["last_run"]["finished_at"]]
                if t["last_run"] else [None, None, None])] for t in report["tasks"]]))
-    for i, (title, headers, rows) in enumerate(sections):
+    for i, (title, summary, headers, rows) in enumerate(sections):
         out.write(("\n" if i else "") + title + "\n")
-        output.table(headers, rows, out)
+        if summary:
+            out.write(summary + "\n")
+        if rows or not summary:
+            output.table(headers, rows, out)
     for note in report["notes"]:
         out.write(f"\nnote: {note}\n")

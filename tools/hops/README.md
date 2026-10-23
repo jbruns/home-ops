@@ -79,7 +79,7 @@ Every command in this table is **read-only**. Each takes `--json`.
 | `hops alerts` | Firing alerts (including silenced and inhibited ones) and active silences, from `amtool` in the alertmanager container |
 | `hops deploys [<stack>] [--status S] [--limit N]` | doco-cd's recent runs, newest first: when, trigger, status, the Stacks each run touched, and doco-cd's message (the error, or why it skipped: retry budget, pause). See [deploys](#deploys). |
 | `hops deploys <run-id>` | One run in detail |
-| `hops host` | Pools, key datasets, `docker system df`, and the last run of each periodic snapshot and Cloud Sync task (see [host](#host)) |
+| `hops host` | Pools, key datasets, `docker system df`, Rollback Snapshots, and the last run of each periodic snapshot and Cloud Sync task (see [host](#host)) |
 | `hops truenas call <method> [json-param…]` | The result of one allowlisted TrueNAS read method (see [truenas call](#truenas-call)), as JSON with credentials redacted. For what other commands lack. |
 
 `alerts` authenticates without sending the password to this machine. The Host pipes Prometheus's
@@ -150,6 +150,8 @@ containers that have since been recreated or removed.
   found is skipped with a note.
 - **Docker:** `docker system df`: images, containers, volumes and build cache, with what is
   reclaimable.
+- **Rollback Snapshots:** how many, their total size, and the expired ones, from the same listing
+  as `hops snapshot list` (`hops.snapshots.rollback_snapshots`).
 - **Tasks:** each periodic snapshot task and Cloud Sync task, with what it covers and its last run's
   state and times. **Status only.** Cloud Sync tasks carry credentials, scripts, rclone arguments
   and job logs, so `hops host` builds each task from named fields only (`id`, the naming schema or
@@ -539,6 +541,13 @@ several Services, `container` is the `container_name` (else `null`), and all thr
     {"type": "images", "total": 107, "active": 50, "size": "61.48GB", "size_bytes": 61480000000,
      "reclaimable": "36.53GB (59%)", "reclaimable_bytes": 36530000000, "reclaimable_percent": 59}
   ],
+  "rollback_snapshots": {
+    "count": 2, "size_bytes": 4294967296,
+    "expired": [
+      {"name": "luna/ix-apps/docker@hops-637-20261015T120000Z", "dataset": "luna/ix-apps/docker",
+       "issue": "637", "expires": "2026-10-22", "size": 3221225472, "expired": true}
+    ]
+  },
   "tasks": [
     {"kind": "cloudsync", "id": 3, "name": "…", "source": "/mnt/andromeda/docker-backups", "enabled": true,
      "last_run": {"state": "SUCCESS", "started_at": "2026-10-23T11:00:01Z", "finished_at": "2026-10-23T11:00:23Z"}}
@@ -547,12 +556,14 @@ several Services, `container` is the `container_name` (else `null`), and all thr
 }
 ```
 
-- `pools`, `datasets` and `tasks` are `null` without TrueNAS; `notes` then says why. `notes` also
+- `pools`, `datasets`, `rollback_snapshots` and `tasks` are `null` without TrueNAS; `notes` then says why. `notes` also
   explains anything skipped (a configured dataset that does not exist, no stack-back container).
 - `roles`: `docker`, `restic` and/or `configured`. `quota_bytes` is `null` when there is no quota.
 - `docker`: one entry per `docker system df` type: `images`, `containers`, `volumes`,
   `build_cache`. `size` and `reclaimable` are Docker's own text (decimal units); `*_bytes` parse
   it, so they are rounded. `reclaimable_percent` is `null` when Docker prints none.
+- `rollback_snapshots`: `size_bytes` sums each snapshot's `used`; `expired` lists those past their
+  release date, each as in [`snapshot list --json`](#rollback-snapshots).
 - `tasks`: `kind` is `snapshot` (periodic snapshot task: `name` is its naming schema, `source` its
   dataset) or `cloudsync` (`name` is its description, `source` its path). `last_run` is `null`
   before the first run. Its `state` is TrueNAS's, e.g. `FINISHED`, `RUNNING`, `PENDING` or `ERROR`
