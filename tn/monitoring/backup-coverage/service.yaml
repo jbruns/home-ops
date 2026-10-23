@@ -56,6 +56,9 @@ services:
 
 volumes:
   restic_cache:
+    name: monitoring_restic_cache
+    labels:
+      homeops.regenerable: "restic rebuilds its cache from the repository"
 
 # restic-exporter's repository password, stored encrypted in repo as <name>.sops.txt
 secrets:

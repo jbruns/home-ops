@@ -131,6 +131,9 @@ services:
 
 volumes:
   dependencies_sd:
+    name: monitoring_dependencies_sd
+    labels:
+      homeops.regenerable: "dependencies-render rewrites it from dependencies.yml at each start"
   prometheus_data:
     name: monitoring_prometheus_data
     external: true

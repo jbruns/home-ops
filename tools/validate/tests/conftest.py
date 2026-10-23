@@ -117,10 +117,17 @@ def repo(tmp_path):
     return root.resolve()
 
 
+def no_network(method, url, headers):
+    raise AssertionError(f"unit tests never reach a registry: {method} {url}")
+
+
 @pytest.fixture
-def validate(repo, monkeypatch):
-    """The validate module, pointed at the fixture repository, with no recorded failures."""
+def validate(repo, monkeypatch, tmp_path):
+    """The validate module, pointed at the fixture repository, with no recorded failures, an empty
+    image-config cache and no registry access."""
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    monkeypatch.setattr(validate_module, "REGISTRY_HTTP", no_network)
     monkeypatch.setattr(validate_module, "failures", [])
     monkeypatch.setattr(validate_module, "ROOT", validate_module.ROOT)
     monkeypatch.setattr(validate_module, "PATHS", dict(validate_module.PATHS))

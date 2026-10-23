@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from conftest import BASE_FILES, CIDRS, TOOL_DIR, commit, write
+from registry_fixtures import RECORDINGS, Replay, Response
 
 REPO_ROOT = TOOL_DIR.parents[1]
 SOPS_ONLY = "sops_version=3\n"
@@ -102,6 +103,68 @@ def test_baseline_stale_and_unknown_exemptions(validate):
     assert any("baseline.exempt.bogus names no Baseline item" in p for p in problems)
 
 
+def test_baseline_anonymous_volumes(validate):
+    assert validate.baseline_problems("app", dict(BASELINE_SVC), uncovered=[]) == ([], [])
+    problems, _ = validate.baseline_problems("app", dict(BASELINE_SVC), uncovered=["/config", "/plugin"])
+    assert problems == ["app: misses Baseline item 'anonymous-volumes' without a baseline.exempt.anonymous-volumes "
+                        "reason (image VOLUME paths with no mount: /config, /plugin)"]
+
+
+def test_baseline_anonymous_volumes_exemption(validate):
+    svc = {**BASELINE_SVC, "labels": {"baseline.exempt.anonymous-volumes": "image writes a scratch dir"}}
+    assert validate.baseline_problems("app", svc, uncovered=["/x"]) == ([], ["app: anonymous-volumes: image writes a scratch dir"])
+    problems, _ = validate.baseline_problems("app", svc, uncovered=[])
+    assert problems == ["app: stale Exemption baseline.exempt.anonymous-volumes; the Service meets it"]
+    # Not checked (registry outage, reported on its own): neither stale nor missing.
+    assert validate.baseline_problems("app", svc) == ([], [])
+
+
+def test_baseline_rejects_declared_anonymous_volume(validate):
+    svc = {**BASELINE_SVC, "volumes": [{"type": "volume", "target": "/data", "volume": {}}]}
+    problems, _ = validate.baseline_problems("app", svc)
+    assert problems == ["app: volume at /data has no source (an anonymous volume); name it, bind it or make it a tmpfs"]
+
+
+def test_uncovered_image_volumes_need_a_mount_at_the_exact_path(validate):
+    svc = {
+        "volumes": [
+            {"type": "volume", "source": "data", "target": "/data/"},
+            {"type": "bind", "source": "/srv", "target": "/srv"},
+            {"type": "tmpfs", "target": "/run"},
+            {"type": "volume", "target": "/anon"},
+        ],
+        "tmpfs": ["/attach:uid=1000,mode=0700", "/tmp"],
+    }
+    image = ["/data", "/srv", "/run", "/attach", "/tmp", "/anon", "/srv/sub", "/config"]
+    # A mount above a VOLUME path does not cover it: Docker still creates the anonymous volume there.
+    assert validate.uncovered_volumes(svc, image) == ["/anon", "/config", "/srv/sub"]
+
+
+VOLUME_STACKS = {"app", "edge", "monitoring"}
+
+
+@pytest.mark.parametrize("volumes,expected", [
+    ({"data": {"name": "app_data", "external": True}}, []),
+    ({"cache": {"name": "app_cache", "labels": {"homeops.regenerable": "rebuilt at start"}}}, []),
+    ({"cache": {"name": "app_cache", "labels": ["homeops.regenerable=rebuilt at start"]}}, []),
+    ({"log": {"name": "edge_traefik_log", "external": True}}, []),
+    ({"old": {"name": "media_app_config", "external": True}}, []),
+    ({"data": {"external": True}}, ["app: volume data has no explicit name:"]),
+    ({"data": None}, ["app: volume data has no explicit name:",
+                      "app: volume data must be external: true (it holds data) or carry a homeops.regenerable label "
+                      "saying what regenerates it"]),
+    ({"cache": {"name": "app_cache", "labels": {"homeops.regenerable": " "}}},
+     ["app: volume app_cache must be external: true (it holds data) or carry a homeops.regenerable label "
+      "saying what regenerates it"]),
+    ({"data": {"name": "web_data", "external": True}}, ["app: volume name web_data must start with app_ (ADR 0010)"]),
+    ({"log": {"name": "edge_log", "labels": {"homeops.regenerable": "x"}}},
+     ["app: volume name edge_log must start with app_ (ADR 0010)"]),
+])
+def test_volume_problems(validate, monkeypatch, volumes, expected):
+    monkeypatch.setattr(validate, "LEGACY_VOLUMES", {"media_app_config"})
+    assert validate.volume_problems("app", volumes, VOLUME_STACKS) == expected
+
+
 def test_router_names_and_rules(validate):
     labels = {
         "traefik.http.routers.app-https.rule": "Host(`a`)",
@@ -170,6 +233,44 @@ def test_probe_problems(validate):
     ]
     ok = {"traefik.http.routers.app-https.rule": "Host(`a`)", "probe.url": "https://a"}
     assert validate.probe_problems("app", ok, {"http_2xx"}) == []
+
+
+# --- image VOLUME paths (recorded registry exchanges) -------------------------------------------
+
+@pytest.mark.parametrize("name,volumes", [
+    ("dockerhub", ["/attach", "/config", "/plugin"]),  # what apprise mounts anonymously on the Host
+    ("dockerhub-single", []),
+    ("ghcr", ["/config"]),
+    ("lscr", ["/config"]),
+    ("quay", []),
+])
+def test_image_volumes_from_each_registry(validate, name, volumes):
+    http = Replay(name)
+    assert validate.image_volumes(RECORDINGS[name], validate.Registry(http)) == volumes
+
+
+def test_image_volumes_reads_the_linux_amd64_image_of_an_index(validate):
+    http = Replay("dockerhub")
+    validate.image_volumes(RECORDINGS["dockerhub"], validate.Registry(http))
+    # apprise's index lists amd64, arm64 and two attestation manifests; amd64 is fc45ea2c...
+    manifests = [url.rsplit("/", 1)[-1] for method, url in http.requests if "/manifests/" in url]
+    assert manifests[-1].startswith("sha256:fc45ea2c888f990c")
+
+
+def test_image_volumes_are_cached_by_digest(validate):
+    image = RECORDINGS["ghcr"]
+    validate.image_volumes(image, validate.Registry(Replay("ghcr")))
+    assert validate.image_volumes(image, validate.Registry(validate.REGISTRY_HTTP)) == ["/config"]
+
+
+def test_image_without_an_amd64_image_is_an_error(validate):
+    index = b'{"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"digest":"sha256:1","platform":{"os":"linux","architecture":"arm64"}}]}'
+
+    def http(method, url, headers):
+        return Response(200, {}, index)
+
+    with pytest.raises(validate.HopsError, match="has no linux/amd64 image"):
+        validate.image_volumes("registry.example/app:1@sha256:abc", validate.Registry(http))
 
 
 # --- secrets ----------------------------------------------------------------------------------
@@ -343,28 +444,52 @@ def docker_compose_available() -> bool:
     return subprocess.run(["docker", "compose", "version"], capture_output=True).returncode == 0
 
 
-@pytest.mark.skipif(not docker_compose_available(), reason="needs docker compose")
-def test_compose_reports_every_rule(validate, repo, capsys):
+APPRISE = RECORDINGS["dockerhub"]  # VOLUME /attach /config /plugin
+
+
+WEB = f"""
+    services:
+      web:
+        extends: {{file: ../../_baseline.yaml, service: baseline}}
+        image: {APPRISE}
+        healthcheck: {{test: ["CMD", "true"]}}
+        deploy: {{resources: {{limits: {{memory: 64M}}}}}}
+"""
+
+
+def compose_fixture(repo, service_yaml: str) -> None:
     shutil.copy(REPO_ROOT / "tn/_baseline.yaml", repo / "tn/_baseline.yaml")
     write(repo, {
         "tn/monitoring/blackbox-exporter/blackbox.yml": "modules:\n  http_2xx: {}\n",
-        "tn/app/web/service.yaml": """
-            services:
-              web:
-                extends: {file: ../../_baseline.yaml, service: baseline}
-                image: nginx:1@sha256:abc
-                env_file: [{path: secret.sops.env, format: raw}]
-                healthcheck: {test: ["CMD", "true"]}
-                deploy: {resources: {limits: {memory: 64M}}}
-                labels:
-                  startup-order: "2"
-                  traefik.http.routers.web-https.rule: Host(`a`)
-                  greeting: ${GREETING}
-              bare:
-                image: nginx:1
-        """,
+        "tn/app/web/service.yaml": service_yaml,
     })
     commit(repo)
+
+
+@pytest.mark.skipif(not docker_compose_available(), reason="needs docker compose")
+def test_compose_reports_every_rule(validate, repo, capsys, monkeypatch):
+    monkeypatch.setattr(validate, "REGISTRY_HTTP", Replay("dockerhub"))
+    monkeypatch.setattr(validate, "LEGACY_VOLUMES", {"media_web_config", "media_gone"})
+    compose_fixture(repo, WEB + """
+        env_file: [{path: secret.sops.env, format: raw}]
+        labels:
+          startup-order: "2"
+          traefik.http.routers.web-https.rule: Host(`a`)
+          greeting: ${GREETING}
+        tmpfs: [/attach]
+        volumes:
+          - config:/config
+          - legacy:/legacy
+          - /scratch
+      bare:
+        image: nginx:1
+    volumes:
+      config:
+        name: app_config
+      legacy:
+        name: media_web_config
+        external: true
+    """)
     validate.check_compose()
     out = messages(validate)
     assert "app: services without a valid startup-order label (0-3, ADR-0003): bare" in out
@@ -373,8 +498,62 @@ def test_compose_reports_every_rule(validate, repo, capsys):
     assert "app: services without restart: unless-stopped: bare" in out
     assert "app: env_file format is unsupported by doco-cd (use the default and single-quote values containing $): web" in out
     assert "app: Baseline (ADR 0007): bare: must extend tn/_baseline.yaml" in out
+    assert ("web: misses Baseline item 'anonymous-volumes' without a baseline.exempt.anonymous-volumes reason "
+            "(image VOLUME paths with no mount: /plugin)") in out
+    assert "web: volume at /scratch has no source (an anonymous volume)" in out
+    assert "app: volumes (ADR 0010): app: volume app_config must be external: true" in out
+    assert "volumes (ADR 0010): legacy name media_gone is no longer declared; remove it from LEGACY_VOLUMES" in out
+    assert "media_web_config" not in out
     assert "compose ok: monitoring" not in out
     assert "Baseline: " in capsys.readouterr().out
+
+
+@pytest.mark.skipif(not docker_compose_available(), reason="needs docker compose")
+def test_a_stack_that_fails_to_render_still_declares_its_legacy_volumes(validate, repo, monkeypatch):
+    monkeypatch.setattr(validate, "LEGACY_VOLUMES", {"media_web_config"})
+    compose_fixture(repo, WEB + """
+        depends_on: [missing]
+    volumes:
+      legacy:
+        name: media_web_config
+        external: true
+    """)
+    validate.check_compose()
+    assert "docker compose config failed" in messages(validate)
+    assert "no longer declared" not in messages(validate)
+
+
+@pytest.mark.skipif(not docker_compose_available(), reason="needs docker compose")
+def test_compose_fails_clearly_when_the_registry_is_down(validate, repo, monkeypatch):
+    def down(method, url, headers):
+        return validate.urllib_http(method, "http://127.0.0.1:9/unreachable", headers)
+
+    monkeypatch.setattr(validate, "REGISTRY_HTTP", down)
+    monkeypatch.setattr(validate, "LEGACY_VOLUMES", set())
+    compose_fixture(repo, WEB + """
+        labels: {startup-order: "2", greeting: "${GREETING}"}
+    """)
+    validate.check_compose()
+    assert messages(validate).startswith(
+        f"app: web: cannot read the image config of {APPRISE} for its VOLUME paths (anonymous volumes, ADR 0007): "
+        "registry request failed: GET http://127.0.0.1:9/unreachable")
+    assert "anonymous-volumes" not in messages(validate).split("ADR 0007): ", 1)[1]
+
+
+def test_registry_requests_retry_rate_limits_and_server_errors(validate):
+    replies = [Response(429, {"retry-after": "120"}), Response(503), Response(200, body=b"ok")]
+    sent, slept = [], []
+
+    def http(method, url, headers):
+        sent.append(url)
+        return replies[len(sent) - 1]
+
+    assert validate.patient(http, sleep=slept.append)("GET", "u", {}).body == b"ok"
+    assert slept == [30, 8]
+    replies[:] = [Response(503)] * 3
+    sent.clear()
+    assert validate.patient(http, sleep=slept.append)("GET", "u", {}).status == 503
+    assert len(sent) == 3
 
 
 # --- the real repository ----------------------------------------------------------------------
@@ -454,3 +633,8 @@ def test_monitoring_reports_stale_declared_containers_under_root(validate, repo,
 def test_configure_rejects_unknown_path(validate, repo):
     with pytest.raises(KeyError):
         validate.configure(repo, {"nope": "x"})
+
+
+def test_template_volumes_are_named_for_stack_app(validate):
+    # Templates are not Stacks yet, so "app" is not among the Stack names.
+    assert validate.volume_problems("app", {"app_config": {"name": "app_config", "external": True}}, {"edge"}) == []

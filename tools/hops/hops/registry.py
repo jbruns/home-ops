@@ -1,5 +1,5 @@
-"""A minimal, stdlib-only client for the registry v2 API: list an image's tags and resolve a tag's
-digest, anonymously, as Renovate does.
+"""A minimal, stdlib-only client for the registry v2 API: list an image's tags, resolve a tag's
+digest and read manifests and blobs, anonymously, as Renovate does.
 
 Works with Docker Hub (implicit `docker.io` and `library/`), GHCR, lscr.io (which hands out GHCR
 tokens) and any registry that uses the standard Bearer token challenge.
@@ -97,6 +97,26 @@ class Registry:
         resp = self._get(host, path, "GET", url, headers)
         self._check(resp, f"{repository}:{tag}", "manifest")
         return resp.headers.get("docker-content-digest") or "sha256:" + hashlib.sha256(resp.body).hexdigest()
+
+    def manifest(self, repository: str, reference: str) -> dict:
+        """The manifest or index a tag or digest names, parsed; `mediaType` falls back to the
+        Content-Type header for manifests that omit it."""
+        host, path = locate(repository)
+        url = f"https://{host}/v2/{path}/manifests/{urllib.parse.quote(reference, safe=':')}"
+        resp = self._get(host, path, "GET", url, {"Accept": MANIFEST_ACCEPT})
+        self._check(resp, f"{repository}@{reference}", "manifest")
+        doc = json.loads(resp.body)
+        doc.setdefault("mediaType", resp.headers.get("content-type", "").split(";")[0])
+        return doc
+
+    def blob(self, repository: str, digest: str) -> bytes:
+        """A blob by digest, checked against it (the registry may redirect to a CDN)."""
+        host, path = locate(repository)
+        resp = self._get(host, path, "GET", f"https://{host}/v2/{path}/blobs/{digest}", {})
+        self._check(resp, f"{repository}@{digest}", "blob")
+        if "sha256:" + hashlib.sha256(resp.body).hexdigest() != digest:
+            raise HopsError(f"{repository}@{digest}: blob does not match its digest")
+        return resp.body
 
     def _get(self, host: str, path: str, method: str, url: str, headers: dict[str, str]) -> Response:
         key = f"{host}/{path}"
