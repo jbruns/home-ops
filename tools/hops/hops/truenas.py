@@ -8,7 +8,8 @@ on the Host.
   Host has no TrueNAS for hops, and commands that need one fail with a ConfigError.
 - `Client(cfg).call(method, *params)` returns the method's result; `Client(cfg).job(...)` calls a
   method that starts a job and waits for the job's result. The client connects and logs in on first
-  use; `close()` ends the connection.
+  use; `close()` ends the connection. TrueNAS rate-limits logins (EBUSY), so a refused login is
+  retried on a new connection after each of LOGIN_BACKOFF's pauses before the error is raised.
 - The API key travels only inside the login message: never in an argv or a log, and it is replaced
   by [REDACTED] in every error hops raises.
 - `redact(data, method)` masks credential-looking fields in a method's result before it is printed.
@@ -29,6 +30,7 @@ REDACTED = "[REDACTED]"
 TIMEOUT = 30.0
 JOB_POLL = 1.0
 JOB_DONE = {"SUCCESS", "FAILED", "ABORTED"}
+LOGIN_BACKOFF = (2.0, 4.0, 8.0, 16.0, 30.0)  # seconds between logins refused with EBUSY: 60 s in all
 
 
 @dataclass(frozen=True)
@@ -112,11 +114,20 @@ class Client:
             self._sleep(JOB_POLL)
 
     def _open(self) -> None:
-        try:
-            self._ws = self._connect(self.cfg.url, verify=self.cfg.verify, timeout=self._timeout)
-        except HopsError as exc:
-            raise type(exc)(self._scrub(str(exc))) from None
-        if self._rpc("auth.login_with_api_key", [self.cfg.api_key]) is not True:
+        for pause in (*LOGIN_BACKOFF, None):
+            try:
+                self._ws = self._connect(self.cfg.url, verify=self.cfg.verify, timeout=self._timeout)
+            except HopsError as exc:
+                raise type(exc)(self._scrub(str(exc))) from None
+            try:
+                accepted = self._rpc("auth.login_with_api_key", [self.cfg.api_key])
+                break
+            except TrueNASError as exc:
+                self.close()
+                if exc.errname != "EBUSY" or pause is None:
+                    raise
+                self._sleep(pause)
+        if accepted is not True:
             self.close()
             raise HopsError(self._scrub(f"TrueNAS at {self.cfg.url} rejected HOPS_TRUENAS_API_KEY"))
 

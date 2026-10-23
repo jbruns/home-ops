@@ -4,12 +4,14 @@ The declared half is the PR changing the volume's `name:`. This creates <new>, r
 <old>/_data into it from one container that mounts Docker's volumes directory once, removes the
 stopped containers that still reference <old> (the Deploy after merge recreates them under the new
 name), and removes <old>. A Rollback Snapshot (ADR 0011) of the dataset holding the volumes is
-required. If anything fails part-way it stops, reports both volumes' state, and rolls nothing back.
+required, and doco-cd must be stopped: on each poll it Deploys every Stack that differs from declared
+state, a Stack stopped for the move included. If anything fails part-way it stops, reports both
+volumes' state, and rolls nothing back.
 """
 import re
 from datetime import datetime, timezone
 
-from hops import output, snapshots, strays, volumes
+from hops import docker, doco, output, snapshots, strays, volumes
 from hops.errors import ConfigError, HopsError, HostTimeout, UsageError
 
 # Docker's FinishedAt: RFC 3339 in UTC, to the nanosecond.
@@ -22,8 +24,8 @@ def register(subparsers) -> None:
     sub = p.add_subparsers(dest="volume_command", metavar="<command>", required=True)
     mv = sub.add_parser("move", help=HELP, description=(
         HELP + ". The runtime half of a rename (ADR 0010); the PR changing the volume's name: is the declared "
-        "half. Refuses unless every container mounting OLD is stopped, NEW is missing or empty, and a "
-        "Rollback Snapshot for --issue covers the dataset holding the volumes (or --take-snapshot takes one). "
+        "half. Refuses unless doco-cd and every container mounting OLD are stopped, NEW is missing or empty, "
+        "and a Rollback Snapshot for --issue covers the dataset holding the volumes (or --take-snapshot takes one). "
         "Stopped containers that mount OLD are removed so OLD can be; the Deploy recreates them. "
         "Runbook: tools/hops/README.md#renaming-a-volume."))
     mv.add_argument("old", help="the volume to move from; removed afterwards")
@@ -50,6 +52,21 @@ def describe(declared, c) -> dict:
     service = declared_service(declared, c)
     return {"container": c.name, "id": c.id, "state": c.status, "service": service.key if service else None,
             "deliberate": strays.deliberate(c)}
+
+
+def deployer(ctx):
+    """doco-cd's container, or None. On each poll doco-cd Deploys every Stack that differs from declared
+    state, so it would start a Stack stopped for the move."""
+    return docker.lookup(ctx.runner, ctx.declared.resolve_one(doco.DOCO_CD))
+
+
+def check_deployer(ctx):
+    """doco-cd's container, stopped (or None); refuses while it is active."""
+    c = deployer(ctx)
+    if c and c.status not in strays.REMOVABLE_STATES:
+        refuse(f"doco-cd ({c.name}, {c.status}) would Deploy the stopped Stack on its next poll; "
+               "pause it for the whole rename first with hops stop doco-cd --for <duration> --force")
+    return c
 
 
 def check_users(ctx, old: str, new: str) -> list:
@@ -132,12 +149,21 @@ def snapshot_plan(ctx, args, dataset: str, on_old):
     return fresh[-1]
 
 
-def late_consumers(ctx, old: str, new: str, on_old) -> list[str]:
+def run_of(c) -> tuple | None:
+    return c and (c.id, c.started_at, c.finished_at)
+
+
+def late_consumers(ctx, old: str, new: str, on_old, stopped_deployer) -> list[str]:
     """Containers active since the checks (a Deploy of the Stack, say): any on <old> that is not one of
     the stopped `on_old`, is no longer stopped, or has started or stopped since (it may have written
-    and exited again), and any running on <new>."""
+    and exited again), any running on <new>, and doco-cd's on the same terms as `stopped_deployer`."""
     known = {c.id: (c.started_at, c.finished_at) for c in on_old}
     late = []
+    c = deployer(ctx)
+    if c and c.status not in strays.REMOVABLE_STATES:
+        late.append(f"{c.name} ({c.status}, doco-cd)")
+    elif c and run_of(c) != run_of(stopped_deployer):
+        late.append(f"{c.name} ({c.status}, doco-cd ran since the checks)")
     for c in volumes.users(ctx.runner, old):
         if c.id not in known or c.status not in strays.REMOVABLE_STATES:
             late.append(f"{c.name} ({c.status})")
@@ -181,6 +207,7 @@ def run_move(args, ctx) -> int:
         problem = volume and volumes.local_problem(volume, directory)
         if problem:
             refuse(f"{volume['Name']}: {problem}")
+    stopped_deployer = check_deployer(ctx)
     on_old = check_users(ctx, old, new)
 
     probe = volumes.check(ctx.runner, image, directory, old, new)
@@ -230,7 +257,7 @@ def run_move(args, ctx) -> int:
     # Again just before the move, and after it before any cleanup: Docker cannot lock a volume, and a
     # Deploy landing now would start the Stack on it.
     try:
-        late = late_consumers(ctx, old, new, on_old)
+        late = late_consumers(ctx, old, new, on_old, stopped_deployer)
     except HopsError as exc:
         stopped("re-checking containers before the move", str(exc))
     if late:
@@ -246,7 +273,7 @@ def run_move(args, ctx) -> int:
     except HopsError as exc:
         stopped("the move", str(exc))
     try:
-        late = late_consumers(ctx, old, new, on_old)
+        late = late_consumers(ctx, old, new, on_old, stopped_deployer)
     except HopsError as exc:
         stopped("re-checking containers after the move", str(exc), moved)
     if late:
@@ -299,7 +326,8 @@ def finish(ctx, args, report: dict) -> int:
     ctx.stdout.write(
         f"Moved {n} top-level entries from {old} to {new}; removed containers: {containers}; removed {old}.\n"
         "Next:\n"
-        f"  1. Merge the PR that renames {old} to {new}; its Deploy recreates the Stack's containers.\n"
-        f"  2. Verify: hops status {' '.join(stacks) or '<stack>'}, and the Stack works as before.\n"
-        f"  3. Release the Rollback Snapshot: hops snapshot release {snap['name']}\n")
+        f"  1. Merge the PR that renames {old} to {new}.\n"
+        "  2. Start doco-cd: hops start doco-cd. Its Deploy of the merge recreates the Stack's containers.\n"
+        f"  3. Verify: hops status {' '.join(stacks) or '<stack>'}, and the Stack works as before.\n"
+        f"  4. Release the Rollback Snapshot: hops snapshot release {snap['name']}\n")
     return 0

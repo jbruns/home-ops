@@ -95,20 +95,25 @@ def pick(containers: list[Container]) -> Container | None:
     return max(containers, key=lambda c: (c.running, c.created), default=None)
 
 
-def find(runner: Runner, service: Service) -> Container:
-    """The Service's container: by container_name, else by its Compose labels."""
+def lookup(runner: Runner, service: Service) -> Container | None:
+    """The Service's container, or None when it has none: by container_name, else by its Compose labels."""
     if service.container_name:
         result = runner.docker("inspect", service.container_name, check=False)
         if result.returncode == 0:
             return Container.from_inspect(json.loads(result.stdout)[0])
         if "no such" not in result.stderr.lower():
             raise HopsError(f"docker inspect {service.container_name} failed: {result.stderr.strip()}")
-    else:
-        ids = runner.docker("ps", "-aq", "--no-trunc", "--filter", f"label={PROJECT}={service.stack}",
-                            "--filter", f"label={SERVICE}={service.name}").stdout.split()
-        found = pick(inspect(runner, *ids))
-        if found:
-            return found
+        return None
+    ids = runner.docker("ps", "-aq", "--no-trunc", "--filter", f"label={PROJECT}={service.stack}",
+                        "--filter", f"label={SERVICE}={service.name}").stdout.split()
+    return pick(inspect(runner, *ids))
+
+
+def find(runner: Runner, service: Service) -> Container:
+    """The Service's container: by container_name, else by its Compose labels."""
+    found = lookup(runner, service)
+    if found:
+        return found
     raise HopsError(f"{service.key} has no container on the Host (expected {service.container}); "
                     "see hops status")
 
