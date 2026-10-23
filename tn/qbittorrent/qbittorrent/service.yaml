@@ -89,5 +89,5 @@ services:
 
 volumes:
   qbittorrent_config:
-    name: media_qbittorrent_config
+    name: qbittorrent_config
     external: true

@@ -403,25 +403,9 @@ REGENERABLE_LABEL = "homeops.regenerable"
 # Names from before ADR 0010 (ADR 0004's prefixes), until each Stack's rename issue moves them and
 # removes its entries. The list only shrinks: an entry no Stack declares fails.
 LEGACY_VOLUMES = {
-    "asot-media_audiobookshelf_config", "asot-media_audiobookshelf_metadata",  # audiobookshelf
-    "media_autobrr_config",  # autobrr
-    "asot-media_calibre-web-automated_config",  # calibre-web-automated
     "common_crowdsec_config", "common_crowdsec_data", "common_crowdsec_log",  # edge
     "common_traefik_le", "common_traefik_log", "common_traefik_plugins-storage",  # edge
-    "media_emby_config",  # emby
-    "media_navidrome_data",  # navidrome
-    "media_nextpvr_buffer", "media_nextpvr_config",  # nextpvr
-    "home_ollama_data", "home_open-webui_data",  # open-webui
     "common_backup_cache", "common_portainer_data",  # ops
-    "asot-media_ownfoil_config",  # ownfoil
-    "media_plex_config", "media_plex_transcode",  # plex
-    "media_qbittorrent_config",  # qbittorrent
-    "media_radarr_config",  # radarr
-    "media_sabnzbd_config",  # sabnzbd
-    "asot-media_cwa-downloader_config",  # shelfmark
-    "media_sonarr_config",  # sonarr
-    "home_syncthing_data",  # syncthing
-    "media_tracearr_backups", "media_tracearr_data", "media_tracearr_postgres", "media_tracearr_redis",  # tracearr
 }
 # Templates are copied to tn/<stack>/ with `app` renamed, so their volumes are named for Stack `app`.
 TEMPLATE_STACK = "app"

@@ -92,7 +92,7 @@ services:
 volumes:
   # Created by the asot-media Stack; the explicit name keeps them across the move.
   calibre-web-automated_config:
-    name: asot-media_calibre-web-automated_config
+    name: calibre-web-automated_config
     external: true
 
 networks:

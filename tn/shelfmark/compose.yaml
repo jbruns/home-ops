@@ -135,7 +135,7 @@ services:
 volumes:
   # Created by the asot-media Stack; the explicit name keeps them across the move.
   cwa-downloader_config:
-    name: asot-media_cwa-downloader_config
+    name: shelfmark_config
     external: true
 
 networks:

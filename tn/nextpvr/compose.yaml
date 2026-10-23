@@ -63,11 +63,13 @@ services:
       - proxy
 
 volumes:
+  # Its contents are regenerable, but the image doesn't create the mount point with NextPVR's owner,
+  # so the volume is moved, not recreated, to keep its ownership.
   nextpvr_buffer:
-    name: media_nextpvr_buffer
+    name: nextpvr_buffer
     external: true
   nextpvr_config:
-    name: media_nextpvr_config
+    name: nextpvr_config
     external: true
 
 networks:

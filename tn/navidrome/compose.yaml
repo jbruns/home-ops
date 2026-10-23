@@ -61,7 +61,7 @@ services:
 
 volumes:
   navidrome_data:
-    name: media_navidrome_data
+    name: navidrome_data
     external: true
 
 networks:

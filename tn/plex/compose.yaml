@@ -137,10 +137,12 @@ services:
 
 volumes:
   plex_config:
-    name: media_plex_config
+    name: plex_config
     external: true
+  # Its contents are regenerable, but the image doesn't create the mount point with Plex's owner,
+  # so the volume is moved, not recreated, to keep its ownership.
   plex_transcode:
-    name: media_plex_transcode
+    name: plex_transcode
     external: true
 
 networks:

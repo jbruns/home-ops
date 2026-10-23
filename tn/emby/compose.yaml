@@ -91,7 +91,7 @@ services:
 
 volumes:
   emby_config:
-    name: media_emby_config
+    name: emby_config
     external: true
 
 networks:

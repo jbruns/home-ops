@@ -61,7 +61,7 @@ services:
 
 volumes:
   syncthing_data:
-    name: home_syncthing_data
+    name: syncthing_data
     external: true
 
 networks:
