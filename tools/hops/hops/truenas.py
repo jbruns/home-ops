@@ -193,6 +193,18 @@ FREE_TEXT = {
     "sudo_commands", "sudo_commands_nopasswd",  # user, group
     "smb_options", "auxsmbconf", "cmdline",  # smb, sharing.smb, process command lines
 }
+# A task's embedded `job` keeps only its status. Its logs, error, result and arguments can echo
+# whatever a script printed, credentials included; the other keys are dropped.
+JOB_FIELDS = ("id", "method", "state", "time_started", "time_finished")
+
+
+def job_status(job: dict) -> dict:
+    out = {k: job[k] for k in JOB_FIELDS if k in job}
+    if isinstance(job.get("progress"), dict) and "percent" in job["progress"]:
+        out["progress"] = {"percent": job["progress"]["percent"]}
+    return out
+
+
 # A URL's user name and password, e.g. http://user:pass@proxy:3128, in any string.
 URL_USERINFO = re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://)[^/\s?#]*@")
 # Fields holding a cloud credential's settings (cloudsync.credentials.*): all but `type` may be secret.
@@ -201,7 +213,7 @@ PROVIDER_FIELDS = ("attributes", "provider")
 
 def redact(data, method: str = ""):
     """A copy of `method`'s result with credential-looking values, user-written scripts and commands,
-    and URL userinfo in any string, replaced by [REDACTED]."""
+    and URL userinfo in any string, replaced by [REDACTED], and embedded jobs reduced to their status."""
     provider = method.startswith("cloudsync.credentials.")
     secret = SECRET_NAMES + (("file",) if method.startswith("kerberos.keytab.") else ())
 
@@ -215,7 +227,9 @@ def redact(data, method: str = ""):
         out = {}
         for k, v in x.items():
             name = str(k).lower()
-            if v is not None and any(s in name for s in secret):
+            if name == "job" and isinstance(v, dict):
+                out[k] = walk(job_status(v))
+            elif v is not None and any(s in name for s in secret):
                 out[k] = REDACTED
             elif name in FREE_TEXT and isinstance(v, (str, list)):
                 out[k] = REDACTED

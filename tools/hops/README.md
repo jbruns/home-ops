@@ -165,6 +165,10 @@ closed: anything not listed here is refused (exit 2) before connecting.
   auxiliary config are redacted too, at any depth, when they hold a string or list: `command`,
   `script`, `pre_script`, `post_script`, `args`, `extra`, `shutdowncmd`, `options`, `optionsupsd`,
   `sudo_commands`, `sudo_commands_nopasswd`, `smb_options`, `auxsmbconf` and `cmdline`.
+- **Embedded jobs.** A task's `job` object (any dict under a `job` key, at any depth, e.g. in
+  `cloudsync.query` or `replication.query`) keeps only `id`, `method`, `state`,
+  `progress.percent`, `time_started` and `time_finished`; its other keys (`logs_excerpt`, `error`,
+  `exception`, `result`, `arguments`, …) are dropped, since they can echo what a script printed.
 - Output is the method's result as JSON, with or without `--json`.
 
 ### exec and db

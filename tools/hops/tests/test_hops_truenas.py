@@ -252,9 +252,24 @@ def test_redact_user_written_scripts_and_commands_at_any_depth():
                    "options": "x", "optionsupsd": "y", "smb_options": "z", "auxsmbconf": "z", "cmdline": None}],
     }]) == [{
         "id": 1, "pre_script": "[REDACTED]", "post_script": "[REDACTED]", "args": "[REDACTED]",
-        "job": {"state": "SUCCESS", "description": None},
+        "job": {"state": "SUCCESS"},
         "tasks": [{"command": "[REDACTED]", "script": "[REDACTED]", "extra": "[REDACTED]",
                    "sudo_commands": "[REDACTED]", "sudo_commands_nopasswd": "[REDACTED]",
                    "shutdowncmd": "[REDACTED]", "options": "[REDACTED]", "optionsupsd": "[REDACTED]",
                    "smb_options": "[REDACTED]", "auxsmbconf": "[REDACTED]", "cmdline": None}],
     }]
+
+
+def test_call_reduces_embedded_jobs_to_their_status(hops_tn, server):
+    leak = "CLOUD_SYNC_KEY=fake-b2-key"
+    job = {"id": 9, "method": "cloudsync.sync", "arguments": [1, leak], "state": "FAILED",
+           "progress": {"percent": 40, "description": leak, "extra": None}, "result": leak,
+           "error": f"script failed: {leak}", "exception": leak, "exc_info": {"repr": leak},
+           "logs_excerpt": f"{leak}\n{leak}", "logs_path": "/var/log/jobs/9.log",
+           "time_started": {"$date": 1}, "time_finished": {"$date": 2}}
+    server.methods["cloudsync.query"] = lambda: [{"id": 1, "job": job, "nested": [{"job": dict(job)}]}]
+    _, out, _ = hops_tn("truenas", "call", "cloudsync.query")
+    assert "fake-b2-key" not in out
+    status = {"id": 9, "method": "cloudsync.sync", "state": "FAILED", "progress": {"percent": 40},
+              "time_started": {"$date": 1}, "time_finished": {"$date": 2}}
+    assert json.loads(out) == [{"id": 1, "job": status, "nested": [{"job": status}]}]
