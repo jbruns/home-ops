@@ -77,7 +77,8 @@ in a process argument.
 containers that have since been recreated or removed.
 
 - **Target:** `stack/service`, a bare Service name, or a bare Stack name for every Service in it
-  (a name that is both, such as `doco-cd`, means the Stack). The selector uses Alloy's `container`
+  (a name that is both means the Stack: `doco-cd` includes apprise, `doco-cd/doco-cd` does not).
+  The selector uses Alloy's `container`
   label and Docker's two streams, e.g. `{container="sonarr", logstream=~"stdout|stderr"}`. A
   `container_name` stays the same across recreations and across a Stack's Compose project being
   renamed (the `stack` label still holds old project names such as `arr`). A Service without one
@@ -89,7 +90,7 @@ containers that have since been recreated or removed.
 - **`--grep RE`** adds a LogQL line filter (`|~`, RE2 syntax).
 - **`--limit N`** (default 1000): the oldest N lines in the range. `hops` pages through
   `query_range` 5000 lines at a time (Loki's per-request cap). When it stops at the limit, it
-  says so on stderr. Use `doco-cd/doco-cd` for doco-cd's own lines; bare `doco-cd` adds apprise.
+  says so on stderr.
 - **Output:** unlike plain `hops logs`, each line starts with its time, as with
   `docker logs --timestamps`: `<time> <text>`, or `<time> <service> | <text>` when the target has
   several Services. `--json` is described [below](#logs---loki---json).
