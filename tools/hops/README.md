@@ -50,7 +50,7 @@ from running containers. An unknown or ambiguous name fails before anything touc
 - A bare Service name works when only one Stack declares it.
 - A bare Stack name: commands that take several targets (`status`) act on every Service in the
   Stack. Commands that take one Service (`inspect`, `logs`) accept it only if the Stack has
-  exactly one Service.
+  exactly one Service. `logs --loki` takes a Stack as every Service in it.
 - A name that is both a Stack and a Service, such as `nextcloud`, means the Stack for multi-target
   commands and the Service for single-Service commands. Write `nextcloud/nextcloud` to be explicit.
 
@@ -63,12 +63,39 @@ Every command in this table is **read-only**. Each takes `--json`.
 | `hops status [target…]` | For each declared Service: running or not, health, restart count, and **digest drift** (the container runs a different digest from the one this checkout pins: run from `main`, this means a Deploy did not apply). With no targets, it also lists running containers that no Stack declares. |
 | `hops inspect <service>` | Image, state, start time, last exit code, OOM-killed flag, memory usage against the limit, and the health-check log |
 | `hops logs <service> [--since D] [--tail N] [-f]` | `docker logs` with the options passed through. `-f` streams through `ssh -t`, until Ctrl-C. |
+| `hops logs <target> --loki [--since D] [--until D] [--grep RE] [--limit N]` | History from Loki, oldest first, which survives container recreation (see [Loki history](#loki-history)). `--query '<LogQL>'` replaces the target. |
 | `hops alerts` | Firing alerts (including silenced and inhibited ones) and active silences, from `amtool` in the alertmanager container |
 
 `alerts` authenticates without sending the password to this machine. The Host pipes Prometheus's
 Alertmanager password file (`/run/secrets/prometheus_password`) from the prometheus container
 into the alertmanager container. There, `sh` hands it to `amtool` on stdin, so it never appears
 in a process argument.
+
+### Loki history
+
+`hops logs --loki` reads the logs Alloy ships to Loki (14 days' retention), so it shows lines from
+containers that have since been recreated or removed.
+
+- **Target:** `stack/service`, a bare Service name, or a bare Stack name for every Service in it
+  (a name that is both, such as `doco-cd`, means the Stack). The selector uses Alloy's `container`
+  label and Docker's two streams, e.g. `{container="sonarr", logstream=~"stdout|stderr"}`. A
+  `container_name` stays the same across recreations and across a Stack's Compose project being
+  renamed (the `stack` label still holds old project names such as `arr`). A Service without one
+  matches every container Compose has given it: `doco-cd-doco-cd-[0-9]+`.
+- **`--query '<LogQL>'`** sends a log query instead, e.g. Traefik's access log:
+  `--query '{logstream="access"} | json | DownstreamStatus >= 500'`. Metric queries are refused.
+- **Range:** `--since` (default `1h`) and `--until` (default now) take a duration back from now
+  (`90s`, `2h`, `1h30m`, `7d`) or an ISO 8601 time (UTC unless it has an offset).
+- **`--grep RE`** adds a LogQL line filter (`|~`, RE2 syntax).
+- **`--limit N`** (default 1000): the oldest N lines in the range. `hops` pages through
+  `query_range` 5000 lines at a time (Loki's per-request cap). When it stops at the limit, it
+  says so on stderr.
+- **Output:** one line per entry, `<time> <text>`, or `<time> <service> | <text>` when the target
+  has several Services. `--json` is described [below](#logs---loki---json).
+- **Transport:** Loki has no auth and listens only on the `monitoring_default` network. Each page
+  is one `docker run --rm --label startup-order=skip --network monitoring_default --log-driver none
+  --pull never` of the image pinned for `monitoring/dependencies-render` (python), which fetches
+  the URL. `--log-driver none` keeps the response from being shipped back into Loki.
 
 ### exec and db
 
@@ -254,6 +281,26 @@ there is no memory limit.
 ```
 
 `lines` merges stdout and stderr in time order (`docker logs --timestamps`).
+
+### `logs --loki --json`
+
+```json
+{
+  "stack": "doco-cd", "service": "doco-cd", "container": null,
+  "query": "{container=~\"doco-cd-doco-cd-[0-9]+\", logstream=~\"stdout|stderr\"}",
+  "truncated": false,
+  "lines": [
+    {"time": "2026-10-18T00:01:20.526870147Z", "stream": "stderr", "text": "…",
+     "labels": {"container": "doco-cd-doco-cd-6", "logstream": "stderr", "service": "doco-cd",
+                "stack": "doco-cd", "tier": "warning", "…": "…"}}
+  ]
+}
+```
+
+The shape of `logs --json`, plus `query` (the LogQL sent), `truncated` (stopped at `--limit`;
+Loki may hold more) and each line's Loki stream `labels`. `service` is `null` for a Stack with
+several Services, `container` is the `container_name` (else `null`), and all three are `null` with
+`--query`. `stream` is the `logstream` label.
 
 ### `alerts --json`
 
