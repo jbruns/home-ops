@@ -77,14 +77,14 @@ scrape_configs:
   - job_name: redis
     scrape_interval: 90s
     static_configs:
-      - targets: ['redis-exporter:9121']
-        labels: {container: redis-exporter, stack: nextcloud, tier: info}
+      - targets: ['nextcloud-valkey-exporter:9121']
+        labels: {container: nextcloud-valkey-exporter, stack: nextcloud, tier: info}
 
   # mysqld_exporter per MariaDB; `datastore` names the Datastore it watches (DatastoreDown).
   - job_name: mysqld
     static_configs:
-      - targets: ['mariadb-exporter:9104']
-        labels: {container: mariadb-exporter, datastore: mariadb, stack: nextcloud, tier: info}
+      - targets: ['nextcloud-mariadb-exporter:9104']
+        labels: {container: nextcloud-mariadb-exporter, datastore: nextcloud-mariadb, stack: nextcloud, tier: info}
       - targets: ['vaultwarden-db-exporter:9104']
         labels: {container: vaultwarden-db-exporter, datastore: vaultwarden-db, stack: vaultwarden, tier: info}
 

@@ -284,7 +284,7 @@ tests:
   - name: DatastoreDown promotes exporter Info to Critical and carries the container name
     interval: 1m
     input_series:
-      - series: mysql_up{datastore="mariadb",container="mariadb-exporter",tier="info",stack="nextcloud"}
+      - series: mysql_up{datastore="nextcloud-mariadb",container="nextcloud-mariadb-exporter",tier="info",stack="nextcloud"}
         values: 0+0x2 1+0x2
     promql_expr_test:
       - expr: &datastore sum by (alertname, tier, stack, name) (ALERTS{alertname="DatastoreDown",alertstate="firing"})
@@ -293,7 +293,7 @@ tests:
       - expr: *datastore
         eval_time: 2m
         exp_samples:
-          - labels: '{alertname="DatastoreDown",tier="critical",stack="nextcloud",name="mariadb"}'
+          - labels: '{alertname="DatastoreDown",tier="critical",stack="nextcloud",name="nextcloud-mariadb"}'
             value: 1
       - expr: *datastore
         eval_time: 3m

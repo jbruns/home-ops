@@ -44,7 +44,7 @@ Every step is safe to re-run.
    `start` returns at once and leaves `run` in the background, so 60 s is plenty. `stop` may wait 30 s
    (`STARTUP_ORDER_STOP_WAIT`) for a boot run to give up, then runs one `docker stop` per level, each
    bounded by the longest stop grace period at that level: 10 s at levels 3, 2 and 0, 60 s at level 1
-   (`mariadb`, `vaultwarden-db`). That is 120 s at worst; 300 s leaves headroom (keep it at least 180 s). Raise it if a Service
+   (`nextcloud-mariadb`, `vaultwarden-db`). That is 120 s at worst; 300 s leaves headroom (keep it at least 180 s). Raise it if a Service
    gets a longer `stop_grace_period`.
 4. Remove the lock directory the old in-repo script used, once no old run is left:
    `pgrep -f startup-order.sh || rmdir /mnt/luna/homeops/startup/lock 2>/dev/null; true`.

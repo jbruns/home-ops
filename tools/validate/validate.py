@@ -410,7 +410,6 @@ LEGACY_VOLUMES = {
     "common_traefik_le", "common_traefik_log", "common_traefik_plugins-storage",  # edge
     "media_emby_config",  # emby
     "media_navidrome_data",  # navidrome
-    "home_mariadb_data", "home_nextcloud_data",  # nextcloud
     "media_nextpvr_buffer", "media_nextpvr_config",  # nextpvr
     "home_ollama_data", "home_open-webui_data",  # open-webui
     "common_backup_cache", "common_portainer_data",  # ops
