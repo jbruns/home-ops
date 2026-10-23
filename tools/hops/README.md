@@ -45,9 +45,11 @@ through `tools/declared-containers` in the same checkout. Without installing, ru
   (`ControlMaster=auto`, `ControlPersist=10m`). The socket is under
   `${XDG_CACHE_HOME:-~/.cache}/hops/`.
 - **TrueNAS:** JSON-RPC 2.0 over a WebSocket at `wss://<TRUENAS_URL host>/api/current`, logged in
-  with `auth.login_with_api_key`. Never the REST API (`/api/v2.0`): it is deprecated and raises
-  alerts on the Host. `HOPS_TRUENAS_API_KEY` belongs to the `homeops-agent` TrueNAS user, whose
-  privilege roles are `READONLY_ADMIN`, `SNAPSHOT_WRITE` and `SNAPSHOT_DELETE`. The key goes only
+  with `auth.login_with_api_key`. TrueNAS rate-limits logins: a login refused with `EBUSY` is
+  retried on a new connection after 2, 4, 8, 16 and 30 s (60 s in all), then fails. Never the
+  REST API (`/api/v2.0`): it is deprecated and raises alerts on the Host. `HOPS_TRUENAS_API_KEY`
+  belongs to the `homeops-agent` TrueNAS user, whose privilege roles are `READONLY_ADMIN`,
+  `SNAPSHOT_WRITE` and `SNAPSHOT_DELETE`. The key goes only
   into the login message; errors print it as `[REDACTED]`. TLS is verified against the default CA
   bundle; `HOPS_TRUENAS_INSECURE=1` opts out for a self-signed certificate. `TRUENAS_URL` must not contain a user name or password. Without `TRUENAS_URL`
   and `HOPS_TRUENAS_API_KEY`, commands that need TrueNAS fail with "TrueNAS is not available on
@@ -406,6 +408,9 @@ Class: **Destructive**. It removes `<old>` and the stopped containers that refer
 **Preconditions.** It refuses (exit 2) before changing anything unless all of these hold:
 
 - Both names match Docker's `[a-zA-Z0-9][a-zA-Z0-9_.-]+`, checked before any Host call.
+- doco-cd's container (the `doco-cd/doco-cd` Service) is not running: on each poll, doco-cd
+  Deploys every Stack that differs from declared state, including a Stack stopped for the move.
+  Pause it with `hops stop doco-cd --for <duration> --force`. There is no override.
 - `<old>` exists. Each existing volume uses the `local` driver with no driver options (so no
   `o=bind`), and its `Mountpoint` is `<DockerRootDir>/volumes/<name>/_data`. The volumes
   directory comes from `docker info`.
@@ -432,9 +437,9 @@ Class: **Destructive**. It removes `<old>` and the stopped containers that refer
 
 1. If `--take-snapshot` is given, take the Rollback Snapshot.
 2. Run `docker volume create <new>`, unless the volume exists.
-3. Check the containers on both volumes again. It stops here, before anything moves, if any
-   container has been active since the first checks (a Deploy of the Stack, say): one that is
-   new, is running, or whose `StartedAt` or `FinishedAt` changed (it ran and exited again).
+3. Check the containers on both volumes, and doco-cd's, again. It stops here, before anything
+   moves, if any of them has been active since the first checks (a Deploy of the Stack, say): one
+   that is new, is running, or whose `StartedAt` or `FinishedAt` changed (it ran and exited again).
 4. Start one container that bind-mounts Docker's volumes directory once, at `/volumes`. The
    container is
    `docker run --rm --label startup-order=skip --log-driver none --network none --pull never
@@ -466,24 +471,31 @@ its 600-second ssh timeout, it may still be renaming; it carries the label
 
 ### Runbook
 
+Run moves and snapshots one at a time, never in parallel: each opens a TrueNAS login, and TrueNAS
+rate-limits them.
+
 1. **PR:** change the volume's `name:` in every Stack that declares it, including any
    Stack that mounts it as `external`. Keep `external: true`. If `validate.py` has an allowlist of old
    volume names (ADR 0010), remove the old name from it. Do not merge yet.
-2. **Stop** the Stack(s) for longer than the change will take:
+2. **Pause doco-cd** for the whole window, until step 7:
+   `hops stop doco-cd --for 2h --force`. On each poll, doco-cd Deploys every Stack that differs
+   from declared state, so it would start a stopped Stack on the volume mid-move. If a Deploy may
+   still be running (a recent merge), check `hops deploys` first and wait for it to finish.
+3. **Stop** the Stack(s) for longer than the change will take:
    `hops stop <stack> --for 1h` (with `--force` for a Critical Stack).
-3. **Snapshot** after stopping, so the snapshot is consistent:
+4. **Snapshot** after stopping, so the snapshot is consistent:
    `hops snapshot take --issue <n> --for 1w`. Or pass `--take-snapshot` in the next step.
-4. **Move:** run `hops volume move <old> <new> --issue <n> --dry-run`, then run it again without
-   `--dry-run`. Until the move has finished, merge nothing that touches the Stack: doco-cd
-   Deploys a Stack whenever a commit changes it, which would start it on the volume mid-move.
-   `hops` will not pause Deploys: doco-cd's `pause: true` is a deploy setting in
-   `.doco-cd.yml`, which is declared state and covers every Stack. If a Deploy of the Stack may
-   still be pending (a recent merge, or a doco-cd retry), check `hops deploys <stack>` first
-   and wait for it to finish.
-5. **Merge** the PR. doco-cd Deploys the Stack and recreates its containers on `<new>`
-   (`hops deploys <stack>` shows the run).
-6. **Verify:** `hops status <stack>`, and check that the Stack works as before.
-7. **Release** the snapshot: `hops snapshot release <name>`.
+5. **Move:** run `hops volume move <old> <new> --issue <n> --dry-run`, then run it again without
+   `--dry-run`. It refuses while doco-cd runs.
+6. **Merge** the PR.
+7. **Start doco-cd:** `hops start doco-cd`. It polls at once and Deploys the merge, which
+   recreates the Stack's containers on `<new>` (`hops deploys <stack>` shows the run).
+8. **Verify:** `hops status <stack>`, and check that the Stack works as before. Check that every
+   container mounts the new volume names (`docker inspect`'s `Mounts`), and `hops recreate` any
+   Service still on an old one. A volume renamed without a move (a regenerable one) is exposed to
+   this: its Service's config hash does not change, so the Deploy keeps the old container and its
+   mount. A moved volume is safe, because `volume move` removes the containers on `<old>`.
+9. **Release** the snapshot: `hops snapshot release <name>`.
 
 ### `volume move --json`
 

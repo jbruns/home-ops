@@ -63,6 +63,49 @@ def test_rejected_key_fails_without_showing_it(server):
     assert server.closed
 
 
+def rate_limited(times: int):
+    """A handler that answers EBUSY `times` times, then accepts the key (as auth.login_with_api_key)."""
+    left = iter(range(times))
+
+    def handler(*params):
+        if next(left, None) is not None:
+            raise FakeTrueNASError("EBUSY", "[EBUSY] Rate Limit Exceeded")
+        return params == (KEY,)
+    return handler
+
+
+def test_a_rate_limited_login_is_retried_on_a_new_connection(client, server, sleeps):
+    server.methods["auth.login_with_api_key"] = rate_limited(2)
+    assert client.call("system.info")["version"] == "25.10.4"
+    assert sleeps == list(truenas.LOGIN_BACKOFF[:2])
+    assert len(server.connects) == 3
+    assert server.called() == ["auth.login_with_api_key"] * 3 + ["system.info"]
+
+
+def test_a_login_still_rate_limited_after_the_backoff_raises(client, server, sleeps):
+    server.methods["auth.login_with_api_key"] = rate_limited(99)
+    with pytest.raises(truenas.TrueNASError, match="auth.login_with_api_key: EBUSY") as exc:
+        client.call("system.info")
+    assert exc.value.errname == "EBUSY"
+    assert sleeps == list(truenas.LOGIN_BACKOFF) and sum(sleeps) == 60
+    assert server.called() == ["auth.login_with_api_key"] * (len(truenas.LOGIN_BACKOFF) + 1)
+
+
+def test_only_a_rate_limited_login_is_retried(client, server, sleeps):
+    def denied(*params):
+        raise FakeTrueNASError("EACCES", "Not authorized")
+
+    server.methods["auth.login_with_api_key"] = denied
+    with pytest.raises(truenas.TrueNASError, match="EACCES"):
+        client.call("system.info")
+    server.methods["auth.login_with_api_key"] = lambda key: True
+    server.methods["pool.query"] = rate_limited(99)
+    with pytest.raises(truenas.TrueNASError, match="pool.query: EBUSY"):
+        client.call("pool.query")
+    assert sleeps == []
+    assert server.called().count("pool.query") == 1
+
+
 def test_method_error_names_the_errno_and_hides_the_key(client, server):
     def denied(*params):
         raise FakeTrueNASError("EACCES", f"Not authorized (key {KEY})")

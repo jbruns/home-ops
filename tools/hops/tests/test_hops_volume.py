@@ -50,6 +50,7 @@ class Host:
     def __init__(self, fake_host, root: Path, dataset=DATASET, fstype="zfs", docker_root=DOCKER_ROOT):
         self.fake, self.root, self.dataset, self.fstype, self.docker_root = fake_host, root, dataset, fstype, docker_root
         self.containers: dict[str, list[dict]] = {}
+        self.deployer: dict | None = None  # doco-cd's container, found by its Compose labels
         self.runs: list[str] = []
         fake_host.respond("info", stdout=json.dumps(docker_root) + "\n")
         fake_host.respond("volume", "inspect", stdout=self.inspect)
@@ -87,12 +88,15 @@ class Host:
         return ""
 
     def ps(self, call):
+        if "label=com.docker.compose.project=doco-cd" in call.docker[-1]:
+            return self.deployer["Id"] + "\n" if self.deployer else ""
         name = call.docker[-1][-1].removeprefix("volume=")
         return "".join(c["Id"] + "\n" for c in self.containers.get(name, []))
 
     def inspect_containers(self, call):
         ids = set(call.docker[-1][1:])
-        return json.dumps([c for cs in self.containers.values() for c in cs if c["Id"] in ids])
+        found = [c for cs in self.containers.values() for c in cs] + [self.deployer] * bool(self.deployer)
+        return json.dumps([c for c in found if c["Id"] in ids])
 
     def run(self, call):
         args = call.docker[-1]
@@ -491,3 +495,58 @@ def test_old_is_kept_when_it_is_not_empty_just_before_its_removal(hops, host, po
     assert "holds 0" not in outcome.err and outcome.err.count("failed") == 1
     assert not any(c[:2] == ["volume", "rm"] for c in fake_host.docker_calls)
     assert (host.root / OLD / "_data" / "late").exists()
+
+
+def doco_cd(status="exited"):
+    return container("doco-cd-doco-cd-1", project="doco-cd", service="doco-cd", status=status,
+                     started_at="2026-10-21T00:00:00Z")
+
+
+@pytest.mark.parametrize("status", ["running", "restarting"])
+@pytest.mark.parametrize("dry_run", [(), ("--dry-run",)])
+def test_refuses_while_doco_cd_is_not_stopped(hops, host, pool, fake_host, status, dry_run):
+    # On each poll doco-cd Deploys every Stack that differs from declared state, a stopped one included.
+    host.add(OLD, {"f": "x"})
+    host.containers[OLD] = [mounting("mariadb", OLD, project="home", service="mariadb", status="exited")]
+    host.deployer = doco_cd(status)
+    outcome = move(hops, pool, *dry_run)
+    assert refused(outcome, f"doco-cd (doco-cd-doco-cd-1, {status})")
+    assert "hops stop doco-cd --for <duration> --force" in outcome.err
+    assert nothing_changed(host, fake_host) and host.runs == []
+
+
+def test_refuses_when_doco_cd_starts_between_the_checks_and_the_move(hops, host, pool, fake_host):
+    host.add(OLD, {"f": "x"})
+    host.deployer = doco_cd()
+    create = host.create
+
+    def doco_cd_starts(call):
+        host.deployer["State"]["Status"] = "running"
+        return create(call)
+    fake_host.respond("volume", "create", stdout=doco_cd_starts)
+
+    outcome = move(hops, pool)
+    assert outcome.code == 1
+    assert "doco-cd-doco-cd-1 (running, doco-cd) started" in outcome.err and "nothing was moved" in outcome.err
+    assert "move" not in host.runs
+    assert not any(c[0] == "rm" or c[:2] == ["volume", "rm"] for c in fake_host.docker_calls)
+
+
+@pytest.mark.parametrize("ran, text", [(False, "(running, doco-cd)"), (True, "(exited, doco-cd ran since the checks)")])
+def test_doco_cd_starting_during_the_move_stops_before_cleanup(hops, host, pool, fake_host, ran, text):
+    host.add(OLD, {"f": "x"})
+    run = host.run
+
+    def doco_cd_during_move(call):
+        report = run(call)
+        if call.docker[-1][-4] == "move":
+            host.deployer = doco_cd("exited" if ran else "running")
+            host.deployer["State"]["StartedAt"] = "2026-10-23T15:47:06.1Z"
+        return report
+    fake_host.respond("run", stdout=doco_cd_during_move)
+
+    outcome = move(hops, pool)
+    assert outcome.code == 1
+    assert f"doco-cd-doco-cd-1 {text} started during the move" in outcome.err
+    assert f"Rollback Snapshot {SNAPSHOT}" in outcome.err
+    assert not any(c[0] == "rm" or c[:2] == ["volume", "rm"] for c in fake_host.docker_calls)
