@@ -65,6 +65,8 @@ Every command in this table is **read-only**. Each takes `--json`.
 | `hops logs <service> [--since D] [--tail N] [-f]` | `docker logs` with the options passed through. `-f` streams through `ssh -t`, until Ctrl-C. |
 | `hops logs <target> --loki [--since D] [--until D] [--grep RE] [--limit N]` | History from Loki, oldest first, which survives container recreation (see [Loki history](#loki-history)). `--query '<LogQL>'` replaces the target. |
 | `hops alerts` | Firing alerts (including silenced and inhibited ones) and active silences, from `amtool` in the alertmanager container |
+| `hops deploys [<stack>] [--status S] [--limit N]` | doco-cd's recent runs, newest first: when, trigger, status, the Stacks each run touched, and doco-cd's message (the error, or why it skipped: retry budget, pause). See [deploys](#deploys). |
+| `hops deploys <run-id>` | One run in detail |
 
 `alerts` authenticates without sending the password to this machine. The Host pipes Prometheus's
 Alertmanager password file (`/run/secrets/prometheus_password`) from the prometheus container
@@ -101,6 +103,23 @@ containers that have since been recreated or removed.
   --pull never` of the image pinned for `monitoring/dependencies-render` (python), which fetches
   the URL, and is removed when it exits. `--log-driver none` keeps the response from being shipped
   back into Loki. It only reads, so `logs --loki` stays read-only.
+
+### deploys
+
+`deploys` reads doco-cd's `GET /v1/api/runs` and `GET /v1/api/run/{jobID}` through the transport
+`recreate` uses (below): same container choice, same key handling.
+
+- **History is in doco-cd's memory only**: 7 days, at most 50 runs per trigger, and lost when
+  doco-cd restarts. An empty list says so. For older history, use `hops logs --loki doco-cd`.
+- `<stack>` keeps the runs whose targets include that Stack; the filtering happens here, over the
+  200 runs doco-cd returns at most. `--status` (`failed`, `succeeded`, `running`, `skipped`) is
+  the run's status, filtered by doco-cd. `--limit` (default 20) applies after both.
+- doco-cd records one message per run, not per Stack. A failure or skip names the Stacks it
+  concerns, e.g. `deployment failed: failed to deploy stack ownfoil: …`,
+  `deployment retry suppressed for ownfoil (default): budget_exhausted`, or
+  ``deployment paused: `plex` ``. Runs whose targets were all paused or retry-suppressed are
+  `skipped`, not `succeeded`.
+- An unknown Stack fails before the Host is touched (exit 2); an unknown run ID exits 1.
 
 ### exec and db
 
@@ -331,6 +350,28 @@ several Services, `container` is the `container_name` (else `null`), and all thr
 ```
 
 `state` is `active` or `suppressed` (silenced or inhibited). `matchers` use amtool's syntax.
+
+### `deploys --json`
+
+```json
+{
+  "runs": [
+    {
+      "job_id": "01a160a4-3901-7c7d-b694-0570e23af5f6", "trigger": "poll", "status": "failed",
+      "repository": "github.com/jbruns/home-ops", "revision": "main",
+      "stacks": ["navidrome", "ownfoil"],
+      "message": "deployment failed: failed to deploy stack ownfoil: …",
+      "created_at": "2026-10-21T15:45:37.666093522-07:00",
+      "started_at": "…", "finished_at": "…"
+    }
+  ]
+}
+```
+
+`deploys <run-id> --json` prints one such run, not wrapped in `runs`. `trigger` is `webhook`,
+`poll`, `scheduled_job` or `mirror_compaction`; `status` is `accepted`, `running`, `succeeded`,
+`failed` or `skipped`. Timestamps are doco-cd's, with its UTC offset. `started_at` and
+`finished_at` are `null` until the run starts or ends.
 
 ## Strays
 
