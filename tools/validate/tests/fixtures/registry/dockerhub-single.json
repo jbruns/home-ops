@@ -1,0 +1,44 @@
+[
+ {
+  "method": "GET",
+  "url": "https://registry-1.docker.io/v2/nextpvr/nextpvr_amd64/manifests/sha256:79841be624d5719153ac7d2303c55fe671aa7d6feed3eaeb4020d5e418f00546",
+  "authorized": false,
+  "status": 401,
+  "headers": {
+   "content-type": "application/json",
+   "www-authenticate": "Bearer realm=\"https://auth.docker.io/token\",service=\"registry.docker.io\",scope=\"repository:nextpvr/nextpvr_amd64:pull\""
+  },
+  "body": "{\"errors\":[{\"code\":\"UNAUTHORIZED\",\"message\":\"authentication required\",\"detail\":[{\"Type\":\"repository\",\"Class\":\"\",\"Name\":\"nextpvr/nextpvr_amd64\",\"Action\":\"pull\"}]}]}\n"
+ },
+ {
+  "method": "GET",
+  "url": "https://auth.docker.io/token?service=registry.docker.io&scope=repository%3Anextpvr%2Fnextpvr_amd64%3Apull",
+  "authorized": false,
+  "status": 200,
+  "headers": {
+   "content-type": "application/json"
+  },
+  "body": "{\"token\": \"anonymous-token\", \"access_token\": \"anonymous-token\"}"
+ },
+ {
+  "method": "GET",
+  "url": "https://registry-1.docker.io/v2/nextpvr/nextpvr_amd64/manifests/sha256:79841be624d5719153ac7d2303c55fe671aa7d6feed3eaeb4020d5e418f00546",
+  "authorized": true,
+  "status": 200,
+  "headers": {
+   "content-type": "application/vnd.docker.distribution.manifest.v2+json",
+   "docker-content-digest": "sha256:79841be624d5719153ac7d2303c55fe671aa7d6feed3eaeb4020d5e418f00546"
+  },
+  "body": "{\n   \"schemaVersion\": 2,\n   \"mediaType\": \"application/vnd.docker.distribution.manifest.v2+json\",\n   \"config\": {\n      \"mediaType\": \"application/vnd.docker.container.image.v1+json\",\n      \"size\": 4529,\n      \"digest\": \"sha256:2e8a2f11cd17c0eaf62ca9390b76318c08833a2acd769252ddd60f2466cc43ba\"\n   },\n   \"layers\": [\n      {\n         \"mediaType\": \"application/vnd.docker.image.rootfs.diff.tar.gzip\",\n         \"size\": 29153828,\n         \"digest\": \"sha256:dc4bf025fa700a56978efc82a6bc7e13f3eb6d9e82fead02270fbb960685e905\"\n      },\n      {\n         \"mediaType\": \"application/vnd.docker.image.rootfs.diff.tar.gzip\",\n         \"size\": 18742651,\n         \"digest\": \"sha256:0a24753870706d2cb979f52b40e30558a42a7f01f6e96f5ac9049ae8d532417a\"\n      },\n      {\n         \"mediaType\": \"application/vnd.docker.image.rootfs.diff.tar.gzip\",\n         \"size\": 3332,\n         \"digest\": \"sha256:4d634e05c1fa5bb2c6f4873cda1c57bf8b955beeebe598eec1e085ed5658be17\"\n      },\n      {\n         \"mediaType\": \"application/vnd.docker.image.rootfs.diff.tar.gzip\",\n         \"size\": 32258640,\n         \"digest\": \"sha256:758891330707c5c2ffdfea8112f4dabe8a801c11758628a335b2f1bd6437c7f5\"\n      },\n      {\n         \"mediaType\": \"application/vnd.docker.image.rootfs.diff.tar.gzip\",\n         \"size\": 164,\n         \"digest\": \"sha256:88eebda4b45aa0f9dd05962b2f79aacb543604d51dc2c5c6946d1d80b4c26684\"\n      },\n      {\n         \"mediaType\": \"application/vnd.docker.image.rootfs.diff.tar.gzip\",\n         \"size\": 11096637,\n         \"digest\": \"sha256:1b349102ca0a231fb9824f5572b9801b4508ef0be6c6ef2e9167549780fc131f\"\n      },\n      {\n         \"mediaType\": \"application/vnd.docker.image.rootfs.diff.tar.gzip\",\n         \"size\": 187360295,\n         \"digest\": \"sha256:9f8bd6e590c8ccb0222d1af7a7f82bfe5ab31093e3af2bd927b46b4b9dcd5b79\"\n      },\n      {\n         \"mediaType\": \"application/vnd.docker.image.rootfs.diff.tar.gzip\",\n         \"size\": 93,\n         \"digest\": \"sha256:383e46fa474a21b8f3c49868d049ccb165c51bb1eff8989da52181c9a6a8a61f\"\n      },\n      {\n         \"mediaType\": \"application/vnd.docker.image.rootfs.diff.tar.gzip\",\n         \"size\": 58356495,\n         \"digest\": \"sha256:16ae865d71d331e80883b5244c11c2f93ea85de78329eca68a670c530a8dca03\"\n      }\n   ]\n}"
+ },
+ {
+  "method": "GET",
+  "url": "https://registry-1.docker.io/v2/nextpvr/nextpvr_amd64/blobs/sha256:2e8a2f11cd17c0eaf62ca9390b76318c08833a2acd769252ddd60f2466cc43ba",
+  "authorized": true,
+  "status": 200,
+  "headers": {
+   "content-type": "application/octet-stream"
+  },
+  "body": "{\"architecture\":\"amd64\",\"config\":{\"ExposedPorts\":{\"443/tcp\":{},\"80/tcp\":{},\"8866/tcp\":{}},\"Env\":[\"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\",\"APP_UID=1654\",\"ASPNETCORE_HTTP_PORTS=8080\",\"DOTNET_RUNNING_IN_CONTAINER=true\",\"DOTNET_VERSION=8.0.28\",\"ASPNET_VERSION=8.0.28\",\"NEXTPVR_DATADIR=/app/data/\",\"NEXTPVR_DATADIR_USERDATA=/config/\"],\"Entrypoint\":[\"dotnet\",\"/app/NextPVRServer.dll\"],\"WorkingDir\":\"/app\"},\"created\":\"2026-06-15T18:24:00.55576077Z\",\"history\":[{\"created\":\"2026-06-10T00:00:00Z\",\"created_by\":\"# debian.sh --arch 'amd64' out/ 'bookworm' '@1781049600'\",\"comment\":\"debuerreotype 0.17\"},{\"created\":\"2026-06-12T12:28:42.718338573Z\",\"created_by\":\"ENV APP_UID=1654 ASPNETCORE_HTTP_PORTS=8080 DOTNET_RUNNING_IN_CONTAINER=true\",\"comment\":\"buildkit.dockerfile.v0\",\"empty_layer\":true},{\"created\":\"2026-06-12T12:28:42.718338573Z\",\"created_by\":\"RUN /bin/sh -c apt-get update     \\u0026\\u0026 apt-get install -y --no-install-recommends         ca-certificates                 libc6         libgcc-s1         libicu72         libssl3         libstdc++6         tzdata         zlib1g     \\u0026\\u0026 rm -rf /var/lib/apt/lists/* # buildkit\",\"comment\":\"buildkit.dockerfile.v0\"},{\"created\":\"2026-06-12T12:28:44.27833798Z\",\"created_by\":\"RUN /bin/sh -c groupadd         --gid=$APP_UID         app     \\u0026\\u0026 useradd --no-log-init         --uid=$APP_UID         --gid=$APP_UID         --create-home         app # buildkit\",\"comment\":\"buildkit.dockerfile.v0\"},{\"created\":\"2026-06-12T12:28:50.511870246Z\",\"created_by\":\"ENV DOTNET_VERSION=8.0.28\",\"comment\":\"buildkit.dockerfile.v0\",\"empty_layer\":true},{\"created\":\"2026-06-12T12:28:50.511870246Z\",\"created_by\":\"COPY /dotnet /usr/share/dotnet # buildkit\",\"comment\":\"buildkit.dockerfile.v0\"},{\"created\":\"2026-06-12T12:28:51.659126086Z\",\"created_by\":\"RUN /bin/sh -c ln -s /usr/share/dotnet/dotnet /usr/bin/dotnet # buildkit\",\"comment\":\"buildkit.dockerfile.v0\"},{\"created\":\"2026-06-12T12:28:57.071437805Z\",\"created_by\":\"ENV ASPNET_VERSION=8.0.28\",\"comment\":\"buildkit.dockerfile.v0\",\"empty_layer\":true},{\"created\":\"2026-06-12T12:28:57.071437805Z\",\"created_by\":\"COPY /dotnet /usr/share/dotnet # buildkit\",\"comment\":\"buildkit.dockerfile.v0\"},{\"created\":\"2026-06-12T18:42:07.563557257Z\",\"created_by\":\"RUN /bin/sh -c apt-get update     \\u0026\\u0026 apt-get install -y --no-install-recommends curl libunwind8 gettext apt-transport-https libgdiplus libc6-dev mediainfo libdvbv5-dev ffmpeg hdhomerun-config dtv-scan-tables comskip     \\u0026\\u0026 sed -i \\\"s/Components: main/Components: main non-free non-free-firmware/\\\" /etc/apt/sources.list.d/debian.sources     \\u0026\\u0026 apt-get update -y     \\u0026\\u0026 apt-get install -y mesa-va-drivers intel-media-va-driver-non-free i965-va-driver-shaders     \\u0026\\u0026 ln -s /usr/lib/x86_64-linux-gnu/libmediainfo.so.0.0.0 /usr/lib/x86_64-linux-gnu/libmediainfo.so     \\u0026\\u0026 rm -rf /var/lib/apt/lists/* # buildkit\",\"comment\":\"buildkit.dockerfile.v0\"},{\"created\":\"2026-06-12T18:42:07.64367439Z\",\"created_by\":\"WORKDIR /app\",\"comment\":\"buildkit.dockerfile.v0\"},{\"created\":\"2026-06-15T18:24:00.55576077Z\",\"created_by\":\"EXPOSE map[443/tcp:{} 80/tcp:{} 8866/tcp:{}]\",\"comment\":\"buildkit.dockerfile.v0\",\"empty_layer\":true},{\"created\":\"2026-06-15T18:24:00.55576077Z\",\"created_by\":\"ENV NEXTPVR_DATADIR=/app/data/\",\"comment\":\"buildkit.dockerfile.v0\",\"empty_layer\":true},{\"created\":\"2026-06-15T18:24:00.55576077Z\",\"created_by\":\"ENV NEXTPVR_DATADIR_USERDATA=/config/\",\"comment\":\"buildkit.dockerfile.v0\",\"empty_layer\":true},{\"created\":\"2026-06-15T18:24:00.55576077Z\",\"created_by\":\"COPY app/ /app/ # buildkit\",\"comment\":\"buildkit.dockerfile.v0\"},{\"created\":\"2026-06-15T18:24:00.55576077Z\",\"created_by\":\"ENTRYPOINT [\\\"dotnet\\\" \\\"/app/NextPVRServer.dll\\\"]\",\"comment\":\"buildkit.dockerfile.v0\",\"empty_layer\":true}],\"os\":\"linux\",\"rootfs\":{\"type\":\"layers\",\"diff_ids\":[\"sha256:8db1b4d0e54f2fbc2baf1563e57d88a8e72d3c79a72a38b9e4dee36e84f1d8ce\",\"sha256:6c644eedca5d1fc3bbfa01e7b892859441202033213c817337c7b6c390a1c16e\",\"sha256:2c8f6cde33d38139876da34fe53256d3427775f0edc9445135ae8e333f96532f\",\"sha256:6f1b5af80ccc4008a9b875317391ff8e81ff952e750dc8b626bb489639d265c2\",\"sha256:7ef7f7289e0f27d71bc465d5c1468b6d8e0b680a5f673aabc0a5a73fae626252\",\"sha256:bb37024f5ef19e2299160e79d7e7b45615935807021f3e69c9a0b5ebdb6d374f\",\"sha256:42e5827a59b9c28713eb10b8b7856860859b6696fea88595d47ee25e7e2bd5d9\",\"sha256:5f59767b989debba03ed3f62b2a63236b35c7f0dff14c2d1f11e510b06afaca2\",\"sha256:f778b5ac13d9d32d3697143d374dd0479b26bec2621aa9e35cf5bd402aca96fb\"]}}"
+ }
+]

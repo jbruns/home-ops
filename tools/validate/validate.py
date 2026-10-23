@@ -13,7 +13,12 @@ Subcommands:
               no env_file sets format (doco-cd supports only the default),
               and every Exposed Service (https router) a probe.url. A Service that extends
               tn/_baseline.yaml meets the Baseline or carries a baseline.exempt.<item> reason, and its
-              routers follow ADR 0006 (names, health and Client Paths, Protected Probes)
+              routers follow ADR 0006 (names, health and Client Paths, Protected Probes). Every image
+              VOLUME path (read from the registry by digest, cached) has a mount at that exact path
+              (Baseline item anonymous-volumes; no digest or a platform other than linux/amd64 needs
+              its Exemption, and volumes_from fails); Services behind any profile are checked. Every
+              top-level volume has a name of its Stack (or LEGACY_VOLUMES) and is external or
+              labelled homeops.regenerable (ADR 0010)
   isolation   tn/doco-cd and tn/_baseline.yaml changes ship in their own PR
   monitoring  full config checks and behavioral rule tests with the images the Stacks deploy;
               Grafana provisioning boots, dashboard generator parity and PromQL/LogQL checks
@@ -26,6 +31,7 @@ Usage: validate.py [--root DIR] [--path NAME=PATH ...] [check ...]   (no check: 
 import argparse
 import base64
 import os
+import posixpath
 import re
 import shutil
 import json
@@ -46,6 +52,10 @@ import yaml
 
 TOOLS_DIR = Path(__file__).resolve().parents[1]
 ROOT = TOOLS_DIR.parent
+# hops bump's registry client: stdlib-only, so CI needs nothing beyond requirements.txt.
+sys.path.insert(0, str(TOOLS_DIR / "hops"))
+from hops.errors import HopsError  # noqa: E402
+from hops.registry import Registry, Response, urllib_http  # noqa: E402
 # The folder doco-cd deploys Stacks from, relative to ROOT.
 HOST_DIR = "tn"
 # Files and folders individual checks read, relative to ROOT.
@@ -307,6 +317,10 @@ BASELINE_ITEMS = {
     "memory": lambda s: bool(((s.get("deploy") or {}).get("resources") or {}).get("limits", {}).get("memory") or s.get("mem_limit")),
     "cap_drop": lambda s: "ALL" in (s.get("cap_drop") or []),
 }
+# Every VOLUME path in the Service's image has a mount; checked against the image config, so it is
+# not in BASELINE_ITEMS (see uncovered_volumes).
+ANONYMOUS_VOLUMES = "anonymous-volumes"
+EXEMPT_ITEMS = [*BASELINE_ITEMS, ANONYMOUS_VOLUMES]
 # Router names carry their kind, so recording rules can tell UI, health and Client Path apart (ADR 0006).
 ROUTER_LABEL_RE = re.compile(r"^traefik\.http\.routers\.([^.]+)\.")
 SERVICE_LABEL_RE = re.compile(r"^traefik\.http\.services\.([^.]+)\.")
@@ -332,22 +346,170 @@ def middlewares(labels: dict, router: str) -> list[str]:
     return [m.strip().split("@")[0] for m in raw.split(",") if m.strip()]
 
 
-def baseline_problems(name: str, svc: dict) -> tuple[list[str], list[str]]:
-    """Problems with one Baseline Service, and its Exemptions for the audit report."""
+@dataclass(frozen=True)
+class Uninspectable:
+    """Why validate cannot read a Service's image VOLUME paths; the item then needs an Exemption."""
+    why: str
+
+
+def baseline_problems(name: str, svc: dict, uncovered: list[str] | Uninspectable | None = None
+                      ) -> tuple[list[str], list[str]]:
+    """Problems with one Baseline Service, and its Exemptions for the audit report. `uncovered` holds
+    the image's VOLUME paths with no mount, or why they cannot be inspected; None when the registry
+    could not be read (reported on its own)."""
     labels = svc.get("labels") or {}
     problems, exemptions = [], []
     for key, reason in labels.items():
-        if key.startswith(EXEMPT_PREFIX) and key[len(EXEMPT_PREFIX):] not in BASELINE_ITEMS:
-            problems.append(f"{name}: {key} names no Baseline item ({', '.join(BASELINE_ITEMS)})")
-    for item, met in BASELINE_ITEMS.items():
+        if key.startswith(EXEMPT_PREFIX) and key[len(EXEMPT_PREFIX):] not in EXEMPT_ITEMS:
+            problems.append(f"{name}: {key} names no Baseline item ({', '.join(EXEMPT_ITEMS)})")
+    checks = {item: met(svc) for item, met in BASELINE_ITEMS.items()}
+    if uncovered is not None:
+        checks[ANONYMOUS_VOLUMES] = not isinstance(uncovered, Uninspectable) and not uncovered
+    for item, met in checks.items():
         reason = str(labels.get(EXEMPT_PREFIX + item, "")).strip()
-        if met(svc) and EXEMPT_PREFIX + item in labels:
+        if met and EXEMPT_PREFIX + item in labels:
             problems.append(f"{name}: stale Exemption {EXEMPT_PREFIX}{item}; the Service meets it")
-        elif not met(svc) and not reason:
-            problems.append(f"{name}: misses Baseline item {item!r} without a {EXEMPT_PREFIX}{item} reason")
-        elif not met(svc):
+        elif not met and not reason and isinstance(uncovered, Uninspectable) and item == ANONYMOUS_VOLUMES:
+            problems.append(f"{name}: cannot inspect image VOLUMEs {uncovered.why}; mount each VOLUME path "
+                            f"and add a {EXEMPT_PREFIX}{item} reason")
+        elif not met and not reason:
+            detail = f" (image VOLUME paths with no mount: {', '.join(uncovered)})" if item == ANONYMOUS_VOLUMES else ""
+            problems.append(f"{name}: misses Baseline item {item!r} without a {EXEMPT_PREFIX}{item} reason{detail}")
+        elif not met:
             exemptions.append(f"{name}: {item}: {reason}")
+    for target in declared_anonymous(svc):
+        problems.append(f"{name}: volume at {target} has no source (an anonymous volume); name it, bind it or make it a tmpfs")
+    if svc.get("volumes_from"):
+        problems.append(f"{name}: volumes_from unsupported by validate; mount the volumes by name instead")
     return problems + router_problems(svc.get("container_name") or name, labels), exemptions
+
+
+def declared_anonymous(svc: dict) -> list[str]:
+    """Targets of service volumes written with only a target (`- /path`)."""
+    return [v["target"] for v in svc.get("volumes") or [] if v.get("type") == "volume" and not v.get("source")]
+
+
+def uncovered_volumes(svc: dict, image_paths: list[str]) -> list[str]:
+    """The image's VOLUME paths that no named volume, bind or tmpfs is mounted at. Only the exact path
+    counts: Docker creates an anonymous volume at a VOLUME path even under a mount on its parent."""
+    targets = {posixpath.normpath(v["target"]) for v in svc.get("volumes") or []
+               if v.get("target") and (v.get("type") != "volume" or v.get("source"))}
+    targets |= {posixpath.normpath(t.split(":", 1)[0]) for t in svc.get("tmpfs") or []}
+    return sorted(p for p in image_paths if posixpath.normpath(p) not in targets)
+
+
+# Volume names (ADR 0010): <stack>_[<service>_]<purpose>, explicit, and external unless regenerable.
+REGENERABLE_LABEL = "homeops.regenerable"
+# Names from before ADR 0010 (ADR 0004's prefixes), until each Stack's rename issue moves them and
+# removes its entries. The list only shrinks: an entry no Stack declares fails.
+LEGACY_VOLUMES = {
+    "asot-media_audiobookshelf_config", "asot-media_audiobookshelf_metadata",  # audiobookshelf
+    "media_autobrr_config",  # autobrr
+    "asot-media_calibre-web-automated_config",  # calibre-web-automated
+    "common_crowdsec_config", "common_crowdsec_data", "common_crowdsec_log",  # edge
+    "common_traefik_le", "common_traefik_log", "common_traefik_plugins-storage",  # edge
+    "media_emby_config",  # emby
+    "media_navidrome_data",  # navidrome
+    "home_mariadb_data", "home_nextcloud_data",  # nextcloud
+    "media_nextpvr_buffer", "media_nextpvr_config",  # nextpvr
+    "home_ollama_data", "home_open-webui_data",  # open-webui
+    "common_backup_cache", "common_portainer_data",  # ops
+    "asot-media_ownfoil_config",  # ownfoil
+    "media_plex_config", "media_plex_transcode",  # plex
+    "media_qbittorrent_config",  # qbittorrent
+    "media_radarr_config",  # radarr
+    "media_sabnzbd_config",  # sabnzbd
+    "asot-media_cwa-downloader_config",  # shelfmark
+    "media_sonarr_config",  # sonarr
+    "home_syncthing_data",  # syncthing
+    "media_tracearr_backups", "media_tracearr_data", "media_tracearr_postgres", "media_tracearr_redis",  # tracearr
+    "home_vaultwarden_data",  # vaultwarden
+}
+# Templates are copied to tn/<stack>/ with `app` renamed, so their volumes are named for Stack `app`.
+TEMPLATE_STACK = "app"
+
+
+def volume_labels(volume: dict) -> dict:
+    labels = volume.get("labels") or {}
+    if isinstance(labels, list):
+        return dict(str(entry).partition("=")[::2] for entry in labels)
+    return {key: "" if value is None else value for key, value in labels.items()}
+
+
+def volume_problems(stack: str, volumes: dict, stack_names: set[str]) -> list[str]:
+    """Top-level volumes as written in one Stack's files (the rendered model fills in a name)."""
+    problems = []
+    for key, volume in volumes.items():
+        volume = volume or {}
+        name = volume.get("name")
+        if not name:
+            problems.append(f"{stack}: volume {key} has no explicit name:")
+        if not volume.get("external") and not str(volume_labels(volume).get(REGENERABLE_LABEL, "")).strip():
+            problems.append(f"{stack}: volume {name or key} must be external: true (it holds data) or carry a "
+                            f"{REGENERABLE_LABEL} label saying what regenerates it")
+        # An external volume may be another Stack's, borrowed under its owner's name.
+        owners = (stack_names | {stack}) if volume.get("external") else {stack}
+        if name and name not in LEGACY_VOLUMES and not any(name.startswith(f"{s}_") for s in owners):
+            problems.append(f"{stack}: volume name {name} must start with {stack}_ (ADR 0010)")
+    return problems
+
+
+def stack_volumes(stack: Path) -> dict:
+    """Top-level volumes declared across a Stack's entry file and the files it includes."""
+    volumes = {}
+    for compose in compose_files(entry(stack)):
+        volumes |= (yaml.safe_load(compose.read_text()) or {}).get("volumes") or {}
+    return volumes
+
+
+# Image configs come from the registry by pinned digest, anonymously; tests swap in recordings.
+REGISTRY_HTTP = urllib_http
+PLATFORM = ("linux", "amd64")
+RETRY_DELAYS = (2, 8)  # seconds; registries answer 429 or 5xx in bursts
+
+
+def patient(http, sleep=time.sleep):
+    """A transport that retries a 429 or 5xx, honouring a short Retry-After."""
+    def send(method: str, url: str, headers: dict[str, str]) -> Response:
+        for delay in RETRY_DELAYS:
+            resp = http(method, url, headers)
+            if resp.status != 429 and resp.status < 500:
+                return resp
+            after = resp.headers.get("retry-after", "")
+            sleep(min(int(after), 30) if after.isdigit() else delay)
+        return http(method, url, headers)
+    return send
+
+
+def image_cache_dir() -> Path:
+    base = os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache"
+    return Path(base) / "home-ops" / "validate" / "image-volumes"
+
+
+def fetch_image_volumes(image: str, registry: Registry) -> list[str]:
+    """The VOLUME paths of a digest-pinned image's linux/amd64 config, from its registry."""
+    ref, _, digest = image.partition("@")
+    repository = ref if ":" not in ref.rsplit("/", 1)[-1] else ref.rsplit(":", 1)[0]
+    manifest = registry.manifest(repository, digest)
+    if "manifests" in manifest:
+        picked = [m["digest"] for m in manifest["manifests"]
+                  if ((m.get("platform") or {}).get("os"), (m.get("platform") or {}).get("architecture")) == PLATFORM]
+        if not picked:
+            raise HopsError(f"{image}: its index has no {'/'.join(PLATFORM)} image")
+        manifest = registry.manifest(repository, picked[0])
+    config = json.loads(registry.blob(repository, manifest["config"]["digest"]))
+    return sorted((config.get("config") or {}).get("Volumes") or {})
+
+
+def image_volumes(image: str, registry: Registry) -> list[str]:
+    """fetch_image_volumes, cached by the pinned digest: a digest's content never changes."""
+    cache = image_cache_dir() / (image.partition("@sha256:")[2] + ".json")
+    if cache.is_file():
+        return json.loads(cache.read_text())["volumes"]
+    volumes = fetch_image_volumes(image, registry)
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text(json.dumps({"image": image, "volumes": volumes}) + "\n")
+    return volumes
 
 
 def router_problems(name: str, labels: dict) -> list[str]:
@@ -405,6 +567,8 @@ def check_compose() -> None:
     modules = probe_modules()
     exemptions: list[str] = []
     counts = {"baseline": 0, "total": 0}
+    registry, read_images = Registry(http=patient(REGISTRY_HTTP)), {}
+    declared_volumes: set[str] = set()
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp).resolve()
         for f in tracked_files():
@@ -414,6 +578,7 @@ def check_compose() -> None:
         # Each template is rendered as if it were a Stack, so it stays valid against the Baseline.
         for tpl in sorted((work / TEMPLATES_DIR).glob(f"*/{ENTRY_NAME}")):
             shutil.copytree(tpl.parent, work / "tn" / f"_template-{tpl.parent.name}")
+        stack_names = {s.name for s in stacks(work)}
         for stack in stacks(work):
             keys = env_keys(stack / "env.template") | stack_vars(stack)
             (stack / ".env").write_text("".join(f"{k}={placeholder(k)}\n" for k in sorted(keys)))
@@ -421,9 +586,13 @@ def check_compose() -> None:
                 for ref in sensitive_refs(compose):
                     if ref.is_relative_to(work) and not ref.exists():
                         ref.write_text("")
-            r = subprocess.run(["docker", "compose", "config", "--format", "json"], cwd=stack, capture_output=True, text=True)
+            r = subprocess.run(["docker", "compose", "--profile", "*", "config", "--format", "json"], cwd=stack, capture_output=True, text=True)
             noise = [line for line in r.stderr.splitlines() if line.strip()]
             template = stack.name.startswith("_template-")
+            # Read before rendering, so a Stack that fails to render still declares its volumes.
+            volumes = stack_volumes(stack)
+            if not template:
+                declared_volumes |= {v["name"] for v in volumes.values() if v and v.get("name")}
             src = (ROOT / TEMPLATES_DIR / stack.name.removeprefix("_template-") if template else ROOT / "tn" / stack.name) / entry(stack).name
             if r.returncode != 0 or any("is not set" in line for line in noise):
                 fail(f"{stack.name}: docker compose config failed:\n" + "\n".join(noise), src)
@@ -439,6 +608,7 @@ def check_compose() -> None:
             # `config` resolves env_file away, so read the sources.
             env_formats = [n for f in compose_files(entry(stack)) for n in env_file_formats(f)]
             on_baseline = baseline_services(stack, work)
+            vol_problems = volume_problems(TEMPLATE_STACK if template else stack.name, volumes, stack_names)
             if template and set(services) - on_baseline:
                 fail(f"{stack.name}: every template Service must extend {BASELINE_FILE}", src)
             if stack.name == "doco-cd" and on_baseline:
@@ -446,7 +616,8 @@ def check_compose() -> None:
             inline = set(services) if stack.name == "doco-cd" else set()
             base_problems = [f"{name}: must extend {BASELINE_FILE}" for name in sorted(set(services) - on_baseline - inline)]
             for name in sorted((on_baseline | inline) & set(services)):
-                p, e = baseline_problems(name, services[name])
+                uncovered = anonymous_volume_check(stack.name, name, services[name], registry, read_images, src)
+                p, e = baseline_problems(name, services[name], uncovered)
                 base_problems += p
                 exemptions += [f"{stack.name}/{x}" for x in e]
             if not template:
@@ -464,11 +635,35 @@ def check_compose() -> None:
                 fail(f"{stack.name}: env_file format is unsupported by doco-cd (use the default and single-quote values containing $): {', '.join(sorted(env_formats))}", src)
             if base_problems:
                 fail(f"{stack.name}: Baseline (ADR 0007): " + "; ".join(base_problems), src)
-            if not bad and not probes and not logs and not restart and not env_formats and not base_problems:
+            if vol_problems:
+                fail(f"{stack.name}: volumes (ADR 0010): " + "; ".join(vol_problems), src)
+            if not bad and not probes and not logs and not restart and not env_formats and not base_problems and not vol_problems:
                 print(f"compose ok: {stack.name}")
+    for name in sorted(LEGACY_VOLUMES - declared_volumes):
+        fail(f"volumes (ADR 0010): legacy name {name} is no longer declared; remove it from LEGACY_VOLUMES")
     print(f"Baseline: {counts['baseline']} of {counts['total']} Services meet it (ADR 0007)")
     for x in exemptions:
         print(f"  Exemption {x}")
+
+
+def anonymous_volume_check(stack: str, name: str, svc: dict, registry: Registry, read: dict,
+                           src: Path) -> list[str] | Uninspectable | None:
+    """The Service's image VOLUME paths with no mount; Uninspectable when validate cannot read them
+    (no digest, or another platform); None after a registry failure, which fails by image name."""
+    image = str(svc.get("image", ""))
+    if "@sha256:" not in image:
+        return Uninspectable("without a digest")
+    platform = svc.get("platform")
+    if platform and platform != "/".join(PLATFORM):
+        return Uninspectable(f"for platform {platform} (validate reads only {'/'.join(PLATFORM)})")
+    if image not in read:
+        try:
+            read[image] = image_volumes(image, registry)
+        except (HopsError, ValueError, KeyError) as exc:
+            read[image] = None
+            fail(f"{stack}: {name}: cannot read the image config of {image} for its VOLUME paths "
+                 f"(anonymous volumes, ADR 0007): {exc}", src)
+    return None if read[image] is None else uncovered_volumes(svc, read[image])
 
 
 def deployed_image(compose: Path, service: str) -> str:

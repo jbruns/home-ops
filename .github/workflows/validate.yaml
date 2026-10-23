@@ -43,6 +43,14 @@ jobs:
         with:
           fetch-depth: 0
       - run: python3 -m pip install --quiet --requirement tools/validate/requirements.txt
+      - id: digests
+        run: echo "hash=$(grep -rhoE 'sha256:[0-9a-f]{64}' tn templates | sort -u | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+      # Image configs by digest for the anonymous-volume check; spares the registries' rate limits.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/home-ops/validate
+          key: validate-image-volumes-${{ steps.digests.outputs.hash }}
+          restore-keys: validate-image-volumes-
       - run: python3 tools/validate/validate.py secrets env compose cloudflare
       - if: github.event_name == 'pull_request'
         env:

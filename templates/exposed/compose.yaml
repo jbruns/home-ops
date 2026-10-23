@@ -70,8 +70,9 @@ services:
 
 volumes:
   app_config:
-    # An explicit name keeps the volume when the Stack is renamed or moved.
+    # Holds data, so external (ADR 0010): `docker volume create app_config` before the first Deploy.
     name: app_config
+    external: true
 
 networks:
   # Traefik and the Exposed Services it routes to; owned by the edge Stack.

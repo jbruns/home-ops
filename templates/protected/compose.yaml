@@ -81,7 +81,9 @@ services:
 
 volumes:
   app_config:
+    # Holds data, so external (ADR 0010): `docker volume create app_config` before the first Deploy.
     name: app_config
+    external: true
 
 networks:
   proxy:
