@@ -244,7 +244,8 @@ closed: anything not listed here is refused (exit 2) before connecting.
 - Without `--users`, output is the client's own, not JSON: MariaDB prints tab-separated rows with
   a header, Valkey prints raw replies, `psql` prints its aligned table.
 - **`--users`** checks a MariaDB Datastore's accounts against its declared ones. The label lists
-  them as comma-separated `user@host` (the host is after the last `@`), e.g.
+  them as comma-separated `user@host` (the host is after the last `@` and, as MariaDB keeps it,
+  compared lowercase; the user keeps its case), e.g.
   `homeops.db.users: "root@localhost,exporter@%"`; the comment above it says why each exists. It
   reads `mysql.user` through the same in-container root login and reports **unexpected** users
   (live, not declared) and **missing** ones (declared, not live). The image's own
@@ -730,8 +731,9 @@ several Services, `container` is the `container_name` (else `null`), and all thr
 ```
 
 - `datastores`: one entry for each checked Datastore, in Stack then Service order.
-- `declared`: the label's entries, in its order. `live`: every `user@host` in `mysql.user`, sorted,
-  the ignored system accounts included.
+- `declared`: the label's entries, in its order, hosts lowercased. `live`: every `user@host` in
+  `mysql.user` (read as hex and decoded as UTF-8, else Latin-1, so no client escaping), sorted, the
+  ignored system accounts included.
 - `unexpected`, `missing`: the drift, sorted, without the ignored system accounts.
 - `drift`: `true` when any Datastore has unexpected or missing users (the exit code is then 1).
 

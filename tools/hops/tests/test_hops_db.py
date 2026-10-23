@@ -279,12 +279,18 @@ def test_client_side_argv_never_carries_credentials(hops, fake_host, stores, tty
 
 
 NEXTCLOUD_USERS = "root@localhost,exporter@%,backupuser@%,nextclouduser@%"
-SYSTEM_ROWS = "mariadb.sys\tlocalhost\nhealthcheck\t127.0.0.1\nhealthcheck\t::1\nhealthcheck\tlocalhost\n"
+def rows(*users: str) -> str:
+    """mysql.user as `mariadb --batch --skip-column-names` prints SELECT HEX(User), HEX(Host)."""
+    return "".join("\t".join(part.encode().hex().upper() for part in u.rpartition("@")[::2]) + "\n"
+                   for u in users)
+
+
+SYSTEM_ROWS = rows("mariadb.sys@localhost", "healthcheck@127.0.0.1", "healthcheck@::1", "healthcheck@localhost")
 
 
 def mariadb_with(repo, users_label: str | None) -> None:
     """nextcloud/mariadb (list-form labels) carrying users_label, and vault/db (mapping form) with its own."""
-    label = "" if users_label is None else f', "homeops.db.users={users_label}"'
+    label = "" if users_label is None else f", 'homeops.db.users={users_label}'"
     write(repo, {
         "tn/nextcloud/mariadb/service.yaml": f"""
             services:
@@ -305,9 +311,9 @@ def mariadb_with(repo, users_label: str | None) -> None:
     })
 
 
-def users(*rows: str) -> str:
-    """mysql.user as `mariadb --batch --skip-column-names` prints it, with the image's system accounts."""
-    return SYSTEM_ROWS + "".join("\t".join(r.rpartition("@")[::2]) + "\n" for r in rows)
+def users(*users: str) -> str:
+    """mysql.user with the image's system accounts."""
+    return SYSTEM_ROWS + rows(*users)
 
 
 @pytest.fixture
@@ -329,7 +335,7 @@ def test_users_clean_ignores_the_image_system_accounts(hops, fake_host, labelled
     assert store["unexpected"] == [] and store["missing"] == []
     call = fake_host.calls[0]
     assert call.docker[0][:3] == ["exec", "-i", "mariadb"]
-    assert call.input == "SELECT User, Host FROM mysql.user\n"
+    assert call.input == "SELECT HEX(User), HEX(Host) FROM mysql.user\n"
     out = remote(call, box, {"MARIADB_ROOT_PASSWORD": "env-secret"})
     assert "client: mariadb --user=root --batch --skip-column-names\n" in out
     assert "auth: env-secret" in out
@@ -403,6 +409,7 @@ def test_users_without_a_datastore_needs_a_labelled_one(hops, fake_host):
     ("root@", "'root@'"),
     ("root @localhost", "'root @localhost'"),
     ("root@localhost,root@localhost", "twice"),
+    ("root@localhost,root@LOCALHOST", "twice"),
 ])
 def test_users_rejects_a_malformed_label_before_the_host(hops, fake_host, repo, label, message):
     mariadb_with(repo, label)
@@ -414,6 +421,36 @@ def test_users_rejects_a_malformed_label_before_the_host(hops, fake_host, repo, 
 
 def test_users_label_host_splits_on_the_last_at(hops, fake_host, repo):
     mariadb_with(repo, "a@b@%")
-    fake_host.respond("exec", stdout=SYSTEM_ROWS + "a@b\t%\n")
+    fake_host.respond("exec", stdout=users("a@b@%"))
     fake_host.respond("exec", "-i", "vault-db", stdout=users("root@localhost", "vaultwardenuser@%"))
     assert hops("db", "--users").code == 0
+
+
+def test_users_label_hosts_compare_lowercased_users_keep_their_case(hops, fake_host, repo):
+    mariadb_with(repo, "root@LOCALHOST,Exporter@%")
+    fake_host.respond("exec", stdout=users("root@localhost", "exporter@%"))
+    fake_host.respond("exec", "-i", "vault-db", stdout=users("root@localhost", "vaultwardenuser@%"))
+    outcome = hops("db", "--users", "--json")
+    assert outcome.code == 1
+    store = json.loads(outcome.out)["datastores"][0]
+    assert store["declared"] == ["root@localhost", "Exporter@%"]
+    assert store["unexpected"] == ["exporter@%"] and store["missing"] == ["Exporter@%"]
+
+
+def test_users_live_names_are_decoded_not_batch_escaped(hops, fake_host, repo):
+    """The label's literal backslash-t is not a live tab, and a live backslash matches the label's."""
+    mariadb_with(repo, "a\\tb@%,c\\d@%")
+    fake_host.respond("exec", stdout=users("a\tb@%", "c\\d@%"))
+    fake_host.respond("exec", "-i", "vault-db", stdout=users("root@localhost", "vaultwardenuser@%"))
+    outcome = hops("db", "--users", "--json")
+    assert outcome.code == 1
+    store = json.loads(outcome.out)["datastores"][0]
+    assert store["unexpected"] == ["a\tb@%"]
+    assert store["missing"] == ["a\\tb@%"]
+
+
+def test_users_live_names_that_are_not_utf8_fall_back_to_latin1(hops, fake_host, labelled):
+    fake_host.respond("exec", stdout=users("root@localhost", "exporter@%", "backupuser@%", "nextclouduser@%")
+                      + "E9\t25\n")
+    store = json.loads(hops("db", "nextcloud/mariadb", "--users", "--json").out)["datastores"][0]
+    assert store["unexpected"] == ["\u00e9@%"]

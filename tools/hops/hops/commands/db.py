@@ -74,7 +74,8 @@ VALKEY_READ_SUBCOMMANDS = {
 USERS_LABEL = "homeops.db.users"
 # Accounts the image creates for itself: its locked system account and healthcheck.sh's user.
 SYSTEM_USERS = {"mariadb.sys@localhost", "healthcheck@localhost", "healthcheck@127.0.0.1", "healthcheck@::1"}
-USERS_QUERY = "SELECT User, Host FROM mysql.user\n"
+# HEX: the batch client escapes tab, newline, NUL and backslash in what it prints.
+USERS_QUERY = "SELECT HEX(User), HEX(Host) FROM mysql.user\n"
 
 
 def register(subparsers) -> None:
@@ -161,13 +162,15 @@ def config_file(service) -> str:
 
 
 def declared_users(service) -> list[str]:
-    """The label's user@host entries; a UsageError names the first malformed one."""
+    """The label's user@host entries, host lowercased as MariaDB stores it; a UsageError names the first
+    malformed one."""
     raw = service.labels.get(USERS_LABEL)
     if raw is None:
         raise UsageError(f"{service.key} has no {USERS_LABEL} label")
     users = []
     for entry in raw.split(","):
         user, at, host = entry.strip().rpartition("@")
+        host = host.lower()
         if not (at and user and host) or any(c.isspace() for c in entry.strip()):
             raise UsageError(f"{service.key}: {USERS_LABEL} entry {entry.strip()!r} is not user@host "
                              "(the label is a comma-separated list of user@host)")
@@ -192,10 +195,20 @@ def live_users(ctx, service) -> list[str]:
                                "--batch", "--skip-column-names", input=USERS_QUERY, check=False)
     if result.returncode:
         raise HopsError(f"{service.key}: reading mysql.user failed: {result.stderr.strip()}")
-    rows = [line.split("\t") for line in result.stdout.splitlines() if line]
-    if any(len(row) != 2 for row in rows):
+    try:
+        rows = [[bytes.fromhex(field) for field in line.split("\t")] for line in result.stdout.splitlines() if line]
+    except ValueError:
+        rows = None
+    if rows is None or any(len(row) != 2 for row in rows):
         raise HopsError(f"{service.key}: unexpected mysql.user output: {result.stdout.strip()!r}")
-    return sorted(f"{user}@{host}" for user, host in rows)
+    return sorted(f"{_text(user)}@{_text(host)}" for user, host in rows)
+
+
+def _text(raw: bytes) -> str:
+    try:
+        return raw.decode()
+    except UnicodeDecodeError:
+        return raw.decode("latin-1")
 
 
 def run_users(args, ctx) -> int:
