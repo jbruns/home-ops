@@ -73,7 +73,7 @@ Changes to `tn/doco-cd/` ship in their own PR (CI enforces this). doco-cd replac
 
 To force-recreate one Service (for example after `ContainerLeftoverName`), run `hops recreate <stack>/<service>` ([tools/hops](tools/hops/README.md#lifecycle-commands)). It calls doco-cd's REST API from a container on the `metrics` network that is not being recreated. The key (`tn/doco-cd/api_secret.sops.txt`) is decrypted locally and sent on stdin.
 
-Deleting a Stack folder removes the Stack from the Host but keeps its volumes. Volumes that predate the one-Stack-per-app split keep their old names (e.g. `home_vaultwarden_data`) through an explicit `name:`; don't rename them without a planned data move (ADR-0004).
+Deleting a Stack folder removes the Stack from the Host but keeps its volumes. Volumes are named after the Stack that owns them, `<stack>_[<service>_]<purpose>` ([ADR-0010](docs/adr/0010-volumes-named-for-their-stack.md)). Some still carry a prefix from before the one-Stack-per-app split (e.g. `home_vaultwarden_data`) until their Stack is moved with `hops volume move` (#638); never rename one by copying.
 
 Renovate runs every morning (America/Los_Angeles) with no hourly PR limit, pins digests, and waits 5 days after a release before proposing it.
 
@@ -126,6 +126,11 @@ Alert and recording-rule behavioral suites live in `tools/validate/rules/` and r
 - Only named volumes (Service config and state) are backed up. Media on bind mounts under `${ZFS_POOL_ROOT_HDD}` (books, audiobooks, music, ROMs) is not.
 - A TrueNAS Cloud Sync task pushes that dataset to Backblaze B2 daily at 04:00 (SYNC mode).
 - restic-exporter feeds the `BackupStale` and `BackupMetricsMissing` alerts.
+- This restic repository is the only Backup; apps' own scheduled backups are part of their state ([ADR-0011](docs/adr/0011-restic-is-the-only-backup.md)).
+
+### Risky changes
+
+Don't copy data before a risky change (no `.bak`, dated or `pre-*` copies). Take a Rollback Snapshot with `hops snapshot take --issue <n>` (#637) and release it once the change is verified; an expired one shows up in `hops strays`. A copy that a snapshot cannot replace is recorded in its issue or PR with a removal checkbox.
 
 ## Startup order
 
@@ -140,7 +145,7 @@ Label an ad-hoc `docker run` on the Host `startup-order=skip` so startup-order a
 1. Copy `templates/exposed/` (or `templates/protected/` for a Protected Service) to `tn/<stack>/` and rename `app`. `compose.yaml` is the entry; to split Services out, put each in `<service>/service.yaml` and list it under `include:`.
 2. Every Service extends the Baseline (`tn/_baseline.yaml`, [ADR-0007](docs/adr/0007-service-baseline-via-extends.md)). It adds a Compose healthcheck, a digest-pinned image, a memory limit, any `cap_add` it needs (only where the image cannot run as its target user with `user:`), a `tier` label and a `startup-order` label. An item it cannot meet needs a `baseline.exempt.<item>` label giving the reason; `validate.py compose` lists them all.
 3. For an Exposed Service, join `proxy` (external) and set the `traefik.*` labels including `traefik.docker.network: proxy`. Routers are `<container>-http`, `-https`, `-health` and `-client-<protocol>`; `-health` and `-client-` routers skip forward auth, so they use `strip-idp-headers`, and the Traefik service is named after the container ([ADR-0006](docs/adr/0006-protected-services.md)). For metrics, join `metrics` and add a scrape job in `prometheus.yml`.
-4. Give named volumes an explicit `name:`, so moving or renaming the Stack keeps the data.
+4. Give every volume an explicit `name:` of the form `<stack>_[<service>_]<purpose>`. A volume holding data is `external: true`; create it with `docker volume create` before the first Deploy, so Compose can never remove it. One holding only what its Service regenerates (a cache or scratch space) may be left to Compose with the label `homeops.regenerable: "<reason>"`. Cover every `VOLUME` path of the image with a volume, bind mount or `tmpfs`; anonymous volumes fail the Baseline ([ADR-0010](docs/adr/0010-volumes-named-for-their-stack.md)).
 5. For a database, keep it on the Stack's `default` network, label it `stack-back.mariadb: true`, and add it to `backup`.
 6. Write `env.template`. Create and encrypt `.sops.env` (it must exist even if empty).
 7. Run `python3 tools/declared-containers/declared_containers.py` and commit `tn/monitoring/node-exporter/declared_containers.prom`, so ContainerDown watches the new Services.
