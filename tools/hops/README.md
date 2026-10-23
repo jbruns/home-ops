@@ -78,9 +78,8 @@ containers that have since been recreated or removed.
 
 - **Target:** `stack/service`, a bare Service name, or a bare Stack name for every Service in it
   (a name that is both means the Stack: `doco-cd` includes apprise, `doco-cd/doco-cd` does not).
-  The selector uses Alloy's `container`
-  label and Docker's two streams, e.g. `{container="sonarr", logstream=~"stdout|stderr"}`. A
-  `container_name` stays the same across recreations and across a Stack's Compose project being
+  The selector uses Alloy's `container` label and Docker's two streams, e.g.
+  `{container="sonarr", logstream=~"stdout|stderr"}`. A `container_name` stays the same across recreations and across a Stack's Compose project being
   renamed (the `stack` label still holds old project names such as `arr`). A Service without one
   matches every container Compose has given it: `doco-cd-doco-cd-[0-9]+`.
 - **`--query '<LogQL>'`** sends a log query instead, e.g. Traefik's access log:
