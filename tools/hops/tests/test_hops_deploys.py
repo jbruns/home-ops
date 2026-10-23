@@ -100,7 +100,7 @@ def test_an_empty_history_says_doco_cd_keeps_it_in_memory_only(hops, doco_cd):
     outcome = hops("deploys", "--status", "failed")
     assert outcome.code == 0, outcome.err
     assert "No runs with status failed" in outcome.out
-    assert "in memory only" in outcome.out and "hops logs --loki doco-cd" in outcome.out
+    assert "in memory only" in outcome.out and "hops logs --loki doco-cd/doco-cd" in outcome.out
 
 
 def test_a_run_id_shows_that_run_in_detail(hops, doco_cd, fake_host):

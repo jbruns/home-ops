@@ -10,7 +10,7 @@ STATUSES = ["failed", "succeeded", "running", "skipped", "accepted"]
 RUN_ID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
 FETCH = 200  # doco-cd's maximum page; Stacks are filtered here, so fetch everything it keeps
 NOTE = ("doco-cd keeps run history in memory only: 7 days, at most 50 runs per trigger, "
-        "lost when doco-cd restarts. For older history: hops logs --loki doco-cd")
+        "lost when doco-cd restarts. For older history: hops logs --loki doco-cd/doco-cd")
 DEFAULT_LIMIT = 20
 WIDE = 3  # more Stacks than this are shown as a count
 

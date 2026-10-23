@@ -110,7 +110,7 @@ containers that have since been recreated or removed.
 `recreate` uses (below): same container choice, same key handling.
 
 - **History is in doco-cd's memory only**: 7 days, at most 50 runs per trigger, and lost when
-  doco-cd restarts. An empty list says so. For older history, use `hops logs --loki doco-cd`.
+  doco-cd restarts. An empty list says so. For older history, use `hops logs --loki doco-cd/doco-cd`.
 - `<stack>` keeps the runs whose targets include that Stack; the filtering happens here, over the
   200 runs doco-cd returns at most. The name is not checked against this checkout, since doco-cd
   may remember a Stack the repo has since removed. `--status` (`failed`, `succeeded`, `running`,
