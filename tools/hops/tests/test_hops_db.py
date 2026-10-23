@@ -1,4 +1,5 @@
 """hops db <datastore>: the Datastore's own client, authenticated from inside its container."""
+import json
 import shlex
 import stat
 import subprocess
@@ -275,3 +276,144 @@ def test_client_side_argv_never_carries_credentials(hops, fake_host, stores, tty
     for call in fake_host.calls:
         args = call.docker[0]
         assert not [a for a in args if a == "-a" or a.startswith(("-p", "--password", "--pass"))], args
+
+
+NEXTCLOUD_USERS = "root@localhost,exporter@%,backupuser@%,nextclouduser@%"
+SYSTEM_ROWS = "mariadb.sys\tlocalhost\nhealthcheck\t127.0.0.1\nhealthcheck\t::1\nhealthcheck\tlocalhost\n"
+
+
+def mariadb_with(repo, users_label: str | None) -> None:
+    """nextcloud/mariadb (list-form labels) carrying users_label, and vault/db (mapping form) with its own."""
+    label = "" if users_label is None else f', "homeops.db.users={users_label}"'
+    write(repo, {
+        "tn/nextcloud/mariadb/service.yaml": f"""
+            services:
+              mariadb:
+                image: mariadb:11.8.9@sha256:bbbb
+                container_name: mariadb
+                labels: [tier=critical, startup-order=1{label}]
+        """,
+        "tn/vault/compose.yaml": """
+            services:
+              db:
+                image: mariadb:11.8.9@sha256:bbbb
+                container_name: vault-db
+                labels:
+                  tier: critical
+                  homeops.db.users: "root@localhost, vaultwardenuser@%"
+        """,
+    })
+
+
+def users(*rows: str) -> str:
+    """mysql.user as `mariadb --batch --skip-column-names` prints it, with the image's system accounts."""
+    return SYSTEM_ROWS + "".join("\t".join(r.rpartition("@")[::2]) + "\n" for r in rows)
+
+
+@pytest.fixture
+def labelled(repo):
+    mariadb_with(repo, NEXTCLOUD_USERS)
+    return repo
+
+
+def test_users_clean_ignores_the_image_system_accounts(hops, fake_host, labelled, box):
+    fake_host.respond("exec", stdout=users("root@localhost", "exporter@%", "backupuser@%", "nextclouduser@%"))
+    outcome = hops("db", "nextcloud/mariadb", "--users", "--json")
+    assert outcome.code == 0, outcome.err
+    report = json.loads(outcome.out)
+    assert report["drift"] is False
+    [store] = report["datastores"]
+    assert store["stack"] == "nextcloud" and store["container"] == "mariadb"
+    assert store["declared"] == NEXTCLOUD_USERS.split(",")
+    assert "healthcheck@::1" in store["live"]
+    assert store["unexpected"] == [] and store["missing"] == []
+    call = fake_host.calls[0]
+    assert call.docker[0][:3] == ["exec", "-i", "mariadb"]
+    assert call.input == "SELECT User, Host FROM mysql.user\n"
+    out = remote(call, box, {"MARIADB_ROOT_PASSWORD": "env-secret"})
+    assert "client: mariadb --user=root --batch --skip-column-names\n" in out
+    assert "auth: env-secret" in out
+
+
+def test_users_reports_unexpected_and_missing_and_exits_1(hops, fake_host, labelled):
+    fake_host.respond("exec", stdout=users("root@localhost", "root@%", "exporter@%", "nextclouduser@%",
+                                           "vaultwardenuser@%"))
+    outcome = hops("db", "nextcloud/mariadb", "--users", "--json")
+    assert outcome.code == 1
+    store = json.loads(outcome.out)["datastores"][0]
+    assert store["unexpected"] == ["root@%", "vaultwardenuser@%"]
+    assert store["missing"] == ["backupuser@%"]
+    outcome = hops("db", "nextcloud/mariadb", "--users")
+    assert outcome.code == 1
+    assert "root@%, vaultwardenuser@%" in outcome.out and "backupuser@%" in outcome.out
+
+
+def test_users_without_a_datastore_checks_every_labelled_one(hops, fake_host, labelled):
+    fake_host.respond("exec", stdout=users("root@localhost", "exporter@%", "backupuser@%", "nextclouduser@%"))
+    fake_host.respond("exec", "-i", "vault-db", stdout=users("root@localhost", "vaultwardenuser@%"))
+    outcome = hops("db", "--users", "--json")
+    assert outcome.code == 0, outcome.err
+    assert [(d["stack"], d["service"]) for d in json.loads(outcome.out)["datastores"]] == [
+        ("nextcloud", "mariadb"), ("vault", "db")]
+    assert [c.docker[0][2] for c in fake_host.calls] == ["mariadb", "vault-db"]
+
+
+def test_users_query_failure_is_a_host_error(hops, fake_host, labelled):
+    fake_host.respond("exec", stderr="ERROR 2002: can't connect\n", returncode=1)
+    outcome = hops("db", "nextcloud/mariadb", "--users")
+    assert outcome.code == 1
+    assert "ERROR 2002" in outcome.err
+
+
+@pytest.mark.parametrize("argv, message", [
+    (("db", "nextcloud/mariadb", "--users", "-e", "SELECT 1"), "-e or --write"),
+    (("db", "nextcloud/mariadb", "--users", "--write"), "-e or --write"),
+    (("db",), "name a Datastore"),
+    (("db", "-e", "SELECT 1"), "name a Datastore"),
+    (("db", "nextcloud/mariadb", "--json"), "--json only applies to --users"),
+    (("db", "nextcloud/valkey", "--users"), "Postgres and Valkey are out of scope"),
+    (("db", "sonarr/sonarr", "--users"), "not a Datastore"),
+])
+def test_users_usage_errors(hops, fake_host, labelled, argv, message):
+    outcome = hops(*argv)
+    assert outcome.code == 2
+    assert message in outcome.err
+    assert fake_host.calls == []
+
+
+def test_users_needs_the_label_on_a_named_datastore(hops, fake_host, repo):
+    mariadb_with(repo, None)
+    outcome = hops("db", "nextcloud/mariadb", "--users")
+    assert outcome.code == 2
+    assert "no homeops.db.users label" in outcome.err
+    assert fake_host.calls == []
+
+
+def test_users_without_a_datastore_needs_a_labelled_one(hops, fake_host):
+    outcome = hops("db", "--users")
+    assert outcome.code == 2
+    assert "no Datastore carries" in outcome.err
+
+
+@pytest.mark.parametrize("label, message", [
+    ("root@localhost,,exporter@%", "''"),
+    ("root@localhost,exporter@%,", "''"),
+    ("root", "'root'"),
+    ("@localhost", "'@localhost'"),
+    ("root@", "'root@'"),
+    ("root @localhost", "'root @localhost'"),
+    ("root@localhost,root@localhost", "twice"),
+])
+def test_users_rejects_a_malformed_label_before_the_host(hops, fake_host, repo, label, message):
+    mariadb_with(repo, label)
+    outcome = hops("db", "--users")
+    assert outcome.code == 2
+    assert message in outcome.err
+    assert fake_host.calls == []
+
+
+def test_users_label_host_splits_on_the_last_at(hops, fake_host, repo):
+    mariadb_with(repo, "a@b@%")
+    fake_host.respond("exec", stdout=SYSTEM_ROWS + "a@b\t%\n")
+    fake_host.respond("exec", "-i", "vault-db", stdout=users("root@localhost", "vaultwardenuser@%"))
+    assert hops("db", "--users").code == 0
