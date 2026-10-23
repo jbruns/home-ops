@@ -73,7 +73,7 @@ Changes to `tn/doco-cd/` ship in their own PR (CI enforces this). doco-cd replac
 
 To force-recreate one Service (for example after `ContainerLeftoverName`), run `hops recreate <stack>/<service>` ([tools/hops](tools/hops/README.md#lifecycle-commands)). It calls doco-cd's REST API from a container on the `metrics` network that is not being recreated. The key (`tn/doco-cd/api_secret.sops.txt`) is decrypted locally and sent on stdin.
 
-Deleting a Stack folder removes the Stack from the Host but keeps its volumes. Volumes are named after the Stack that owns them, `<stack>_[<service>_]<purpose>` ([ADR-0010](docs/adr/0010-volumes-named-for-their-stack.md)). Some still carry a prefix from before the one-Stack-per-app split (e.g. `home_vaultwarden_data`) until their Stack is moved with `hops volume move` (#638); never rename one by copying.
+Deleting a Stack folder removes the Stack from the Host but keeps its volumes. Volumes are named after the Stack that owns them, `<stack>_[<service>_]<purpose>` ([ADR-0010](docs/adr/0010-volumes-named-for-their-stack.md)). Some still carry a prefix from before the one-Stack-per-app split (e.g. `media_plex_config`) until their Stack is moved with `hops volume move` (#638); never rename one by copying.
 
 Renovate runs every morning (America/Los_Angeles) with no hourly PR limit, pins digests, and waits 5 days after a release before proposing it.
 

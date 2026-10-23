@@ -34,7 +34,7 @@ services:
     # https://github.com/dani-garcia/vaultwarden/wiki/Enabling-admin-page#secure-the-admin_token
     env_file: ./vaultwarden.sops.env
     depends_on:
-      vaultwarden-db:
+      mariadb:
         condition: service_healthy
         restart: true
     labels:
@@ -80,13 +80,13 @@ services:
       - default
       - proxy
 
-  vaultwarden-db:
+  mariadb:
     # https://hub.docker.com/_/mariadb
     extends:
       file: ../_baseline.yaml
       service: baseline
     image: mariadb:11.8.9@sha256:f16d7a344413e519dff518f27bdb221388f84b0d274c97c4fb5f2cb0dc1b34fa
-    container_name: vaultwarden-db
+    container_name: vaultwarden-mariadb
     # The image's mysql user; the entrypoint skips its chown + gosu when not root, so no caps.
     user: "999:999"
     deploy:
@@ -104,13 +104,13 @@ services:
       start_period: 60s
       start_interval: 5s
     environment:
-      - MARIADB_ROOT_PASSWORD_FILE=/run/secrets/vaultwarden_db_root_password
+      - MARIADB_ROOT_PASSWORD_FILE=/run/secrets/vaultwarden_mariadb_root_password
     # MARIADB_DATABASE/USER/PASSWORD: Vaultwarden's own account (created on first init);
     # stack-back dumps with it too.
     env_file:
-      - ./db.sops.env
+      - ./mariadb.sops.env
     secrets:
-      - vaultwarden_db_root_password
+      - vaultwarden_mariadb_root_password
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: critical
@@ -118,22 +118,22 @@ services:
       stack-back.mariadb: true
 
     volumes:
-      - db_data:/var/lib/mysql
+      - mariadb_data:/var/lib/mysql
     networks:
       - default
       # stack-back (ops) dumps the database over the backup network.
       - backup
 
-  vaultwarden-db-exporter:
+  mariadb-exporter:
     # https://github.com/prometheus/mysqld_exporter
     # Its `exporter` account was created by hand, once (a fresh data volume needs it again):
-    #   CREATE USER 'exporter'@'%' IDENTIFIED BY '<DB_EXPORTER_PASSWORD>' WITH MAX_USER_CONNECTIONS 3;
+    #   CREATE USER 'exporter'@'%' IDENTIFIED BY '<MARIADB_EXPORTER_PASSWORD>' WITH MAX_USER_CONNECTIONS 3;
     #   GRANT PROCESS, SLAVE MONITOR ON *.* TO 'exporter'@'%';
     extends:
       file: ../_baseline.yaml
       service: baseline
     image: prom/mysqld-exporter:v0.20.0@sha256:abed8dac117b4ae5b70757f988e44795935b9a72c3b58d720c67ba688f8cb79e
-    container_name: vaultwarden-db-exporter
+    container_name: vaultwarden-mariadb-exporter
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:9104/metrics"]
       interval: 30s
@@ -147,12 +147,12 @@ services:
           # 30-day peak 33M working set
           memory: 64M
     command:
-      - --mysqld.address=vaultwarden-db:3306
+      - --mysqld.address=mariadb:3306
       - --mysqld.username=exporter
     environment:
-      - MYSQLD_EXPORTER_PASSWORD=${DB_EXPORTER_PASSWORD}
+      - MYSQLD_EXPORTER_PASSWORD=${MARIADB_EXPORTER_PASSWORD}
     depends_on:
-      vaultwarden-db:
+      mariadb:
         condition: service_healthy
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
@@ -178,13 +178,13 @@ networks:
     external: true
 
 secrets:
-  vaultwarden_db_root_password:
-    file: ./db_root_password.sops.txt
+  vaultwarden_mariadb_root_password:
+    file: ./mariadb_root_password.sops.txt
 
 volumes:
   vaultwarden_data:
-    name: home_vaultwarden_data
+    name: vaultwarden_data
     external: true
-  db_data:
-    name: vaultwarden_db_data
+  mariadb_data:
+    name: vaultwarden_mariadb_data
     external: true

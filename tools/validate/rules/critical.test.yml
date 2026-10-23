@@ -103,7 +103,7 @@ tests:
   - name: ContainerDown fires for a declared container that was never created, but waits out a slow first Deploy
     interval: 1m
     input_series:
-      - series: homeops_container_declared{stack="vaultwarden",service="vaultwarden-db",name="vaultwarden-db",tier="critical"}
+      - series: homeops_container_declared{stack="vaultwarden",service="mariadb",name="vaultwarden-mariadb",tier="critical"}
         values: 1x10
       - series: homeops_container_declared{stack="plex",service="plex",name="plex",tier="warning"}
         values: 1x10
@@ -116,7 +116,7 @@ tests:
       - expr: *container
         eval_time: 5m
         exp_samples:
-          - labels: '{alertname="ContainerDown",tier="critical",stack="vaultwarden",name="vaultwarden-db"}'
+          - labels: '{alertname="ContainerDown",tier="critical",stack="vaultwarden",name="vaultwarden-mariadb"}'
             value: 1
 
   # Without container_name, `name` is Compose's guess (<stack>-<service>-1); doco-cd's self-updates

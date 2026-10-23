@@ -422,7 +422,6 @@ LEGACY_VOLUMES = {
     "media_sonarr_config",  # sonarr
     "home_syncthing_data",  # syncthing
     "media_tracearr_backups", "media_tracearr_data", "media_tracearr_postgres", "media_tracearr_redis",  # tracearr
-    "home_vaultwarden_data",  # vaultwarden
 }
 # Templates are copied to tn/<stack>/ with `app` renamed, so their volumes are named for Stack `app`.
 TEMPLATE_STACK = "app"

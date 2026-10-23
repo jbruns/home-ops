@@ -270,7 +270,7 @@ nothing starts the Service again until a reboot, the next Deploy of its Stack, o
 
   It also silences alerts the stop sets off elsewhere, all derived from the repo:
   - Services in the same Stack that `depends_on` it, directly or transitively, get the same sets
-    (stopping `vaultwarden-db` silences Vaultwarden's ProbeFailed).
+    (stopping `vaultwarden-mariadb` silences Vaultwarden's ProbeFailed).
   - An inhibit rule in `alertmanager/config.yml` whose source is the stopped container's own
     ProbeFailed no longer works, because Docker SD drops a stopped container's Probe target. What
     it inhibited is silenced instead. Stopping traefik adds `alertname="ProbeFailed"`, which

@@ -204,7 +204,7 @@ def test_stopping_traefik_silences_its_target_down_page():
 def test_stopping_a_datastore_silences_datastore_down():
     found = stop_silences("nextcloud/mariadb", "nextcloud-mariadb")
     assert silenced(found, alert("DatastoreDown", scrape_target("mysqld", datastore="nextcloud-mariadb")))
-    assert not silenced(found, alert("DatastoreDown", scrape_target("mysqld", datastore="vaultwarden-db")))
+    assert not silenced(found, alert("DatastoreDown", scrape_target("mysqld", datastore="vaultwarden-mariadb")))
 
 
 def test_stopping_a_service_without_container_name_silences_its_target_by_service_name():
@@ -239,9 +239,10 @@ def test_stopping_other_services_leaves_other_probes_paging():
 
 
 def test_stopping_a_datastore_silences_the_services_in_its_stack_that_depend_on_it():
-    found = stop_silences("vaultwarden/vaultwarden-db", "vaultwarden-db")
+    found = stop_silences("vaultwarden/mariadb", "vaultwarden-mariadb")
     assert silenced(found, probe_failed("vaultwarden", "vaultwarden", "vaultwarden"))
-    assert silenced(found, alert("TargetDown", scrape_target("mysqld", datastore="vaultwarden-db")))
+    assert silenced(found, alert("TargetDown", scrape_target("mysqld", datastore="vaultwarden-mariadb")))
+    assert not silenced(found, alert("DatastoreDown", scrape_target("mysqld", datastore="nextcloud-mariadb")))
     nextcloud = stop_silences("nextcloud/mariadb", "nextcloud-mariadb")
     assert silenced(nextcloud, probe_failed("nextcloud", "nextcloud", "nextcloud"))
     assert silenced(nextcloud, alert("ContainerDown", {"stack": "nextcloud", "service": "nextcloud-cron",
@@ -262,7 +263,7 @@ def test_stopping_a_monitoring_service_never_silences_the_heartbeat():
 
 
 @pytest.mark.parametrize("key, container", [("edge/traefik", "traefik"), ("ops/stack-back", "stack-back"),
-                                            ("vaultwarden/vaultwarden-db", "vaultwarden-db"),
+                                            ("vaultwarden/mariadb", "vaultwarden-mariadb"),
                                             ("monitoring/prometheus", "prometheus")])
 def test_every_silence_is_narrow_and_explained(key, container):
     for s in stop_plan((key, container)):
