@@ -133,12 +133,19 @@ def snapshot_plan(ctx, args, dataset: str, on_old):
 
 
 def late_consumers(ctx, old: str, new: str, on_old) -> list[str]:
-    """Containers that turned up since the checks (a Deploy of the Stack, say): any on <old> that is not
-    one of the stopped `on_old`, and any running on <new>."""
-    known = {c.id: c for c in on_old}
-    late = [c for c in volumes.users(ctx.runner, old) if c.id not in known or c.status not in strays.REMOVABLE_STATES]
-    late += [c for c in volumes.users(ctx.runner, new) if c.status not in strays.REMOVABLE_STATES]
-    return [f"{c.name} ({c.status})" for c in late]
+    """Containers active since the checks (a Deploy of the Stack, say): any on <old> that is not one of
+    the stopped `on_old`, is no longer stopped, or has started or stopped since (it may have written
+    and exited again), and any running on <new>."""
+    known = {c.id: (c.started_at, c.finished_at) for c in on_old}
+    late = []
+    for c in volumes.users(ctx.runner, old):
+        if c.id not in known or c.status not in strays.REMOVABLE_STATES:
+            late.append(f"{c.name} ({c.status})")
+        elif (c.started_at, c.finished_at) != known[c.id]:
+            late.append(f"{c.name} ({c.status}, ran since the checks)")
+    late += [f"{c.name} ({c.status})" for c in volumes.users(ctx.runner, new)
+             if c.status not in strays.REMOVABLE_STATES]
+    return late
 
 
 def state(ctx, image: str, directory: str, old: str, new: str, probe=None) -> str:
@@ -251,15 +258,25 @@ def run_move(args, ctx) -> int:
     if moved.old is None or moved.new is None or moved.old["entries"] or moved.new["entries"] != probe.old["entries"]:
         stopped("checking the move", f"expected {old} empty and {probe.old['entries']} entries in {new}", moved)
     removed = []
+
+    def removing(exc, probe):
+        left = [c.name for c in on_old if c.name not in removed]
+        stopped(f"removing {old}", f"{exc} (containers removed: {', '.join(removed) or 'none'}; "
+                f"still there: {', '.join(left) or 'none'})", probe)
     try:
         for c in on_old:
             ctx.runner.docker("rm", c.id)
             removed.append(c.name)
+        # Read <old> once more right before removing it: anything written since the move would go with it.
+        last = volumes.check(ctx.runner, image, directory, old, new)
+    except HopsError as exc:
+        removing(exc, moved)
+    if last.old is None or last.old["entries"]:
+        removing(f"{old} is not empty just before its removal, so hops kept it", last)
+    try:
         ctx.runner.docker("volume", "rm", old)
     except HopsError as exc:
-        left = [c.name for c in on_old if c.name not in removed]
-        stopped(f"removing {old}", f"{exc} (containers removed: {', '.join(removed) or 'none'}; "
-                f"still there: {', '.join(left) or 'none'})", moved)
+        removing(exc, last)
     report["moved"] = True
     return finish(ctx, args, report)
 

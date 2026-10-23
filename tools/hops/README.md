@@ -432,8 +432,9 @@ Class: **Destructive**. It removes `<old>` and the stopped containers that refer
 
 1. If `--take-snapshot` is given, take the Rollback Snapshot.
 2. Run `docker volume create <new>`, unless the volume exists.
-3. Check the containers on both volumes again: one that started since the checks (a Deploy of the
-   Stack, say) stops it here, before anything moves.
+3. Check the containers on both volumes again. It stops here, before anything moves, if any
+   container has been active since the first checks (a Deploy of the Stack, say): one that is
+   new, is running, or whose `StartedAt` or `FinishedAt` changed (it ran and exited again).
 4. Start one container that bind-mounts Docker's volumes directory once, at `/volumes`. The
    container is
    `docker run --rm --label startup-order=skip --log-driver none --network none --pull never
@@ -445,14 +446,15 @@ Class: **Destructive**. It removes `<old>` and the stopped containers that refer
    times. A symlink is renamed, never followed. Names are passed as arguments, never through a
    shell, so spaces and newlines are safe. An entry already in `<new>` stops the move. Before
    the move, a read-only run of the same container checks the preconditions above.
-5. Check the containers again. If one started during the move, it stops there, exits 1 and
-   cleans up nothing. Stop that container first, then look at both volumes.
+5. Check the containers again, the same way. If one was active during the move, it stops there,
+   exits 1 and cleans up nothing. Stop that container first, then look at both volumes.
 6. Check that `<old>/_data` is empty and `<new>/_data` holds as many top-level entries as `<old>`
    did.
 7. `docker rm` (never forced) the stopped containers that reference `<old>`. Docker will not
    remove a volume while any container references it, even a stopped one. This is runtime
    state: the Deploy after merge recreates them with the new name, since their volume changed.
-8. `docker volume rm <old>`.
+8. Read `<old>/_data` again. If it is not empty, `hops` keeps `<old>`, exits 1 and reports how
+   many entries each volume holds. Otherwise `docker volume rm <old>`.
 9. Print the next steps.
 
 **If it fails part-way**, it stops and exits 1. The message reports how many top-level entries
@@ -474,8 +476,10 @@ its 600-second ssh timeout, it may still be renaming; it carries the label
 4. **Move:** run `hops volume move <old> <new> --issue <n> --dry-run`, then run it again without
    `--dry-run`. Until the move has finished, merge nothing that touches the Stack: doco-cd
    Deploys a Stack whenever a commit changes it, which would start it on the volume mid-move.
-   `hops` cannot hold Deploys off. doco-cd's `pause: true` is a deploy setting in
-   `.doco-cd.yml`, which is declared state and covers every Stack.
+   `hops` will not pause Deploys: doco-cd's `pause: true` is a deploy setting in
+   `.doco-cd.yml`, which is declared state and covers every Stack. If a Deploy of the Stack may
+   still be pending (a recent merge, or a doco-cd retry), check `hops deploys <stack>` first
+   and wait for it to finish.
 5. **Merge** the PR. doco-cd Deploys the Stack and recreates its containers on `<new>`
    (`hops deploys <stack>` shows the run).
 6. **Verify:** `hops status <stack>`, and check that the Stack works as before.

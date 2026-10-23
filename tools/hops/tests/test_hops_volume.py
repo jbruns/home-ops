@@ -143,7 +143,7 @@ def test_move_renames_every_entry_and_removes_the_old_volume(hops, host, pool, f
     report = json.loads(outcome.out)
     assert report["moved"] is True and report["entries"] == 5 and report["snapshot"]["name"] == SNAPSHOT
     assert report["containers"][0]["service"] == "nextcloud/mariadb"
-    assert host.runs == ["check", "move"]
+    assert host.runs == ["check", "move", "check"]  # <old> is probed again, empty, just before its removal
     # The stopped container is removed (by ID) before the volume, which Docker refuses while one references it.
     removals = [c[:2] for c in fake_host.docker_calls if c[0] == "rm" or c[:2] == ["volume", "rm"]]
     assert removals == [["rm", report["containers"][0]["id"]], ["volume", "rm"]]
@@ -429,3 +429,65 @@ def test_a_consumer_appearing_during_the_move_stops_before_cleanup(hops, host, p
     assert f"{OLD} holds 0 top-level entries, {NEW} holds 1 top-level entries" in outcome.err
     assert f"Rollback Snapshot {SNAPSHOT}" in outcome.err
     assert not any(c[0] == "rm" or c[:2] == ["volume", "rm"] for c in fake_host.docker_calls)
+
+
+def ran_and_exited(db, host, write=True):
+    """A known consumer starts, writes to <old> and exits again: stopped as before, with new times."""
+    db["State"].update(StartedAt="2026-10-23T15:47:06.1Z", FinishedAt="2026-10-23T15:47:07.2Z")
+    if write:
+        (host.root / OLD / "_data" / "written-meanwhile").write_text("new")
+
+
+def test_a_known_consumer_that_ran_before_the_move_stops_it(hops, host, pool, fake_host):
+    host.add(OLD, {"f": "x"})
+    db = stopped_mariadb(host, "2026-10-21T00:00:00Z")
+    create = host.create
+
+    def runs_meanwhile(call):
+        ran_and_exited(db, host, write=False)
+        return create(call)
+    fake_host.respond("volume", "create", stdout=runs_meanwhile)
+
+    outcome = move(hops, pool)
+    assert outcome.code == 1
+    assert "mariadb (exited, ran since the checks) started" in outcome.err and "nothing was moved" in outcome.err
+    assert "move" not in host.runs
+    assert not any(c[0] == "rm" or c[:2] == ["volume", "rm"] for c in fake_host.docker_calls)
+
+
+def test_a_known_consumer_that_ran_during_the_move_stops_before_cleanup(hops, host, pool, fake_host):
+    host.add(OLD, {"f": "x"})
+    db = stopped_mariadb(host, "2026-10-21T00:00:00Z")
+    run = host.run
+
+    def runs_during_move(call):
+        report = run(call)
+        if call.docker[-1][-4] == "move":
+            ran_and_exited(db, host)
+        return report
+    fake_host.respond("run", stdout=runs_during_move)
+
+    outcome = move(hops, pool)
+    assert outcome.code == 1
+    assert "mariadb (exited, ran since the checks) started during the move" in outcome.err
+    assert f"Rollback Snapshot {SNAPSHOT}" in outcome.err
+    assert not any(c[0] == "rm" or c[:2] == ["volume", "rm"] for c in fake_host.docker_calls)
+    assert (host.root / OLD / "_data" / "written-meanwhile").read_text() == "new"
+
+
+def test_old_is_kept_when_it_is_not_empty_just_before_its_removal(hops, host, pool, fake_host):
+    host.add(OLD, {"f": "x"})
+    host.containers[OLD] = [mounting("mariadb", OLD, project="home", service="mariadb", status="exited")]
+
+    def something_writes(call):
+        (host.root / OLD / "_data" / "late").write_text("new")
+        return ""
+    fake_host.respond("rm", stdout=something_writes)
+
+    outcome = move(hops, pool)
+    assert outcome.code == 1
+    assert f"{OLD} is not empty" in outcome.err and "kept it" in outcome.err
+    assert f"{OLD} holds 1 top-level entries, {NEW} holds 1 top-level entries" in outcome.err
+    assert "holds 0" not in outcome.err and outcome.err.count("failed") == 1
+    assert not any(c[:2] == ["volume", "rm"] for c in fake_host.docker_calls)
+    assert (host.root / OLD / "_data" / "late").exists()
