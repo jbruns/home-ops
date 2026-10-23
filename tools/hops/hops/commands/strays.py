@@ -50,8 +50,12 @@ def expired_snapshots(ctx) -> tuple[list[dict] | None, str | None]:
         found = snapshots.rollback_snapshots(ctx.truenas)
     except ConfigError as exc:
         return None, str(exc)
-    return [{"snapshot": r.name, "dataset": r.dataset, "issue": r.issue, "expires": r.expires, "size": r.size,
-             "kept": SNAPSHOT_KEPT, "removed": None} for r in found if r.expired], None
+    def row(r):
+        fields = r.to_json()
+        fields.pop("expired")  # true for every row here
+        return {"snapshot": fields.pop("name"), **fields, "kept": SNAPSHOT_KEPT, "removed": None}
+
+    return [row(r) for r in found if r.expired], None
 
 
 class Kept(str):

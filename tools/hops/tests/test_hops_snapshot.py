@@ -1,66 +1,16 @@
-"""hops snapshot take|list|release, and expired Rollback Snapshots in hops strays, against FakeTrueNAS."""
+"""hops snapshot take|list|release and hops.snapshots, against hops_fakes.FakeSnapshots."""
 import json
 from datetime import date, datetime, timezone
 
 import pytest
-from hops_fakes import FakeTrueNAS, FakeTrueNASError
-from test_hops_strays import answer, host  # noqa: F401 (fixture)
+from hops_fakes import FakeSnapshots as Pool
+from hops_fakes import prop, rollback, snap
 
-from hops import snapshots, truenas
+from hops import snapshots
 
 NOW = datetime(2026, 10, 23, 15, 47, 5, tzinfo=timezone.utc)
-DOCKER = "luna/ix-apps/docker"
+DOCKER = snapshots.DOCKER_DATASET
 PERIODIC = f"{DOCKER}@luna-2026-10-19_23-00"
-
-
-def prop(value, source="LOCAL") -> dict:
-    return {"value": str(value), "rawvalue": str(value), "source": source, "parsed": value}
-
-
-def snap(name: str, used: int = 1024, **user) -> dict:
-    dataset, short = name.split("@")
-    return {"id": name, "name": name, "dataset": dataset, "snapshot_name": short, "pool": "luna",
-            "type": "SNAPSHOT", "properties": {"used": prop(used, "NONE"), **user}}
-
-
-class Pool:
-    """TrueNAS's pool.snapshot.* methods over an in-memory set of snapshots."""
-
-    def __init__(self, *found: dict):
-        self.snapshots = {s["id"]: s for s in found}
-        self.datasets = {DOCKER, "luna/apps"}
-        self.server = FakeTrueNAS({
-            "pool.snapshot.query": self.query, "pool.snapshot.create": self.create,
-            "pool.snapshot.delete": self.delete, "zfs.resource.query": self.resources,
-        })
-        self.client = truenas.Client(truenas.TrueNASConfig("wss://tn.example/api/current", FakeTrueNAS.KEY),
-                                     connect=self.server.connect)
-
-    def query(self, filters, options):
-        assert options == {"extra": {"properties": ["used", "homeops:issue", "homeops:expires"]}}
-        return [s for s in self.snapshots.values() if all(s[k] == v for k, _, v in filters)]
-
-    def create(self, data):
-        name = f"{data['dataset']}@{data['name']}"
-        self.snapshots[name] = snap(name, 0, **{k: prop(v) for k, v in data["properties"].items()})
-        return self.snapshots[name]
-
-    def delete(self, name):
-        del self.snapshots[name]
-        return True
-
-    def resources(self, query):
-        missing = [p for p in query["paths"] if p not in self.datasets]
-        if missing:
-            raise FakeTrueNASError("EINVAL", f"[ENOENT] zfs.resource.query: {missing[0]!r}: not found")
-        return [{"name": p} for p in query["paths"]]
-
-    def called(self, method):
-        return [r["params"] for r in self.server.requests if r["method"] == method]
-
-
-def rollback(name, issue="637", expires="2026-10-30", **kw):
-    return snap(name, **{"homeops:issue": prop(issue), "homeops:expires": prop(expires)}, **kw)
 
 
 @pytest.fixture(autouse=True)
@@ -174,40 +124,3 @@ def test_release_dry_run_destroys_nothing(hops):
     outcome = hops("snapshot", "release", name, "--dry-run", truenas=pool.client)
     assert outcome.code == 0 and outcome.out.startswith(f"Would release {name}")
     assert list(pool.snapshots) == [name]
-
-
-# hops strays
-
-def test_strays_reports_expired_rollback_snapshots(hops, fake_host):
-    answer(fake_host)
-    pool = Pool(rollback(f"{DOCKER}@hops-1-x", issue="1", expires="2026-10-22"),
-                rollback(f"{DOCKER}@hops-2-x", issue="2", expires="2026-10-23"),
-                snap(PERIODIC))
-    outcome = hops("strays", "--json", truenas=pool.client)
-    assert outcome.code == 0, outcome.err
-    report = json.loads(outcome.out)
-    assert report["snapshots"] == [
-        {"snapshot": f"{DOCKER}@hops-1-x", "dataset": DOCKER, "issue": "1", "expires": "2026-10-22", "size": 1024,
-         "kept": "released only with hops snapshot release, once its change is verified", "removed": None}]
-    assert report["snapshots_unchecked"] is None
-    text = hops("strays", truenas=pool.client).out
-    assert "Expired Rollback Snapshots:" in text and "hops-2-x" not in text
-
-
-@pytest.mark.usefixtures("host")  # a fake Host and an origin/main to classify against
-def test_strays_apply_never_releases_a_snapshot(hops):
-    pool = Pool(rollback(f"{DOCKER}@hops-1-x", expires="2026-10-01"))
-    outcome = hops("strays", "--apply", "--json", truenas=pool.client)
-    assert outcome.code == 0, outcome.err
-    assert json.loads(outcome.out)["snapshots"][0]["removed"] is None
-    assert pool.called("pool.snapshot.delete") == []
-
-
-def test_strays_without_truenas_says_snapshots_were_not_checked(hops, fake_host):
-    answer(fake_host)
-    outcome = hops("strays", "--json")
-    assert outcome.code == 0, outcome.err
-    report = json.loads(outcome.out)
-    assert report["snapshots"] is None
-    assert report["snapshots_unchecked"].startswith("TrueNAS is not available on this host")
-    assert "Rollback Snapshots not checked: TrueNAS is not available" in hops("strays").out

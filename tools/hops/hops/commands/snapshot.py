@@ -25,7 +25,6 @@ def register(subparsers) -> None:
 
     ls = sub.add_parser("list", help="every Rollback Snapshot, with its issue, release date and size",
                         description="List every snapshot carrying homeops:issue or homeops:expires. Read-only.")
-    ls.add_argument("--dry-run", action="store_true", help="accepted for symmetry; list is read-only")
     output.add_json_flag(ls)
     ls.set_defaults(func=run_list)
 

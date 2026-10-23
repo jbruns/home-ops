@@ -1,7 +1,8 @@
 """TrueNAS middleware: JSON-RPC 2.0 over a WebSocket (`wss://<TRUENAS_URL host>/api/current`).
 
-Everything TrueNAS-specific lives here. Never use the REST API (`/api/v2.0`): it is deprecated and
-raises alerts on the Host.
+The connection, login, errors and redaction live here; feature modules (e.g. hops/snapshots.py) call
+methods through `Client`. Never use the REST API (`/api/v2.0`): it is deprecated and raises alerts
+on the Host.
 
 - `load_config(repo_root, env)` reads `TRUENAS_URL` and `HOPS_TRUENAS_API_KEY`. Without them the
   Host has no TrueNAS for hops, and commands that need one fail with a ConfigError.

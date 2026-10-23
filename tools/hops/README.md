@@ -290,7 +290,8 @@ Errors go to stderr as `hops: error: …`, including with `--json`.
 A **Rollback Snapshot** (GLOSSARY, [ADR 0011](../../docs/adr/0011-restic-is-the-only-backup.md)) is a
 ZFS snapshot taken before a risky change, through TrueNAS (see [Configuration](#configuration)). It
 carries two ZFS user properties: `homeops:issue`, the issue or PR it serves, and `homeops:expires`,
-its release date. Each command takes `--json` and `--dry-run`.
+its release date. Each command takes `--json`; `take` and `release` take `--dry-run`, which checks
+everything and changes nothing.
 
 | Command | Class | What it does |
 |---|---|---|
@@ -640,7 +641,8 @@ Tests replay recorded registry exchanges from `tests/fixtures/registry/`. To re-
 ## Adding a command
 
 - One module in `hops/commands/` per command. It exposes `register(subparsers)`, which adds a
-  parser and calls `set_defaults(func=run)`, where `run(args, ctx) -> int`. Modules are found
+  parser and calls `set_defaults(func=run)`, where `run(args, ctx) -> int`. A command with
+  subcommands (`truenas`, `snapshot`) sets a `run` function on each. Modules are found
   automatically.
 - `ctx.declared` (`hops.declared.Declared`) resolves names with `resolve(names)` or
   `resolve_one(name)`. Each `Service` has `tier`, `image` (repository, tag, digest), `container`
@@ -651,8 +653,9 @@ Tests replay recorded registry exchanges from `tests/fixtures/registry/`. To re-
   `attach(*args, tty=)` connects the terminal; interactive modes first call
   `hops.terminal.require_tty(what)`. `hops.docker` reads containers, and
   `hops.alertmanager.amtool` runs amtool.
-- `ctx.truenas` (`hops.truenas.Client`) is the only way to reach TrueNAS; everything
-  TrueNAS-specific stays in `hops/truenas.py`. `call(method, *params)` returns the result;
+- `ctx.truenas` (`hops.truenas.Client`) is the only way to reach TrueNAS; the connection, login,
+  errors and redaction stay in `hops/truenas.py`. A feature's TrueNAS calls live in its own module
+  that takes the client (`hops/snapshots.py`), so other commands can reuse them. `call(method, *params)` returns the result;
   `job(method, *params)` calls a method that starts a job and waits for the job's result (polling
   `core.get_jobs`). Errors raise `hops.truenas.TrueNASError` with its `errname` (e.g. `EACCES`).
   `truenas.redact(data, method)` masks credentials before printing. On a host without TrueNAS config,
@@ -670,5 +673,7 @@ python3 -m pytest tools/hops -m live        # read-only, against the real Host
 The `fake_host` fixture (`tests/conftest.py`) replaces the ssh process. It records each argv and
 answers with canned `docker` output. The `hops` fixture runs the CLI against a fixture repo.
 `hops_fakes.FakeTrueNAS` stands in for the TrueNAS WebSocket: pass its `connect` to
-`truenas.Client(..., connect=)` and its `methods` answer each JSON-RPC call. The
+`truenas.Client(..., connect=)` and its `methods` answer each JSON-RPC call.
+`hops_fakes.FakeSnapshots` builds on it with an in-memory set of snapshots; pass its `client` as
+`hops(..., truenas=)`. Tests fix today's date by patching `hops.snapshots.now`. The
 `live` suite is skipped unless selected with `-m live`. It must only ever read.
