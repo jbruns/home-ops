@@ -220,11 +220,13 @@ services:
 
 volumes:
   traefik_log:
-    name: common_traefik_log
+    name: edge_traefik_log
     external: true
   traefik_le:
-    name: common_traefik_le
+    name: edge_traefik_le
     external: true
+  # Traefik re-downloads its contents, but not regenerable: the image has no /plugins-storage, so
+  # a volume Compose created would be root-owned and Traefik (non-root) could not write to it.
   traefik_plugins-storage:
-    name: common_traefik_plugins-storage
+    name: edge_traefik_plugins-storage
     external: true

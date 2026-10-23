@@ -402,11 +402,7 @@ def uncovered_volumes(svc: dict, image_paths: list[str]) -> list[str]:
 REGENERABLE_LABEL = "homeops.regenerable"
 # Names from before ADR 0010 (ADR 0004's prefixes), until each Stack's rename issue moves them and
 # removes its entries. The list only shrinks: an entry no Stack declares fails.
-LEGACY_VOLUMES = {
-    "common_crowdsec_config", "common_crowdsec_data", "common_crowdsec_log",  # edge
-    "common_traefik_le", "common_traefik_log", "common_traefik_plugins-storage",  # edge
-    "common_backup_cache", "common_portainer_data",  # ops
-}
+LEGACY_VOLUMES: set[str] = set()
 # Templates are copied to tn/<stack>/ with `app` renamed, so their volumes are named for Stack `app`.
 TEMPLATE_STACK = "app"
 

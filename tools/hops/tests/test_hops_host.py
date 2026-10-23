@@ -36,8 +36,8 @@ STACK_BACK = {
 STACK_BACK_MOUNTS = [
     {"Type": "bind", "Source": "/mnt/andromeda/docker-backups", "Destination": "/backups"},
     {"Type": "bind", "Source": "/var/run/docker.sock", "Destination": "/tmp/docker.sock"},
-    {"Type": "volume", "Name": "common_backup_cache",
-     "Source": "/mnt/.ix-apps/docker/volumes/common_backup_cache/_data", "Destination": "/cache"},
+    {"Type": "volume", "Name": "ops_stack-back_cache",
+     "Source": "/mnt/.ix-apps/docker/volumes/ops_stack-back_cache/_data", "Destination": "/cache"},
 ]
 
 

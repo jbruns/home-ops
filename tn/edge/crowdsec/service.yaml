@@ -53,11 +53,12 @@ services:
 
 volumes:
   crowdsec_log:
-    name: common_crowdsec_log
-    external: true
+    name: edge_crowdsec_log
+    labels:
+      homeops.regenerable: "crowdsec logs to stdout (log_media: stdout); nothing is written here"
   crowdsec_config:
-    name: common_crowdsec_config
+    name: edge_crowdsec_config
     external: true
   crowdsec_data:
-    name: common_crowdsec_data
+    name: edge_crowdsec_data
     external: true
