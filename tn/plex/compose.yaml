@@ -137,11 +137,14 @@ services:
 
 volumes:
   plex_config:
-    name: media_plex_config
+    name: plex_config
     external: true
+  # Compose creates it root-owned and the image has no such folder to copy, so a new one needs
+  # `chown ${PLEX_UID}:${MEDIA_SHARED_GID}` on its _data once before the Service can write to it.
   plex_transcode:
-    name: media_plex_transcode
-    external: true
+    name: plex_transcode
+    labels:
+      homeops.regenerable: "transcode scratch; Plex recreates it per stream"
 
 networks:
   # Traefik and the Exposed Services it routes to; owned by the edge Stack.

@@ -69,7 +69,7 @@ services:
 volumes:
   # Created by the asot-media Stack; the explicit name keeps them across the move.
   ownfoil_config:
-    name: asot-media_ownfoil_config
+    name: ownfoil_config
     external: true
 
 networks:

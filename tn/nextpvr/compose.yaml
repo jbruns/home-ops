@@ -63,11 +63,14 @@ services:
       - proxy
 
 volumes:
+  # Compose creates it root-owned and the image has no such folder to copy, so a new one needs
+  # `chown ${NEXTPVR_UID}:${MEDIA_SHARED_GID}` on its _data once before the Service can write to it.
   nextpvr_buffer:
-    name: media_nextpvr_buffer
-    external: true
+    name: nextpvr_buffer
+    labels:
+      homeops.regenerable: "live TV buffer; NextPVR refills it while streaming"
   nextpvr_config:
-    name: media_nextpvr_config
+    name: nextpvr_config
     external: true
 
 networks:

@@ -158,5 +158,5 @@ services:
 
 volumes:
   sabnzbd_config:
-    name: media_sabnzbd_config
+    name: sabnzbd_config
     external: true

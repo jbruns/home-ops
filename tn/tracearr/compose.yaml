@@ -67,16 +67,16 @@ services:
 
 volumes:
   tracearr_postgres:
-    name: media_tracearr_postgres
+    name: tracearr_postgres
     external: true
   tracearr_redis:
-    name: media_tracearr_redis
+    name: tracearr_redis
     external: true
   tracearr_data:
-    name: media_tracearr_data
+    name: tracearr_data
     external: true
   tracearr_backups:
-    name: media_tracearr_backups
+    name: tracearr_backups
     external: true
 
 networks:

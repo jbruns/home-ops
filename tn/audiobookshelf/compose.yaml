@@ -73,10 +73,10 @@ services:
 volumes:
   # Created by the asot-media Stack; the explicit name keeps them across the move.
   audiobookshelf_config:
-    name: asot-media_audiobookshelf_config
+    name: audiobookshelf_config
     external: true
   audiobookshelf_metadata:
-    name: asot-media_audiobookshelf_metadata
+    name: audiobookshelf_metadata
     external: true
 
 networks:

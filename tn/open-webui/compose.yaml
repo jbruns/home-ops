@@ -100,10 +100,10 @@ services:
 
 volumes:
   ollama_data:
-    name: home_ollama_data
+    name: open-webui_ollama_data
     external: true
   open-webui_data:
-    name: home_open-webui_data
+    name: open-webui_data
     external: true
 
 networks:
