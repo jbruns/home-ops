@@ -48,3 +48,10 @@ def test_logs_loki_reads_history_oldest_first(capsys):
     times = [line["time"] for line in report["lines"]]
     assert times == sorted(times)
     assert all(line["labels"]["service"] == "doco-cd" for line in report["lines"])
+
+
+def test_deploys_lists_doco_cds_runs(capsys):
+    runs = hops_json(capsys, "deploys", "--limit", "3")["runs"]
+    assert len(runs) <= 3
+    if runs:  # empty right after doco-cd restarts
+        assert hops_json(capsys, "deploys", runs[0]["job_id"])["job_id"] == runs[0]["job_id"]
