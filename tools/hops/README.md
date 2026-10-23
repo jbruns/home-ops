@@ -156,8 +156,10 @@ A passthrough for reads that no other command covers, e.g.
   `secret`, `token`, `salt` or `hash` prints as `"[REDACTED]"` (`null` stays `null`). For
   `cloudsync.credentials.*`, every field of `attributes`/`provider` except `type` is redacted too,
   and for `kerberos.keytab.*` the keytab `file`. In every string, a URL's user name and password
-  print as `scheme://[REDACTED]@host…`. Other free-form strings (e.g. a cron job's command) are
-  printed as they are.
+  print as `scheme://[REDACTED]@host…`. Fields holding user-written scripts, commands and
+  auxiliary config are redacted too, at any depth, when they hold a string or list: `command`,
+  `script`, `pre_script`, `post_script`, `args`, `extra`, `shutdowncmd`, `options`, `optionsupsd`,
+  `sudo_commands`, `sudo_commands_nopasswd`, `smb_options`, `auxsmbconf` and `cmdline`.
 - Output is the method's result as JSON, with or without `--json`.
 
 ### exec and db

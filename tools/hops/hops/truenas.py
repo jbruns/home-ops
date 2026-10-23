@@ -183,6 +183,15 @@ def websocket_connect(url: str, *, verify: bool, timeout: float) -> Transport:
 
 # A field is a credential when its name contains one of these (case-insensitive).
 SECRET_NAMES = ("credential", "key", "pass", "pwd", "bindpw", "secret", "token", "salt", "hash")
+# Fields (exact names, from TrueNAS's API schema) holding user-written scripts, commands, command
+# arguments or auxiliary config, which can hold a secret in any form. Masked when a string or list.
+FREE_TEXT = {
+    "command", "script", "pre_script", "post_script",  # cronjob, initshutdownscript, cloudsync, acme
+    "args", "extra",  # cloudsync rclone arguments, rsynctask rsync arguments
+    "shutdowncmd", "options", "optionsupsd",  # ups (also ssh, snmp, ftp `options`)
+    "sudo_commands", "sudo_commands_nopasswd",  # user, group
+    "smb_options", "auxsmbconf", "cmdline",  # smb, sharing.smb, process command lines
+}
 # A URL's user name and password, e.g. http://user:pass@proxy:3128, in any string.
 URL_USERINFO = re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://)[^/\s?#]*@")
 # Fields holding a cloud credential's settings (cloudsync.credentials.*): all but `type` may be secret.
@@ -190,8 +199,8 @@ PROVIDER_FIELDS = ("attributes", "provider")
 
 
 def redact(data, method: str = ""):
-    """A copy of `method`'s result with credential-looking values, and URL userinfo in any string,
-    replaced by [REDACTED]."""
+    """A copy of `method`'s result with credential-looking values, user-written scripts and commands,
+    and URL userinfo in any string, replaced by [REDACTED]."""
     provider = method.startswith("cloudsync.credentials.")
     secret = SECRET_NAMES + (("file",) if method.startswith("kerberos.keytab.") else ())
 
@@ -206,6 +215,8 @@ def redact(data, method: str = ""):
         for k, v in x.items():
             name = str(k).lower()
             if v is not None and any(s in name for s in secret):
+                out[k] = REDACTED
+            elif name in FREE_TEXT and isinstance(v, (str, list)):
                 out[k] = REDACTED
             elif provider and name in PROVIDER_FIELDS and isinstance(v, dict):
                 out[k] = {pk: pv if pk == "type" else REDACTED for pk, pv in v.items()}

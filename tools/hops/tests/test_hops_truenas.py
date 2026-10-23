@@ -156,7 +156,7 @@ def test_call_redacts_credentials(hops_tn, server):
         "id": 1, "path": "/mnt/tank/a", "encryption_password": "pw", "encryption_salt": "salt",
         "credentials": {"id": 2, "provider": {"type": "B2", "account": "acct", "key": "k"}},
         "attributes": {"bucket": "b", "folder": "/x"},
-        "args": "", "api_key": None,
+        "api_key": None,
     }]
     server.methods["cloudsync.credentials.query"] = lambda: [
         {"id": 2, "name": "b2", "provider": {"type": "B2", "account": "acct", "key": "k"}}]
@@ -165,7 +165,7 @@ def test_call_redacts_credentials(hops_tn, server):
     assert json.loads(out) == [{
         "id": 1, "path": "/mnt/tank/a", "encryption_password": "[REDACTED]", "encryption_salt": "[REDACTED]",
         "credentials": "[REDACTED]", "attributes": {"bucket": "b", "folder": "/x"},
-        "args": "", "api_key": None,
+        "api_key": None,
     }]
     _, out, _ = hops_tn("truenas", "call", "cloudsync.credentials.query", "--json")
     assert json.loads(out) == [
@@ -240,3 +240,33 @@ def test_url_with_userinfo_is_refused_without_echoing_it(tmp_path):
         truenas.load_config(tmp_path, env={"TRUENAS_URL": "https://admin:hunter2@tn.example",
                                            "HOPS_TRUENAS_API_KEY": KEY})
     assert "user" in str(exc.value) and "hunter2" not in str(exc.value) and "admin" not in str(exc.value)
+
+
+def test_call_redacts_user_written_scripts_and_commands_at_any_depth(hops_tn, server):
+    server.methods["cloudsync.query"] = lambda: [{
+        "id": 1, "pre_script": "run-backup.sh", "post_script": "", "args": "--b2-key x",
+        "job": {"state": "SUCCESS", "description": None},
+    }]
+    server.methods["cronjob.query"] = lambda: [{"id": 2, "command": "backup --password x", "user": "root"}]
+    server.methods["initshutdownscript.query"] = lambda: [{"id": 3, "command": None, "script": "/mnt/a.sh"}]
+    server.methods["user.query"] = lambda: [{"username": "u", "sudo_commands": ["/bin/x"],
+                                             "sudo_commands_nopasswd": []}]
+    server.methods["rsynctask.query"] = lambda: [{"id": 4, "extra": ["--rsh=ssh -i k"]}]
+    server.methods["ups.config"] = lambda: {"shutdowncmd": "/bin/off", "options": "x", "optionsupsd": "y"}
+    server.methods["smb.config"] = lambda: {"smb_options": "z", "netbiosname": "tn"}
+    server.methods["sharing.smb.query"] = lambda: [{"name": "s", "auxsmbconf": "z"}]
+
+    def show(method):
+        return json.loads(hops_tn("truenas", "call", method)[1])
+
+    assert show("cloudsync.query") == [{
+        "id": 1, "pre_script": "[REDACTED]", "post_script": "[REDACTED]", "args": "[REDACTED]",
+        "job": {"state": "SUCCESS", "description": None}}]
+    assert show("cronjob.query") == [{"id": 2, "command": "[REDACTED]", "user": "root"}]
+    assert show("initshutdownscript.query") == [{"id": 3, "command": None, "script": "[REDACTED]"}]
+    assert show("user.query") == [{"username": "u", "sudo_commands": "[REDACTED]",
+                                   "sudo_commands_nopasswd": "[REDACTED]"}]
+    assert show("rsynctask.query") == [{"id": 4, "extra": "[REDACTED]"}]
+    assert show("ups.config") == {"shutdowncmd": "[REDACTED]", "options": "[REDACTED]", "optionsupsd": "[REDACTED]"}
+    assert show("smb.config") == {"smb_options": "[REDACTED]", "netbiosname": "tn"}
+    assert show("sharing.smb.query") == [{"name": "s", "auxsmbconf": "[REDACTED]"}]
