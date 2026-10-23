@@ -17,6 +17,7 @@ PYTHON = "python:3.14.8-alpine3.24@sha256:4444"
 DOCKER_ROOT = "/mnt/.ix-apps/docker"
 DATASET = "luna/ix-apps/docker"
 SNAPSHOT = f"{DATASET}@hops-638-20261022T000000Z"
+CREATED = 1792627200  # SNAPSHOT's ZFS creation, by the Host's clock: 2026-10-22T00:00:00Z
 OLD, NEW = "home_mariadb_data", "nextcloud_mariadb_data"
 
 
@@ -112,7 +113,7 @@ def host(fake_host, tmp_path):
 
 @pytest.fixture
 def pool():
-    return Pool(rollback(SNAPSHOT, issue="638", expires="2026-10-30"))
+    return Pool(rollback(SNAPSHOT, issue="638", expires="2026-10-30", creation=CREATED))
 
 
 def move(hops, pool, *extra):
@@ -247,15 +248,48 @@ def test_refuses_a_stopped_container_on_old_that_no_stack_declares(hops, host, p
     assert nothing_changed(host, fake_host)
 
 
-def test_refuses_a_snapshot_taken_before_the_containers_on_old_stopped(hops, host, pool, fake_host):
-    host.add(OLD, {"f": "x"})
+def stopped_mariadb(host, finished_at):
     db = mounting("mariadb", OLD, project="home", service="mariadb", status="exited")
-    db["State"]["FinishedAt"] = "2026-10-22T00:00:01.5Z"  # a second after SNAPSHOT was taken
+    db["State"]["FinishedAt"] = finished_at
     host.containers[OLD] = [db]
-    assert refused(move(hops, pool), f"{SNAPSHOT} was not taken after mariadb stopped (2026-10-22 00:00:01Z)")
-    assert nothing_changed(host, fake_host)
-    db["State"]["FinishedAt"] = "2026-10-22T00:00:00.5Z"  # within the second it was taken: at rest
+    return db
+
+
+def test_a_snapshot_created_after_the_last_stop_covers_the_move(hops, host, pool):
+    host.add(OLD, {"f": "x"})
+    stopped_mariadb(host, "2026-10-21T23:59:59.999999999Z")
     assert move(hops, pool).code == 0
+
+
+def test_refuses_a_snapshot_created_before_the_containers_on_old_stopped(hops, host, pool, fake_host):
+    host.add(OLD, {"f": "x"})
+    stopped_mariadb(host, "2026-10-22T00:00:01.5Z")
+    assert refused(move(hops, pool), f"{SNAPSHOT} was created at 2026-10-22 00:00:00Z, before mariadb stopped "
+                                     "(2026-10-22 00:00:01.500000Z)")
+    assert nothing_changed(host, fake_host)
+
+
+@pytest.mark.parametrize("finished_at", ["2026-10-22T00:00:00.000000001Z", "2026-10-22T00:00:00.5Z",
+                                         "2026-10-22T00:00:00Z"])
+def test_refuses_a_snapshot_created_in_the_second_the_containers_on_old_stopped(hops, host, pool, fake_host,
+                                                                                finished_at):
+    # ZFS keeps creation to the second, so a snapshot of that second may be from before the stop.
+    host.add(OLD, {"f": "x"})
+    stopped_mariadb(host, finished_at)
+    assert refused(move(hops, pool), f"{SNAPSHOT} was created in the second mariadb stopped")
+    assert nothing_changed(host, fake_host)
+
+
+def test_freshness_is_the_hosts_creation_time_not_the_snapshots_name(hops, host, fake_host):
+    # The name comes from the clock of the machine that ran `snapshot take`; creation from the Host's.
+    host.add(OLD, {"f": "x"})
+    stopped_mariadb(host, "2026-10-22T00:00:30Z")
+    ahead = f"{DATASET}@hops-638-20261022T000100Z"  # named after the stop, created before it
+    assert refused(move(hops, Pool(rollback(ahead, issue="638", creation=CREATED))), "before mariadb stopped")
+    behind = f"{DATASET}@hops-638-20261021T235900Z"  # named before the stop, created after it
+    outcome = move(hops, Pool(rollback(behind, issue="638", creation=CREATED + 60)), "--json")
+    assert outcome.code == 0, outcome.err
+    assert json.loads(outcome.out)["snapshot"]["name"] == behind
 
 
 def test_a_stopped_deliberate_container_on_old_is_removed(hops, host, pool, fake_host):
@@ -354,3 +388,44 @@ def test_a_failed_removal_after_the_move_reports_what_was_removed(hops, host, po
     assert outcome.code == 1
     assert f"removing {OLD} failed" in outcome.err and "containers removed: mariadb; still there: none" in outcome.err
     assert f"{OLD} holds 0 top-level entries, {NEW} holds 1 top-level entries" in outcome.err
+
+
+def test_refuses_when_a_consumer_starts_between_the_checks_and_the_move(hops, host, pool, fake_host):
+    # e.g. a Deploy of the Stack lands while the snapshot is taken and <new> created
+    host.add(OLD, {"f": "x"})
+    db = stopped_mariadb(host, "2026-10-21T00:00:00Z")
+    create = host.create
+
+    def deploy_starts_it(call):
+        db["State"]["Status"] = "running"
+        return create(call)
+    fake_host.respond("volume", "create", stdout=deploy_starts_it)
+
+    outcome = move(hops, pool)
+    assert outcome.code == 1
+    assert "mariadb (running) started" in outcome.err and "nothing was moved" in outcome.err
+    assert f"{OLD} holds 1 top-level entries, {NEW} holds 0 top-level entries" in outcome.err
+    assert f"Rollback Snapshot {SNAPSHOT}" in outcome.err
+    assert host.runs == ["check", "check"]
+    assert not any(c[0] == "rm" or c[:2] == ["volume", "rm"] for c in fake_host.docker_calls)
+
+
+@pytest.mark.parametrize("on, status", [(OLD, "running"), (NEW, "running"), (OLD, "created")])
+def test_a_consumer_appearing_during_the_move_stops_before_cleanup(hops, host, pool, fake_host, on, status):
+    host.add(OLD, {"f": "x"})
+    run = host.run
+
+    def deploy_during_move(call):
+        report = run(call)
+        if call.docker[-1][-4] == "move":
+            host.containers.setdefault(on, []).append(
+                mounting("mariadb", on, project="nextcloud", service="mariadb", status=status))
+        return report
+    fake_host.respond("run", stdout=deploy_during_move)
+
+    outcome = move(hops, pool)
+    assert outcome.code == 1
+    assert f"mariadb ({status}) started" in outcome.err and "during the move" in outcome.err
+    assert f"{OLD} holds 0 top-level entries, {NEW} holds 1 top-level entries" in outcome.err
+    assert f"Rollback Snapshot {SNAPSHOT}" in outcome.err
+    assert not any(c[0] == "rm" or c[:2] == ["volume", "rm"] for c in fake_host.docker_calls)

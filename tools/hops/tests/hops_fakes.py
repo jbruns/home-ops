@@ -249,10 +249,12 @@ def prop(value, source="LOCAL") -> dict:
     return {"value": str(value), "rawvalue": str(value), "source": source, "parsed": value}
 
 
-def snap(name: str, used: int = 1024, **user) -> dict:
+def snap(name: str, used: int = 1024, creation: int = 1792540800, **user) -> dict:
+    """`creation`: seconds since the epoch, as ZFS keeps it (default 2026-10-21T00:00:00Z)."""
     dataset, short = name.split("@")
+    created = {"value": "-", "rawvalue": str(creation), "source": "NONE", "parsed": {"$date": creation * 1000}}
     return {"id": name, "name": name, "dataset": dataset, "snapshot_name": short, "pool": "luna",
-            "type": "SNAPSHOT", "properties": {"used": prop(used, "NONE"), **user}}
+            "type": "SNAPSHOT", "properties": {"used": prop(used, "NONE"), "creation": created, **user}}
 
 
 class FakeSnapshots:
@@ -271,8 +273,10 @@ class FakeSnapshots:
                                      connect=self.server.connect)
 
     def query(self, filters, options):
-        assert options == {"extra": {"properties": ["used", "homeops:issue", "homeops:expires"]}}
-        return [s for s in self.snapshots.values() if all(s[k] == v for k, _, v in filters)]
+        assert options in ({"extra": {"properties": ["used", "homeops:issue", "homeops:expires"]}},
+                           {"extra": {"properties": ["creation"]}})
+        return [s for s in self.snapshots.values()
+                if all(s[k] in v if op == "in" else s[k] == v for k, op, v in filters)]
 
     def create(self, data):
         name = f"{data['dataset']}@{data['name']}"

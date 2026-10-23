@@ -119,10 +119,14 @@ def check_issue(issue: str) -> None:
         raise UsageError(f"--issue {issue!r} is not an issue number")
 
 
-def taken_at(name: str) -> datetime | None:
-    """When `take` made the snapshot, from its name (hops-<issue>-<UTC time>); None for any other name."""
-    m = re.fullmatch(rf"{PREFIX}\d+-(\d{{8}}T\d{{6}}Z)", name.split("@", 1)[-1])
-    return datetime.strptime(m[1], "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc) if m else None
+def created(client, names: list[str]) -> dict[str, datetime | None]:
+    """Each snapshot's ZFS `creation`, by the Host's clock and to the whole second (None if unreadable)."""
+    found = client.call("pool.snapshot.query", [["id", "in", names]], {"extra": {"properties": ["creation"]}})
+    at = {}
+    for s in found:
+        raw = ((s.get("properties") or {}).get("creation") or {}).get("rawvalue")
+        at[s["id"]] = datetime.fromtimestamp(int(raw), timezone.utc) if str(raw).isdigit() else None
+    return at
 
 
 def plan_take(client, issue: str, dataset: str, expires: str, at: datetime) -> dict:

@@ -6,11 +6,14 @@ stopped containers that still reference <old> (the Deploy after merge recreates 
 name), and removes <old>. A Rollback Snapshot (ADR 0011) of the dataset holding the volumes is
 required. If anything fails part-way it stops, reports both volumes' state, and rolls nothing back.
 """
+import re
 from datetime import datetime, timezone
 
 from hops import output, snapshots, strays, volumes
 from hops.errors import ConfigError, HopsError, HostTimeout, UsageError
 
+# Docker's FinishedAt: RFC 3339 in UTC, to the nanosecond.
+FINISHED = re.compile(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d+))?Z")
 HELP = "rename a volume: move its contents into a new volume, then remove the old one"
 
 
@@ -75,15 +78,32 @@ def truenas(ctx):
 
 
 def last_stop(containers) -> tuple[datetime, str] | None:
-    """When the last of the containers stopped (to the second, as snapshot names have it), and which."""
+    """When the last of the containers stopped (to the microsecond, by the Host's clock), and which."""
     stops = []
     for c in containers:
-        try:
-            at = datetime.strptime(c.finished_at[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
-        except ValueError:
+        m = FINISHED.fullmatch(c.finished_at)
+        if not m:
             continue
+        at = datetime.strptime(m[1], "%Y-%m-%dT%H:%M:%S").replace(
+            tzinfo=timezone.utc, microsecond=int((m[2] or "").ljust(6, "0")[:6]))
         stops.append((at, c.name))
     return max(stops, default=None)
+
+
+def stale(name: str, created: datetime | None, stop: tuple[datetime, str]) -> str | None:
+    """Why the snapshot may hold data mid-write, or None when ZFS created it strictly after the stop.
+
+    Both times are the Host's clock. ZFS keeps `creation` to the second, so a snapshot created in the
+    second the last container stopped may be from before the stop, and does not count."""
+    at, who = stop
+    if created is None:
+        return f"{name} has no readable creation time"
+    if created > at:
+        return None
+    if created == at.replace(microsecond=0):
+        return (f"{name} was created in the second {who} stopped ({at:%Y-%m-%d %H:%M:%S.%f}Z), and ZFS keeps "
+                "creation to the second, so it may be from before the stop")
+    return f"{name} was created at {created:%Y-%m-%d %H:%M:%S}Z, before {who} stopped ({at:%Y-%m-%d %H:%M:%S.%f}Z)"
 
 
 def snapshot_plan(ctx, args, dataset: str, on_old):
@@ -101,16 +121,24 @@ def snapshot_plan(ctx, args, dataset: str, on_old):
     if not found:
         refuse(f"no unexpired Rollback Snapshot of {dataset} (which holds the volumes) for issue #{args.issue}; {take}")
     stop = last_stop(on_old)
-
-    def after_stop(s) -> bool:
-        taken = snapshots.taken_at(s.name)
-        return taken is not None and taken >= stop[0]
-    fresh = [s for s in found if after_stop(s)] if stop else found
+    if not stop:
+        return found[-1]
+    created = snapshots.created(client, [s.name for s in found])
+    reasons = {s.name: stale(s.name, created.get(s.name), stop) for s in found}
+    fresh = sorted((s for s in found if not reasons[s.name]), key=lambda s: created[s.name])
     if not fresh:
-        refuse(f"{', '.join(s.name for s in found)} {'was' if len(found) == 1 else 'were'} not taken after {stop[1]} "
-               f"stopped ({stop[0]:%Y-%m-%d %H:%M:%S}Z), so {'it' if len(found) == 1 else 'they'} may hold data "
-               f"mid-write; {take}")
+        refuse(f"{'; '.join(reasons.values())}; so {'it' if len(found) == 1 else 'they'} may hold data mid-write; "
+               f"{take}")
     return fresh[-1]
+
+
+def late_consumers(ctx, old: str, new: str, on_old) -> list[str]:
+    """Containers that turned up since the checks (a Deploy of the Stack, say): any on <old> that is not
+    one of the stopped `on_old`, and any running on <new>."""
+    known = {c.id: c for c in on_old}
+    late = [c for c in volumes.users(ctx.runner, old) if c.id not in known or c.status not in strays.REMOVABLE_STATES]
+    late += [c for c in volumes.users(ctx.runner, new) if c.status not in strays.REMOVABLE_STATES]
+    return [f"{c.name} ({c.status})" for c in late]
 
 
 def state(ctx, image: str, directory: str, old: str, new: str, probe=None) -> str:
@@ -192,6 +220,17 @@ def run_move(args, ctx) -> int:
         problem = volumes.local_problem(created, directory) if created else "it does not exist"
         if problem:
             stopped(f"docker volume create {new}", problem)
+    # Again just before the move, and after it before any cleanup: Docker cannot lock a volume, and a
+    # Deploy landing now would start the Stack on it.
+    try:
+        late = late_consumers(ctx, old, new, on_old)
+    except HopsError as exc:
+        stopped("re-checking containers before the move", str(exc))
+    if late:
+        raise HopsError(
+            f"{', '.join(late)} started after the checks passed (a Deploy of the Stack?), so nothing was moved: "
+            f"{state(ctx, image, directory, old, new)}. Stop it, then run hops volume move again; Rollback "
+            f"Snapshot {snap.name} is still there")
     try:
         moved = volumes.move(ctx.runner, image, directory, old, new)
     except HostTimeout as exc:
@@ -199,6 +238,14 @@ def run_move(args, ctx) -> int:
                 "Host, so wait for it to exit before trusting what follows")
     except HopsError as exc:
         stopped("the move", str(exc))
+    try:
+        late = late_consumers(ctx, old, new, on_old)
+    except HopsError as exc:
+        stopped("re-checking containers after the move", str(exc), moved)
+    if late:
+        stopped("the move", f"{', '.join(late)} started during the move, so files were renamed under it; stop it "
+                f"now, before anything else{f' (the move itself reported {moved.error})' if moved.error else ''}",
+                moved)
     if moved.error:
         stopped("the move", f"{moved.error} after {moved.moved} of {probe.old['entries']} entries", moved)
     if moved.old is None or moved.new is None or moved.old["entries"] or moved.new["entries"] != probe.old["entries"]:

@@ -417,10 +417,12 @@ Class: **Destructive**. It removes `<old>` and the stopped containers that refer
   dataset, so `rename(2)` can move them.
 - An unexpired Rollback Snapshot for `--issue <n>` exists of that dataset (`luna/ix-apps/docker` on
   the Host). The dataset is read from the move container's `/proc/self/mountinfo`, not assumed.
-  The snapshot must have been taken (by the time in its `hops-<issue>-<UTC time>` name) no earlier
-  than the second the last container on `<old>` stopped, so it holds the data at rest. A snapshot
-  taken while the Stack was still running is refused. `--take-snapshot` takes one instead,
-  released by default in 7 days.
+  ZFS must have created the snapshot strictly after the last container on `<old>` stopped, so it
+  holds the data at rest. Both times come from the Host's clock: the snapshot's `creation` and
+  Docker's `FinishedAt`, never the time in the snapshot's name. ZFS keeps `creation` to the
+  second, so a snapshot created in the second of the stop is refused too. A snapshot taken while
+  the Stack was still running is refused. `--take-snapshot` takes one instead, released by
+  default in 7 days.
   There is no override. Without TrueNAS configured, `volume move` refuses, because a rename moves a
   Stack's only live copy of its data (ADR 0011).
 - `<new>` should be named `<stack>_[<service>_]<purpose>` for a declared Stack. If it isn't,
@@ -430,7 +432,9 @@ Class: **Destructive**. It removes `<old>` and the stopped containers that refer
 
 1. If `--take-snapshot` is given, take the Rollback Snapshot.
 2. Run `docker volume create <new>`, unless the volume exists.
-3. Start one container that bind-mounts Docker's volumes directory once, at `/volumes`. The
+3. Check the containers on both volumes again: one that started since the checks (a Deploy of the
+   Stack, say) stops it here, before anything moves.
+4. Start one container that bind-mounts Docker's volumes directory once, at `/volumes`. The
    container is
    `docker run --rm --label startup-order=skip --log-driver none --network none --pull never
    --read-only --user 0:0 --cap-drop ALL --cap-add CHOWN,DAC_OVERRIDE,FOWNER` of the python
@@ -441,13 +445,15 @@ Class: **Destructive**. It removes `<old>` and the stopped containers that refer
    times. A symlink is renamed, never followed. Names are passed as arguments, never through a
    shell, so spaces and newlines are safe. An entry already in `<new>` stops the move. Before
    the move, a read-only run of the same container checks the preconditions above.
-4. Check that `<old>/_data` is empty and `<new>/_data` holds as many top-level entries as `<old>`
+5. Check the containers again. If one started during the move, it stops there, exits 1 and
+   cleans up nothing. Stop that container first, then look at both volumes.
+6. Check that `<old>/_data` is empty and `<new>/_data` holds as many top-level entries as `<old>`
    did.
-5. `docker rm` (never forced) the stopped containers that reference `<old>`. Docker will not
+7. `docker rm` (never forced) the stopped containers that reference `<old>`. Docker will not
    remove a volume while any container references it, even a stopped one. This is runtime
    state: the Deploy after merge recreates them with the new name, since their volume changed.
-6. `docker volume rm <old>`.
-7. Print the next steps.
+8. `docker volume rm <old>`.
+9. Print the next steps.
 
 **If it fails part-way**, it stops and exits 1. The message reports how many top-level entries
 each volume holds and names the Rollback Snapshot. It never rolls anything back on its own.
@@ -466,7 +472,10 @@ its 600-second ssh timeout, it may still be renaming; it carries the label
 3. **Snapshot** after stopping, so the snapshot is consistent:
    `hops snapshot take --issue <n> --for 1w`. Or pass `--take-snapshot` in the next step.
 4. **Move:** run `hops volume move <old> <new> --issue <n> --dry-run`, then run it again without
-   `--dry-run`.
+   `--dry-run`. Until the move has finished, merge nothing that touches the Stack: doco-cd
+   Deploys a Stack whenever a commit changes it, which would start it on the volume mid-move.
+   `hops` cannot hold Deploys off. doco-cd's `pause: true` is a deploy setting in
+   `.doco-cd.yml`, which is declared state and covers every Stack.
 5. **Merge** the PR. doco-cd Deploys the Stack and recreates its containers on `<new>`
    (`hops deploys <stack>` shows the run).
 6. **Verify:** `hops status <stack>`, and check that the Stack works as before.
