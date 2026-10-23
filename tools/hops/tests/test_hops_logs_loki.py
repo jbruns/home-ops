@@ -180,3 +180,57 @@ def test_a_loki_error_is_reported_with_its_message(hops, fake_host):
 def test_bad_combinations_fail_before_the_host(hops, fake_host, argv):
     assert hops(*argv).code == 2
     assert fake_host.calls == []
+
+
+def test_a_full_page_of_lines_at_one_timestamp_does_not_stop_paging(hops, fake_host, monkeypatch):
+    from hops import loki as loki_module
+
+    monkeypatch.setattr(loki_module, "PAGE", 3)
+    tied = [(1, f"tied {i}", SONARR) for i in range(3)]
+    loki = FakeLoki([*tied, (2, "after", SONARR)])
+    fake_host.respond("run", stdout=loki)
+    outcome = hops("logs", "sonarr/sonarr", "--loki", "--since", "1970-01-01T00:00:00Z", "--limit", "6", "--json")
+    assert outcome.code == 0, outcome.err
+    report = json.loads(outcome.out)
+    assert sorted(line["text"] for line in report["lines"]) == ["after", "tied 0", "tied 1", "tied 2"]
+    assert report["lines"][-1]["text"] == "after"
+    assert report["truncated"] is False
+
+
+def test_more_tied_lines_than_loki_returns_at_once_fail_clearly(hops, fake_host, monkeypatch):
+    from hops import loki as loki_module
+
+    monkeypatch.setattr(loki_module, "PAGE", 3)
+    monkeypatch.setattr(loki_module, "MAX_ENTRIES", 3)
+    loki = FakeLoki([*((1, f"tied {i}", SONARR) for i in range(3)), (2, "after", SONARR)])
+    fake_host.respond("run", stdout=loki)
+    outcome = hops("logs", "sonarr/sonarr", "--loki", "--since", "1970-01-01T00:00:00Z", "--limit", "6")
+    assert outcome.code == 1
+    assert "share the timestamp 1970-01-01T00:00:00.000000001Z" in outcome.err
+    assert "--grep" in outcome.err
+
+
+def test_absolute_times_keep_nanoseconds(hops, fake_host):
+    """A time copied from hops' own output bounds the range to the nanosecond; --until is exclusive."""
+    first = 1792281680526870147  # 2026-10-18T00:01:20.526870147Z, the recorded fixture's first line
+    loki = FakeLoki([(first - 1, "before", SONARR), (first, "at", SONARR), (first + 1, "after", SONARR)])
+    fake_host.respond("run", stdout=loki)
+    outcome = hops("logs", "sonarr/sonarr", "--loki", "--since", "2026-10-18T00:01:20.526870147Z",
+                   "--until", "2026-10-18T00:01:20.526870148Z", "--json")
+    assert (loki.requests[0]["start"], loki.requests[0]["end"]) == (str(first), str(first + 1))
+    assert [line["text"] for line in json.loads(outcome.out)["lines"]] == ["at"]
+
+
+def test_absolute_times_with_an_offset_keep_nanoseconds(hops, fake_host):
+    loki = FakeLoki([])
+    fake_host.respond("run", stdout=loki)
+    hops("logs", "sonarr/sonarr", "--loki", "--since", "2026-10-17T17:01:20.526539876-07:00",
+         "--until", "2026-10-18T00:01:21Z")
+    assert loki.requests[0]["start"] == "1792281680526539876"
+
+
+def test_grep_keeps_characters_outside_the_basic_plane(hops, fake_host):
+    loki = FakeLoki([])
+    fake_host.respond("run", stdout=loki)
+    hops("logs", "sonarr/sonarr", "--loki", "--grep", "ok 😀")
+    assert loki.requests[0]["query"].endswith('|~ "ok 😀"')

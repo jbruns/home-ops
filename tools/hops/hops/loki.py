@@ -23,8 +23,10 @@ from hops.runner import Runner
 ADDRESS = "loki:3100"
 NETWORK = "monitoring_default"
 TRANSPORT = ("monitoring", "dependencies-render")  # a Service whose image has python3
-# Loki's max_entries_limit_per_query default; one request returns at most this many lines.
-PAGE = 5000
+# Lines per request. Loki returns at most MAX_ENTRIES (its max_entries_limit_per_query default)
+# per request; staying below it lets one request fetch every line tied at a page's last timestamp.
+PAGE = 4000
+MAX_ENTRIES = 5000
 TIMEOUT = 60
 # Docker's two streams; Alloy also ships Traefik's access log as logstream=access.
 STREAMS = 'logstream=~"stdout|stderr"'
@@ -42,6 +44,8 @@ except OSError as e:
 """
 DURATION = re.compile(r"(?:\d+[smhdw])+")
 DURATION_PART = re.compile(r"(\d+)([smhdw])")
+# ISO 8601 with up to 9 fractional digits, which datetime would cut to 6.
+FRACTION = re.compile(r"(?P<head>[^.]*?)(?:\.(?P<frac>\d{1,9}))?(?P<tz>Z|[+-]\d{2}:?\d{2})?")
 UNITS = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
 REGEX_SPECIAL = re.compile(r"([.^$*+?()\[\]{}|\\])")
 
@@ -64,7 +68,8 @@ def selector(services: list[Service]) -> str:
 
 
 def with_grep(query: str, grep: str | None) -> str:
-    return f"{query} |~ {json.dumps(grep)}" if grep else query
+    # LogQL decodes \\u escapes but not surrogate pairs, so characters stay as they are.
+    return f"{query} |~ {json.dumps(grep, ensure_ascii=False)}" if grep else query
 
 
 def parse_time(value: str, now: datetime) -> int:
@@ -73,11 +78,15 @@ def parse_time(value: str, now: datetime) -> int:
     if DURATION.fullmatch(value):
         seconds = sum(int(n) * UNITS[u] for n, u in DURATION_PART.findall(value))
         return to_ns(now) - seconds * 10**9
+    parts = FRACTION.fullmatch(value)
     try:
-        when = datetime.fromisoformat(value)
+        if not parts:
+            raise ValueError
+        when = datetime.fromisoformat(parts["head"] + (parts["tz"] or ""))
     except ValueError:
         raise UsageError(f"{value!r} is neither a duration (10m, 2h, 7d) nor an ISO 8601 time") from None
-    return to_ns(when if when.tzinfo else when.replace(tzinfo=timezone.utc))
+    when = when if when.tzinfo else when.replace(tzinfo=timezone.utc)
+    return int(when.timestamp()) * 10**9 + int((parts["frac"] or "").ljust(9, "0"))
 
 
 def to_ns(when: datetime) -> int:
@@ -134,7 +143,9 @@ def query_range(fetch: Callable[[dict], dict], query: str, start: int, end: int,
     Returns them and whether Loki may hold more in the range.
 
     Each page starts at the last page's newest timestamp, since lines can share one; the lines
-    already seen at that timestamp are dropped."""
+    already seen at that timestamp are dropped. When a whole page is lines already seen at that
+    timestamp, one request of up to MAX_ENTRIES fetches every line at it, and paging goes on
+    after it."""
     found: list[tuple[int, dict, str]] = []
     seen_at_start: set = set()
     while len(found) < limit:
@@ -146,8 +157,20 @@ def query_range(fetch: Callable[[dict], dict], query: str, start: int, end: int,
         if len(page) < want:
             return found, False
         if not new:
-            # More than PAGE lines share the timestamp `start`; Loki cannot page within it.
-            return found, True
+            tied = entries(fetch({"query": query, "start": start, "end": start + 1, "limit": MAX_ENTRIES,
+                                  "direction": "forward"}))
+            if len(tied) >= MAX_ENTRIES:
+                raise HopsError(f"{MAX_ENTRIES} or more lines share the timestamp {rfc3339(start)}, more than "
+                                "Loki returns in one request, so hops cannot page past them; narrow the "
+                                "query with --grep, or a selector with --query")
+            rest = [e for e in tied if key(e) not in seen_at_start]
+            found += rest[:limit - len(found)]
+            if len(found) >= limit:
+                return found, True
+            start, seen_at_start = start + 1, set()
+            if start >= end:
+                return found, False
+            continue
         start = found[-1][0]
         seen_at_start = {key(e) for e in found if e[0] == start}
     return found, True

@@ -85,11 +85,14 @@ containers that have since been recreated or removed.
 - **`--query '<LogQL>'`** sends a log query instead, e.g. Traefik's access log:
   `--query '{logstream="access"} | json | DownstreamStatus >= 500'`. Metric queries are refused.
 - **Range:** `--since` (default `1h`) and `--until` (default now) take a duration back from now
-  (`90s`, `2h`, `1h30m`, `7d`) or an ISO 8601 time (UTC unless it has an offset).
+  (`90s`, `2h`, `1h30m`, `7d`) or an ISO 8601 time (UTC unless it has an offset), to the
+  nanosecond, so a time copied from the output works as a boundary. `--until` is exclusive.
 - **`--grep RE`** adds a LogQL line filter (`|~`, RE2 syntax).
 - **`--limit N`** (default 1000): the oldest N lines in the range. `hops` pages through
-  `query_range` 5000 lines at a time (Loki's per-request cap). When it stops at the limit, it
-  says so on stderr.
+  `query_range` 4000 lines at a time. Lines can share a timestamp; when a whole page does, one
+  request fetches every line at it, up to Loki's per-request cap of 5000. More than that at one
+  nanosecond fails (exit 1): narrow with `--grep` or `--query`. When `hops` stops at the limit,
+  it says so on stderr.
 - **Output:** unlike plain `hops logs`, each line starts with its time, as with
   `docker logs --timestamps`: `<time> <text>`, or `<time> <service> | <text>` when the target has
   several Services. `--json` is described [below](#logs---loki---json).
