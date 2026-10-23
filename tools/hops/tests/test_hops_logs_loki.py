@@ -11,10 +11,13 @@ PYTHON = "python:3.14.8-alpine3.24@sha256:4444"
 
 @pytest.fixture(autouse=True)
 def transport_image(repo):
-    """The fixture monitoring Stack gains the Service whose image carries the request."""
+    """The fixture monitoring Stack gains the Service whose image carries the request, and doco-cd
+    its second Service, as in the repo."""
     compose = repo / "tn" / "monitoring" / "compose.yaml"
     compose.write_text(compose.read_text() + f"  dependencies-render:\n    image: {PYTHON}\n"
                        "    container_name: dependencies-render\n")
+    doco = repo / "tn" / "doco-cd" / "compose.yaml"
+    doco.write_text(doco.read_text() + "  apprise:\n    image: caronc/apprise:2.0.1\n")
 
 
 def request(call) -> dict:
@@ -77,9 +80,20 @@ def test_a_bare_stack_selects_every_service_in_it(hops, fake_host):
 def test_a_service_without_container_name_matches_every_container_compose_gave_it(hops, fake_host):
     loki = FakeLoki([])
     fake_host.respond("run", stdout=loki)
-    hops("logs", "doco-cd", "--loki", "--grep", 'deploy"ed')
+    hops("logs", "doco-cd/doco-cd", "--loki", "--grep", 'deploy"ed')
     assert loki.requests[0]["query"] == (
         '{container=~"doco-cd-doco-cd-[0-9]+", logstream=~"stdout|stderr"} |~ "deploy\\"ed"')
+
+
+def test_a_name_that_is_both_stack_and_service_means_the_stack(hops, fake_host):
+    loki = FakeLoki([(1, "sent", {"container": "doco-cd-apprise-1", "service": "apprise", "logstream": "stdout"}),
+                     (2, "deployed", {"container": "doco-cd-doco-cd-6", "service": "doco-cd", "logstream": "stderr"})])
+    fake_host.respond("run", stdout=loki)
+    outcome = hops("logs", "doco-cd", "--loki", "--since", "1970-01-01T00:00:00Z")
+    assert loki.requests[0]["query"] == (
+        '{container=~"doco-cd-apprise-[0-9]+|doco-cd-doco-cd-[0-9]+", logstream=~"stdout|stderr"}')
+    assert outcome.out.splitlines() == ["1970-01-01T00:00:00.000000001Z apprise | sent",
+                                        "1970-01-01T00:00:00.000000002Z doco-cd | deployed"]
 
 
 def test_query_passes_logql_through(hops, fake_host):

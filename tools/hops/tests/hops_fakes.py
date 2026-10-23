@@ -6,6 +6,7 @@ pytest collects tools/ together.
 import shlex
 import subprocess
 import textwrap
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -140,7 +141,7 @@ class FakeHost:
         self.calls: list[Call] = []
         self._responses: list[tuple[tuple[str, ...], tuple[str, ...], int, str, str]] = []
 
-    def respond(self, *docker_args: str, suffix: tuple[str, ...] = (), stdout="", stderr: str = "",
+    def respond(self, *docker_args: str, suffix: tuple[str, ...] = (), stdout: str | Callable[[Call], str] = "", stderr: str = "",
                 returncode: int = 0):
         self._responses.append((docker_args, tuple(suffix), returncode, stdout, stderr))
 

@@ -89,13 +89,15 @@ containers that have since been recreated or removed.
 - **`--grep RE`** adds a LogQL line filter (`|~`, RE2 syntax).
 - **`--limit N`** (default 1000): the oldest N lines in the range. `hops` pages through
   `query_range` 5000 lines at a time (Loki's per-request cap). When it stops at the limit, it
-  says so on stderr.
-- **Output:** one line per entry, `<time> <text>`, or `<time> <service> | <text>` when the target
-  has several Services. `--json` is described [below](#logs---loki---json).
+  says so on stderr. Use `doco-cd/doco-cd` for doco-cd's own lines; bare `doco-cd` adds apprise.
+- **Output:** unlike plain `hops logs`, each line starts with its time, as with
+  `docker logs --timestamps`: `<time> <text>`, or `<time> <service> | <text>` when the target has
+  several Services. `--json` is described [below](#logs---loki---json).
 - **Transport:** Loki has no auth and listens only on the `monitoring_default` network. Each page
   is one `docker run --rm --label startup-order=skip --network monitoring_default --log-driver none
   --pull never` of the image pinned for `monitoring/dependencies-render` (python), which fetches
-  the URL. `--log-driver none` keeps the response from being shipped back into Loki.
+  the URL, and is removed when it exits. `--log-driver none` keeps the response from being shipped
+  back into Loki. It only reads, so `logs --loki` stays read-only.
 
 ### exec and db
 

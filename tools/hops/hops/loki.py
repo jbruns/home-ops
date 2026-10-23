@@ -46,10 +46,16 @@ UNITS = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
 REGEX_SPECIAL = re.compile(r"([.^$*+?()\[\]{}|\\])")
 
 
+def literal(text: str) -> str:
+    """`text` as an RE2 pattern that matches only itself."""
+    return REGEX_SPECIAL.sub(r"\\\1", text)
+
+
 def selector(services: list[Service]) -> str:
     """The LogQL stream selector for the containers of `services` (Docker's streams only)."""
-    patterns = [REGEX_SPECIAL.sub(r"\\\1", s.container_name) if s.container_name
-                else REGEX_SPECIAL.sub(r"\\\1", f"{s.stack}-{s.name}-") + "[0-9]+" for s in services]
+    # Compose names a container without container_name <project>-<service>-<n>.
+    patterns = [literal(s.container_name) if s.container_name else literal(f"{s.stack}-{s.name}-") + "[0-9]+"
+                for s in services]
     if len(services) == 1 and services[0].container_name:
         matcher = f"container={json.dumps(services[0].container_name)}"
     else:
@@ -140,9 +146,8 @@ def query_range(fetch: Callable[[dict], dict], query: str, start: int, end: int,
         if len(page) < want:
             return found, False
         if not new:
-            # A full page of lines all at `start`, every one seen: step past that timestamp.
-            start, seen_at_start = start + 1, set()
-            continue
+            # More than PAGE lines share the timestamp `start`; Loki cannot page within it.
+            return found, True
         start = found[-1][0]
         seen_at_start = {key(e) for e in found if e[0] == start}
     return found, True
