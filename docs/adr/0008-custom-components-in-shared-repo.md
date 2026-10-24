@@ -9,3 +9,5 @@ Every Component is tested, test-first for new behaviour. A Contract Test runs it
 - **A `components/` folder in this repo, published from here**: rejected; asotbz/ops would depend on this repo's history, CI and SOPS keys, and Components would share home-ops' release cadence.
 - **Keep bind-mounting source into stock images**: rejected; nothing gates the code on tests, and the code cannot be versioned or reused apart from a Stack.
 - **Copy the code into each repo**: rejected; fixes diverge.
+
+Extended to shared Repo Tooling by [ADR 0012](0012-shared-repo-tooling.md).
