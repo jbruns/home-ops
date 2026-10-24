@@ -2,13 +2,18 @@
 
 ## Install
 
-From the repository root, with Bash 3.2+, Git 2.25+ (sparse-checkout support),
-Python 3, and access to the upstream Git repository:
+From the repository root, with Bash, Git 2.25+ (sparse-checkout support),
+[uv](https://docs.astral.sh/uv/), and access to the upstream Git repository:
 
 ```sh
 tools/agent-skills/setup-agent-skills
 tools/agent-skills/setup-agent-skills check
 ```
+
+`tools/agent-skills/setup-agent-skills` is a thin wrapper that runs the shared
+`setup-agent-skills` from jbruns/homelab-components with `uvx`, pinned by commit
+([README](https://github.com/jbruns/homelab-components/blob/agent-skills-v1.0.0/repo-tools/agent-skills/README.md),
+ADR 0012). uv caches it after the first run, so `check` keeps working offline.
 
 Start a fresh agent session after installing or changing skills so the agent
 discovers them. Setup is local development tooling; it needs no Host access,
@@ -72,10 +77,5 @@ reinstalling; the helper will not claim unmanaged directories.
 
 ## Installer maintenance
 
-```sh
-tools/agent-skills/test-setup-agent-skills
-```
-
-The regression suite uses temporary local Git repositories without network
-access. CI runs it as part of the required `validate` check. CI does not install
-upstream workflows or require a developer's ignored installation.
+The installer and its tests live in homelab-components. Renovate bumps the
+wrapper's `tag` and `commit` together; review the release before merging.

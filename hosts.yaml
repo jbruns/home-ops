@@ -1,0 +1,11 @@
+# The Hosts this repo's shared Repo Tooling (hops, homelab-validate, homelab-declared-containers) may reach
+# (ADR 0012). Schema: https://github.com/jbruns/homelab-components/blob/hosts-v1.1.0/repo-tools/hosts/README.md
+# Connection details stay in the gitignored .env as HOPS_TRUENAS_* (see .env.example).
+version: 1
+default_branch: main
+validate: [tools/validate/homelab-validate, secrets, env, compose]   # what `hops bump` runs before it commits
+hosts:
+  truenas:
+    stack_root: tn
+    deployer: doco-cd
+    capabilities: [truenas, zfs]

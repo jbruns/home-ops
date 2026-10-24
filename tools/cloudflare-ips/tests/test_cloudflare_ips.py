@@ -99,9 +99,8 @@ def test_fetch_rejects_invalid_cidr(monkeypatch):
         cloudflare_ips.fetch()
 
 
-def test_default_file_is_traefik_and_consistent():
+def test_default_file_is_traefik():
     assert cloudflare_ips.TRAEFIK == TOOL_DIR.parents[1] / "tn/edge/traefik/service.yaml"
-    assert cloudflare_ips.problems(cloudflare_ips.TRAEFIK.read_text()) == []
 
 
 def test_cli_requires_update_flag():

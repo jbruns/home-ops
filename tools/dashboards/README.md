@@ -11,7 +11,7 @@ python3 tools/dashboards/dashboards.py           # rewrite tn/monitoring/grafana
 python3 tools/dashboards/dashboards.py --check   # exit 1 if any JSON is stale, missing or extra
 ```
 
-Commit the regenerated JSON with the generator change; `validate.py monitoring` runs `--check`.
+Commit the regenerated JSON with the generator change; `homelab-validate monitoring` runs `--check` (`dashboards` in `tools/validate/paths`).
 Standard library only.
 
 ## Configuration

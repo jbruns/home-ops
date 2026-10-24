@@ -2,9 +2,10 @@
 """Cloudflare edge ranges that Traefik trusts for X-Forwarded-For.
 
 The ranges appear three times in the Traefik Compose file (both entrypoints and the
-CrowdSec bouncer). `validate.py cloudflare` checks they agree; `--update` rewrites all
-three from Cloudflare's API when the published set changes (run weekly by
-.github/workflows/cloudflare-ips.yaml).
+CrowdSec bouncer). `homelab-validate cloudflare` (shared Repo Tooling) checks they agree;
+`--update` rewrites all three from Cloudflare's API when the published set changes (run
+weekly by .github/workflows/cloudflare-ips.yaml), and refuses a file whose lists are
+already malformed or differ.
 
 Usage: cloudflare_ips.py --update [--file PATH]   (default: tn/edge/traefik/service.yaml)
 """

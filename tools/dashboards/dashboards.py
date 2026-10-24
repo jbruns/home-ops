@@ -2,7 +2,7 @@
 """Generate the Grafana dashboards provisioned from the repo (stdlib only).
 
     python3 tools/dashboards/dashboards.py           # write tn/monitoring/grafana/dashboards/*.json
-    python3 tools/dashboards/dashboards.py --check   # fail if they are stale (validate.py)
+    python3 tools/dashboards/dashboards.py --check   # fail if they are stale (homelab-validate monitoring)
     python3 tools/dashboards/dashboards.py --out DIR # write or check another folder
 
 Edit this file, never the JSON. Vocabulary follows GLOSSARY.md: Service, Stack, Tier, Probe,

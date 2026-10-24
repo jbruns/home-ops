@@ -13,20 +13,9 @@ concurrency:
   group: validate-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  # renovate: datasource=npm depName=renovate
-  RENOVATE_VERSION: 44.167.5
-  # renovate: datasource=docker depName=rhysd/actionlint
-  ACTIONLINT_VERSION: 1.7.12
-
+# Shared Repo Tooling (ADR 0012): reusable workflows from jbruns/homelab-components, each installing its tools from
+# its own commit. Renovate bumps them together (repo-ci-vX.Y.Z).
 jobs:
-  agent-skills:
-    name: agent skill installer
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: tools/agent-skills/test-setup-agent-skills
-
   tool-tests:
     name: tool tests
     runs-on: ubuntu-24.04
@@ -35,71 +24,59 @@ jobs:
       - run: python3 -m pip install --quiet --requirement tools/requirements-test.txt
       - run: python3 -m pytest tools host
 
-  repo:
-    name: secrets, env, compose, cloudflare
+  # Every input as an explicit --path, so a moved or missing component fails instead of being skipped.
+  validate-paths:
+    name: validate paths
     runs-on: ubuntu-24.04
+    outputs:
+      args: ${{ steps.paths.outputs.args }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
-      - run: python3 -m pip install --quiet --requirement tools/validate/requirements.txt
-      - id: digests
-        run: echo "hash=$(grep -rhoE 'sha256:[0-9a-f]{64}' tn templates | sort -u | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
-      # Image configs by digest for the anonymous-volume check; spares the registries' rate limits.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/home-ops/validate
-          key: validate-image-volumes-${{ steps.digests.outputs.hash }}
-          restore-keys: validate-image-volumes-
-      - run: python3 tools/validate/validate.py secrets env compose cloudflare
-      - if: github.event_name == 'pull_request'
-        env:
-          VALIDATE_BASE: ${{ github.event.pull_request.base.sha }}
-        run: python3 tools/validate/validate.py isolation
+          sparse-checkout: |
+            tools/validate/paths
+            tools/validate/validate_paths.py
+          sparse-checkout-cone-mode: false
+      # validate_paths.py refuses a malformed line and shell-quotes the rest for repo-validate's shlex.split.
+      - id: paths
+        run: |
+          args=$(python3 tools/validate/validate_paths.py)
+          echo "args=$args" >> "$GITHUB_OUTPUT"
+
+  repo:
+    name: secrets, env, compose, cloudflare, isolation
+    needs: validate-paths
+    uses: jbruns/homelab-components/.github/workflows/repo-validate.yaml@b627c3e1015d20d0a6c6428f79c8d615bee3db04 # repo-ci-v1.0.1
+    with:
+      checks: secrets env compose cloudflare isolation
+      extra-args: ${{ needs.validate-paths.outputs.args }}
 
   monitoring:
     name: monitoring configs, rules, dashboards, Grafana
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-      - run: python3 -m pip install --quiet --requirement tools/validate/requirements.txt
-      - env:
-          VALIDATE_BASE: ${{ github.event.pull_request.base.sha }}
-        run: python3 tools/validate/validate.py monitoring
+    needs: validate-paths
+    uses: jbruns/homelab-components/.github/workflows/repo-validate.yaml@b627c3e1015d20d0a6c6428f79c8d615bee3db04 # repo-ci-v1.0.1
+    with:
+      checks: monitoring
+      timeout-minutes: 10
+      extra-args: ${{ needs.validate-paths.outputs.args }}
+
+  declared-containers:
+    name: declared containers
+    uses: jbruns/homelab-components/.github/workflows/repo-declared-containers.yaml@b627c3e1015d20d0a6c6428f79c8d615bee3db04 # repo-ci-v1.0.1
 
   gitleaks:
     name: gitleaks
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    uses: jbruns/homelab-components/.github/workflows/repo-gitleaks.yaml@b627c3e1015d20d0a6c6428f79c8d615bee3db04 # repo-ci-v1.0.1
 
   tooling:
     name: renovate config, actionlint
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24
-      - run: npx --yes --package "renovate@${RENOVATE_VERSION}" -- renovate-config-validator --strict renovate.json
-      - run: docker run --rm -v "$PWD:/repo" -w /repo "rhysd/actionlint:${ACTIONLINT_VERSION}" -color
+    uses: jbruns/homelab-components/.github/workflows/repo-lint.yaml@b627c3e1015d20d0a6c6428f79c8d615bee3db04 # repo-ci-v1.0.1
 
   # Single required check for branch protection.
   validate:
     name: validate
     if: always()
-    needs: [repo, monitoring, gitleaks, tooling, agent-skills, tool-tests]
+    needs: [validate-paths, repo, monitoring, declared-containers, gitleaks, tooling, tool-tests]
     runs-on: ubuntu-24.04
     steps:
       - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')

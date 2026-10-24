@@ -7,7 +7,7 @@ repos:
     hooks:
       - id: validate-secrets-env
         name: validate secrets and env templates
-        entry: python3 tools/validate/validate.py secrets env
+        entry: tools/validate/homelab-validate secrets env
         language: system
         pass_filenames: false
         always_run: true

@@ -3,6 +3,11 @@
 Installs the agent skills pinned in [`.agent-skills.lock`](../../.agent-skills.lock) into the
 gitignored `.agents/skills/`. Repo Tooling: it never runs on the Host.
 
+`setup-agent-skills` here is a thin wrapper around the shared `setup-agent-skills` from
+jbruns/homelab-components ([README](https://github.com/jbruns/homelab-components/blob/agent-skills-v1.0.0/repo-tools/agent-skills/README.md),
+ADR 0012), pinned by commit with its tag beside it; Renovate bumps both. It runs the tool with `uvx`, so it
+needs [uv](https://docs.astral.sh/uv/), Git 2.25+ and network access on first use (uv caches it afterwards).
+
 ## Run
 
 ```sh
@@ -12,8 +17,6 @@ tools/agent-skills/setup-agent-skills pin REF  # move the pin
 tools/agent-skills/setup-agent-skills clean    # remove managed skills
 ```
 
-Needs Bash 3.2+, Git 2.25+ and Python 3.
-
 ## Configuration
 
 `.agent-skills.lock` selects the source, ref, revision and `include`/`exclude` entries.
@@ -22,8 +25,4 @@ Needs Bash 3.2+, Git 2.25+ and Python 3.
 
 ## Test
 
-```sh
-tools/agent-skills/test-setup-agent-skills
-```
-
-Uses throwaway local Git repositories; no network access.
+The tool's tests live with it in homelab-components.

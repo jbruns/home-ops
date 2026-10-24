@@ -1,0 +1,15 @@
+# Every homelab-validate input home-ops has, passed as --path NAME=PATH (relative to the repo root) by
+# tools/validate/homelab-validate and CI (.github/workflows/validate.yaml), both through validate_paths.py, which
+# refuses any line that is not NAME=PATH with a known NAME. An explicit --path that is missing
+# fails its check, where a missing default would skip it, so moving or removing a component cannot turn a
+# check off. Names: https://github.com/jbruns/homelab-components/blob/validate-v1.0.1/repo-tools/validate/README.md#inputs
+prometheus=tn/monitoring/prometheus
+rule-tests=tools/validate/rules
+alertmanager=tn/monitoring/alertmanager
+loki=tn/monitoring/loki
+alloy=tn/monitoring/alloy
+grafana=tn/monitoring/grafana
+dashboards-json=tn/monitoring/grafana/dashboards
+dashboards=tools/dashboards/dashboards.py
+blackbox=tn/monitoring/blackbox-exporter/blackbox.yml
+traefik=tn/edge/traefik/service.yaml
