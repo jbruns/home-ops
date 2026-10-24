@@ -96,9 +96,9 @@ homelab-validate --path dashboards=tools/dashboards/dashboards.py --path rule-te
   secrets env compose monitoring cloudflare
 ```
 
-Use the versions `.github/workflows/validate.yaml` pins (its `repo-ci` tag).
+CI runs the same checks through the reusable workflows `.github/workflows/validate.yaml` pins; keep these install tags in step with its `repo-ci` pin.
 
-Each tool under `tools/` has a README. CI also runs their tests and the `host/` runbook's (`pip install -r tools/requirements-test.txt`):
+`tools/cloudflare-ips` and `tools/dashboards` each have a README; `tools/validate/rules` holds the Prometheus rule tests. CI also runs the tools' tests and the `host/` runbook's (`pip install -r tools/requirements-test.txt`):
 
 ```sh
 python3 -m pytest tools host

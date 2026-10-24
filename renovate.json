@@ -43,14 +43,13 @@
       "automerge": true
     },
     {
-      "description": "startup-order Custom Component on the Host: never automerge; after merging, install it on the Host (host/README.md)",
+      "description": "startup-order Custom Component on the Host (the preset already blocks automerge): after merging, install it on the Host (host/README.md)",
       "matchDatasources": [
         "github-release-attachments"
       ],
       "matchPackageNames": [
         "jbruns/homelab-components"
       ],
-      "automerge": false,
       "prBodyNotes": [
         "After merging, install the new release on the Host: [runbook](https://github.com/jbruns/home-ops/blob/main/host/README.md#runbook-install-or-upgrade-startup-order)."
       ]
