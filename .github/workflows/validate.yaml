@@ -33,10 +33,15 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          sparse-checkout: tools/validate/paths
+          sparse-checkout: |
+            tools/validate/paths
+            tools/validate/validate_paths.py
           sparse-checkout-cone-mode: false
+      # validate_paths.py refuses a malformed line and shell-quotes the rest for repo-validate's shlex.split.
       - id: paths
-        run: echo "args=$(sed -e '/^#/d' -e '/^$/d' -e 's/^/--path /' tools/validate/paths | paste -sd' ' -)" >> "$GITHUB_OUTPUT"
+        run: |
+          args=$(python3 tools/validate/validate_paths.py)
+          echo "args=$args" >> "$GITHUB_OUTPUT"
 
   repo:
     name: secrets, env, compose, cloudflare, isolation
