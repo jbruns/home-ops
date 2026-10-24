@@ -1,19 +1,8 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended",
-    "docker:pinDigests",
-    "helpers:pinGitHubActionDigests",
-    ":dependencyDashboard",
-    ":enablePreCommit"
+    "github>jbruns/homelab-components//renovate/repo-default#repo-ci-v1.0.0"
   ],
-  "minimumReleaseAge": "5 days",
-  "minimumReleaseAgeBehaviour": "timestamp-optional",
-  "schedule": [
-    "* 10-13 * * *"
-  ],
-  "prHourlyLimit": 0,
-  "timezone": "America/Los_Angeles",
   "packageRules": [
     {
       "description": "Disable Docker-sourced updates for emby/embyserver (handled by custom manager)",
@@ -36,37 +25,6 @@
       "enabled": false
     },
     {
-      "description": "Nextcloud can only upgrade one major at a time (the image refuses to skip one), so propose each major separately",
-      "matchPackageNames": [
-        "nextcloud"
-      ],
-      "separateMultipleMajor": true
-    },
-    {
-      "description": "Grafana logging stack",
-      "matchPackageNames": [
-        "grafana/grafana",
-        "grafana/loki",
-        "grafana/alloy"
-      ],
-      "groupName": "grafana stack"
-    },
-    {
-      "description": "Prometheus and Alertmanager",
-      "matchPackageNames": [
-        "prom/prometheus",
-        "prom/alertmanager"
-      ],
-      "groupName": "prometheus"
-    },
-    {
-      "description": "Automerge patch updates",
-      "matchUpdateTypes": [
-        "patch"
-      ],
-      "automerge": true
-    },
-    {
       "description": "Automerge minor and digest updates for Info-tier Services",
       "matchPackageNames": [
         "ghcr.io/onedr0p/exportarr",
@@ -85,14 +43,6 @@
       "automerge": true
     },
     {
-      "description": "Automerge pinning of digests",
-      "matchUpdateTypes": [
-        "pin",
-        "pinDigest"
-      ],
-      "automerge": true
-    },
-    {
       "description": "startup-order Custom Component on the Host: never automerge; after merging, install it on the Host (host/README.md)",
       "matchDatasources": [
         "github-release-attachments"
@@ -104,6 +54,13 @@
       "prBodyNotes": [
         "After merging, install the new release on the Host: [runbook](https://github.com/jbruns/home-ops/blob/main/host/README.md#runbook-install-or-upgrade-startup-order)."
       ]
+    },
+    {
+      "description": "The setup-agent-skills wrapper's own PR, apart from the repo-ci group the preset puts every homelab-components tag in",
+      "matchFileNames": [
+        "tools/agent-skills/setup-agent-skills"
+      ],
+      "groupName": "homelab-components agent-skills"
     }
   ],
   "docker-compose": {
@@ -144,16 +101,6 @@
     },
     {
       "customType": "regex",
-      "description": "Versions annotated with # renovate: comments in workflows",
-      "managerFilePatterns": [
-        "/^\\.github/workflows/.+\\.ya?ml$/"
-      ],
-      "matchStrings": [
-        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+\\w+:\\s*\"?(?<currentValue>[^\\s\"]+)\"?"
-      ]
-    },
-    {
-      "customType": "regex",
       "description": "startup-order release pinned for the Host: tag and the sha256 of its startup-order.sh asset",
       "managerFilePatterns": [
         "/^host/startup-order\\.pin$/"
@@ -164,6 +111,19 @@
       "depNameTemplate": "jbruns/homelab-components",
       "datasourceTemplate": "github-release-attachments",
       "versioningTemplate": "regex:^startup-order-v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "setup-agent-skills wrapper: shared Repo Tooling pinned by tag and commit (homelab-components repo-tools/agent-skills README)",
+      "managerFilePatterns": [
+        "/(^|/)tools/agent-skills/setup-agent-skills$/"
+      ],
+      "matchStrings": [
+        "tag=(?<currentValue>agent-skills-v\\S+)\\s+commit=(?<currentDigest>[0-9a-f]{40})"
+      ],
+      "datasourceTemplate": "github-tags",
+      "depNameTemplate": "jbruns/homelab-components",
+      "versioningTemplate": "regex:^agent-skills-v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$"
     }
   ],
   "customDatasources": {

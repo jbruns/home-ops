@@ -75,7 +75,7 @@ tests:
         eval_time: 6m
         exp_samples: []
 
-  # ContainerDown: a container tn/ declares (homeops_container_declared, tools/declared-containers)
+  # ContainerDown: a container tn/ declares (homeops_container_declared, homelab-declared-containers)
   # that cAdvisor has not seen for 2 minutes, for 5 minutes.
   - name: ContainerDown fires for a declared container that stopped and clears when it returns
     interval: 1m

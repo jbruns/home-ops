@@ -5,8 +5,10 @@ Keeps the Cloudflare edge ranges Traefik trusts for `X-Forwarded-For` in step wi
 times in `tn/edge/traefik/service.yaml` (both entrypoints and the CrowdSec bouncer). Repo Tooling:
 it never runs on the Host.
 
-- `validate.py cloudflare` checks the three lists are valid CIDRs and identical.
-- `--update` fetches the current ranges and rewrites all three lists if the set changed.
+- [`homelab-validate cloudflare`](https://github.com/jbruns/homelab-components/blob/validate-v1.0.0/repo-tools/validate/README.md#cloudflare-ranges)
+  checks the three lists are valid CIDRs and identical.
+- `--update` fetches the current ranges and rewrites all three lists if the set changed. It
+  refuses a file whose lists are malformed or differ.
   [`cloudflare-ips.yaml`](../../.github/workflows/cloudflare-ips.yaml) runs it weekly and opens a PR.
 
 ## Run

@@ -1,5 +1,5 @@
 # Template for an Exposed Service (GLOSSARY.md). Copy this directory to tn/<stack>/, rename `app`
-# throughout, and see README.md "Adding a Stack". validate.py renders this file as a Stack, so it
+# throughout, and see README.md "Adding a Stack". homelab-validate renders this file as a Stack, so it
 # must stay valid. For a Protected Service start from templates/protected/ instead.
 services:
   app:

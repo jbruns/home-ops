@@ -25,10 +25,12 @@ Keep every secret value out of tool output, logs and commits, whether it comes f
 
 ### Host access
 
-Reach the Host through `hops` (install with `uv tool install -e tools/hops`; read
-`tools/hops/README.md` before first use), with `--json` when you parse its output. It changes
+Reach the Host through `hops`, shared Repo Tooling from jbruns/homelab-components (install with
+`uv tool install "git+https://github.com/jbruns/homelab-components@hops-v1.0.0#subdirectory=repo-tools/hops"`;
+read [its README](https://github.com/jbruns/homelab-components/blob/hops-v1.0.0/repo-tools/hops/README.md)
+before first use), with `--json` when you parse its output. `hosts.yaml` declares the Host, `truenas`. It changes
 runtime state only; declared state changes through a PR (ADR 0001). For anything `hops --help`
 lacks, use read-only `ssh … sudo -n docker …`. Reach TrueNAS through `hops` too (`hops truenas
 call <method>` for reads it lacks), never with the REST API or `curl` to `/api/v2.0`.
 
-When an agent runs `hops bump`, pass its co-author line with `--trailer` (see `tools/hops/README.md`).
+When an agent runs `hops bump`, pass its co-author line with `--trailer` (see [its README](https://github.com/jbruns/homelab-components/blob/hops-v1.0.0/repo-tools/hops/README.md#bump-pin-a-newer-image-through-a-pr)).

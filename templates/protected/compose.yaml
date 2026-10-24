@@ -1,6 +1,6 @@
 # Template for a Protected Service (GLOSSARY.md, ADR 0006): an Exposed Service whose web UI is behind
 # the IdP. Copy this directory to tn/<stack>/, rename `app` throughout, and see README.md "Adding a
-# Stack". validate.py renders this file as a Stack, so it must stay valid. Prefer the app's native
+# Stack". homelab-validate renders this file as a Stack, so it must stay valid. Prefer the app's native
 # OIDC over forward auth where it has it; then this is just templates/exposed/.
 services:
   app:

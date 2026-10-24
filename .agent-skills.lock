@@ -1,6 +1,7 @@
 # Repository agent-skill source. Change source/ref/revision to adopt another
 # provider or release; keep revision pinned to the commit resolved by ref.
-# Use `tools/agent-skills/setup-agent-skills pin <ref>` to move the pin.
+# Use `tools/agent-skills/setup-agent-skills pin <ref>` to move the pin; it rewrites only
+# the ref and revision lines. Format: docs/agents/skills.md.
 source https://github.com/mattpocock/skills.git
 ref v1.3.1
 revision 24fe0ef7737efae15c87225755e9f6f5965e4888
