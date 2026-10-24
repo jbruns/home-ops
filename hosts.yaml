@@ -3,8 +3,7 @@
 # Connection details stay in the gitignored .env as HOPS_TRUENAS_* (see .env.example).
 version: 1
 default_branch: main
-# TODO: add `validate: [homelab-validate, secrets, env, compose]` (what `hops bump` runs before it commits)
-# once homelab-validate and homelab-declared-containers accept it (jbruns/homelab-components#16).
+validate: [tools/validate/homelab-validate, secrets, env, compose]   # what `hops bump` runs before it commits
 hosts:
   truenas:
     stack_root: tn

@@ -24,37 +24,54 @@ jobs:
       - run: python3 -m pip install --quiet --requirement tools/requirements-test.txt
       - run: python3 -m pytest tools host
 
+  # Every input as an explicit --path, so a moved or missing component fails instead of being skipped.
+  validate-paths:
+    name: validate paths
+    runs-on: ubuntu-24.04
+    outputs:
+      args: ${{ steps.paths.outputs.args }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: tools/validate/paths
+          sparse-checkout-cone-mode: false
+      - id: paths
+        run: echo "args=$(sed -e '/^#/d' -e '/^$/d' -e 's/^/--path /' tools/validate/paths | paste -sd' ' -)" >> "$GITHUB_OUTPUT"
+
   repo:
     name: secrets, env, compose, cloudflare, isolation
-    uses: jbruns/homelab-components/.github/workflows/repo-validate.yaml@277615d9bf8552644cd1fc3e0e48416e2f3709bb # repo-ci-v1.0.0
+    needs: validate-paths
+    uses: jbruns/homelab-components/.github/workflows/repo-validate.yaml@b627c3e1015d20d0a6c6428f79c8d615bee3db04 # repo-ci-v1.0.1
     with:
       checks: secrets env compose cloudflare isolation
+      extra-args: ${{ needs.validate-paths.outputs.args }}
 
   monitoring:
     name: monitoring configs, rules, dashboards, Grafana
-    uses: jbruns/homelab-components/.github/workflows/repo-validate.yaml@277615d9bf8552644cd1fc3e0e48416e2f3709bb # repo-ci-v1.0.0
+    needs: validate-paths
+    uses: jbruns/homelab-components/.github/workflows/repo-validate.yaml@b627c3e1015d20d0a6c6428f79c8d615bee3db04 # repo-ci-v1.0.1
     with:
       checks: monitoring
       timeout-minutes: 10
-      extra-args: --path dashboards=tools/dashboards/dashboards.py --path rule-tests=tools/validate/rules
+      extra-args: ${{ needs.validate-paths.outputs.args }}
 
   declared-containers:
     name: declared containers
-    uses: jbruns/homelab-components/.github/workflows/repo-declared-containers.yaml@277615d9bf8552644cd1fc3e0e48416e2f3709bb # repo-ci-v1.0.0
+    uses: jbruns/homelab-components/.github/workflows/repo-declared-containers.yaml@b627c3e1015d20d0a6c6428f79c8d615bee3db04 # repo-ci-v1.0.1
 
   gitleaks:
     name: gitleaks
-    uses: jbruns/homelab-components/.github/workflows/repo-gitleaks.yaml@277615d9bf8552644cd1fc3e0e48416e2f3709bb # repo-ci-v1.0.0
+    uses: jbruns/homelab-components/.github/workflows/repo-gitleaks.yaml@b627c3e1015d20d0a6c6428f79c8d615bee3db04 # repo-ci-v1.0.1
 
   tooling:
     name: renovate config, actionlint
-    uses: jbruns/homelab-components/.github/workflows/repo-lint.yaml@277615d9bf8552644cd1fc3e0e48416e2f3709bb # repo-ci-v1.0.0
+    uses: jbruns/homelab-components/.github/workflows/repo-lint.yaml@b627c3e1015d20d0a6c6428f79c8d615bee3db04 # repo-ci-v1.0.1
 
   # Single required check for branch protection.
   validate:
     name: validate
     if: always()
-    needs: [repo, monitoring, declared-containers, gitleaks, tooling, tool-tests]
+    needs: [validate-paths, repo, monitoring, declared-containers, gitleaks, tooling, tool-tests]
     runs-on: ubuntu-24.04
     steps:
       - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
