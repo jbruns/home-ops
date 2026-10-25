@@ -13,7 +13,7 @@ concurrency:
   group: validate-${{ github.ref }}
   cancel-in-progress: true
 
-# Shared Repo Tooling (ADR 0012): reusable workflows from jbruns/homelab-components, each installing its tools from
+# Shared Repo Tooling (ADR 0012): reusable workflows from the Repo Tooling repo, each installing its tools from
 # its own commit. Renovate bumps them together (repo-ci-vX.Y.Z).
 jobs:
   tool-tests:
@@ -24,7 +24,8 @@ jobs:
       - run: python3 -m pip install --quiet --requirement tools/requirements-test.txt
       - run: python3 -m pytest tools host
 
-  # Every input as an explicit --path, so a moved or missing component fails instead of being skipped.
+  # Every input as an explicit --path, so a moved or missing component fails instead of being skipped, and every
+  # privacy allowlist pattern as a --privacy-allow.
   validate-paths:
     name: validate paths
     runs-on: ubuntu-24.04
@@ -35,6 +36,7 @@ jobs:
         with:
           sparse-checkout: |
             tools/validate/paths
+            tools/validate/privacy-allow
             tools/validate/validate_paths.py
           sparse-checkout-cone-mode: false
       # validate_paths.py refuses a malformed line and shell-quotes the rest for repo-validate's shlex.split.
@@ -44,17 +46,21 @@ jobs:
           echo "args=$args" >> "$GITHUB_OUTPUT"
 
   repo:
-    name: secrets, env, compose, cloudflare, isolation
+    name: secrets, env, compose, cloudflare, isolation, privacy
     needs: validate-paths
-    uses: jbruns/homelab-components/.github/workflows/repo-validate.yaml@b627c3e1015d20d0a6c6428f79c8d615bee3db04 # repo-ci-v1.0.1
+    uses: jbruns/homelab-components/.github/workflows/repo-validate.yaml@b59b24fbb343d5838f90eb8abd7f943488e0846c # repo-ci-v1.1.0
     with:
-      checks: secrets env compose cloudflare isolation
+      checks: secrets env compose cloudflare isolation privacy
       extra-args: ${{ needs.validate-paths.outputs.args }}
+      # Prose names roles, never repositories, people, logins or hostnames (ADR 0013); the denylist stays a secret.
+      privacy-mode: fail
+    secrets:
+      privacy-denylist: ${{ secrets.PRIVACY_DENYLIST }}
 
   monitoring:
     name: monitoring configs, rules, dashboards, Grafana
     needs: validate-paths
-    uses: jbruns/homelab-components/.github/workflows/repo-validate.yaml@b627c3e1015d20d0a6c6428f79c8d615bee3db04 # repo-ci-v1.0.1
+    uses: jbruns/homelab-components/.github/workflows/repo-validate.yaml@b59b24fbb343d5838f90eb8abd7f943488e0846c # repo-ci-v1.1.0
     with:
       checks: monitoring
       timeout-minutes: 10
@@ -62,15 +68,15 @@ jobs:
 
   declared-containers:
     name: declared containers
-    uses: jbruns/homelab-components/.github/workflows/repo-declared-containers.yaml@b627c3e1015d20d0a6c6428f79c8d615bee3db04 # repo-ci-v1.0.1
+    uses: jbruns/homelab-components/.github/workflows/repo-declared-containers.yaml@b59b24fbb343d5838f90eb8abd7f943488e0846c # repo-ci-v1.1.0
 
   gitleaks:
     name: gitleaks
-    uses: jbruns/homelab-components/.github/workflows/repo-gitleaks.yaml@b627c3e1015d20d0a6c6428f79c8d615bee3db04 # repo-ci-v1.0.1
+    uses: jbruns/homelab-components/.github/workflows/repo-gitleaks.yaml@b59b24fbb343d5838f90eb8abd7f943488e0846c # repo-ci-v1.1.0
 
   tooling:
     name: renovate config, actionlint
-    uses: jbruns/homelab-components/.github/workflows/repo-lint.yaml@b627c3e1015d20d0a6c6428f79c8d615bee3db04 # repo-ci-v1.0.1
+    uses: jbruns/homelab-components/.github/workflows/repo-lint.yaml@b59b24fbb343d5838f90eb8abd7f943488e0846c # repo-ci-v1.1.0
 
   # Single required check for branch protection.
   validate:

@@ -11,8 +11,8 @@ tools/agent-skills/setup-agent-skills check
 ```
 
 `tools/agent-skills/setup-agent-skills` is a thin wrapper that runs the shared
-`setup-agent-skills` from jbruns/homelab-components with `uvx`, pinned by commit
-([README](https://github.com/jbruns/homelab-components/blob/agent-skills-v1.0.0/repo-tools/agent-skills/README.md),
+`setup-agent-skills` from the Repo Tooling repo with `uvx`, pinned by commit
+(its README is `repo-tools/agent-skills/README.md` there;
 ADR 0012). uv caches it after the first run, so `check` keeps working offline.
 
 Start a fresh agent session after installing or changing skills so the agent
@@ -77,5 +77,5 @@ reinstalling; the helper will not claim unmanaged directories.
 
 ## Installer maintenance
 
-The installer and its tests live in homelab-components. Renovate bumps the
+The installer and its tests live in the Repo Tooling repo. Renovate bumps the
 wrapper's `tag` and `commit` together; review the release before merging.

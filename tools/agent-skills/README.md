@@ -4,7 +4,7 @@ Installs the agent skills pinned in [`.agent-skills.lock`](../../.agent-skills.l
 gitignored `.agents/skills/`. Repo Tooling: it never runs on the Host.
 
 `setup-agent-skills` here is a thin wrapper around the shared `setup-agent-skills` from
-jbruns/homelab-components ([README](https://github.com/jbruns/homelab-components/blob/agent-skills-v1.0.0/repo-tools/agent-skills/README.md),
+the Repo Tooling repo (its README is `repo-tools/agent-skills/README.md` there;
 ADR 0012), pinned by commit with its tag beside it; Renovate bumps both. It runs the tool with `uvx`, so it
 needs [uv](https://docs.astral.sh/uv/), Git 2.25+ and network access on first use (uv caches it afterwards).
 
@@ -25,4 +25,4 @@ tools/agent-skills/setup-agent-skills clean    # remove managed skills
 
 ## Test
 
-The tool's tests live with it in homelab-components.
+The tool's tests live with it in the Repo Tooling repo.

@@ -120,7 +120,7 @@ services:
 
   sabnzbd-status-exporter:
     # Usenet provider (server) health for Prometheus; a Custom Component (ADR 0008).
-    # https://github.com/jbruns/homelab-components/tree/main/components/sabnzbd-status-exporter
+    # Source: components/sabnzbd-status-exporter in the Repo Tooling repo.
     extends:
       file: ../../_baseline.yaml
       service: baseline

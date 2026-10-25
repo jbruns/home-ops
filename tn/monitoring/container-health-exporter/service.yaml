@@ -3,7 +3,7 @@ services:
   container-health-exporter:
     # Docker health-check status for Prometheus (Uptime of Services that are not Exposed Services);
     # a Custom Component (ADR 0008). Reads through the read-only docker-socket-proxy.
-    # https://github.com/jbruns/homelab-components/tree/main/components/container-health-exporter
+    # Source: components/container-health-exporter in the Repo Tooling repo.
     extends:
       file: ../../_baseline.yaml
       service: baseline

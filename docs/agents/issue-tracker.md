@@ -1,6 +1,6 @@
 # Issue tracker: GitHub
 
-Issues and specs live in GitHub Issues for `jbruns/home-ops`. Use the `gh` CLI; it infers the repository from the clone's remote.
+Issues and specs live in this repo's GitHub Issues. Use the `gh` CLI; it infers the repository from the clone's remote.
 
 ## Conventions
 

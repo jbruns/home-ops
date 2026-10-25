@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""homelab-validate with every input in tools/validate/paths passed as one --path each, so a missing one fails.
+"""homelab-validate with every input in tools/validate/paths passed as one --path each, so a missing one fails,
+and every pattern in tools/validate/privacy-allow as one --privacy-allow each.
 
 Usage: tools/validate/homelab-validate [homelab-validate args...] [check...]
 """
@@ -12,7 +13,7 @@ sys.path.insert(0, str(here))
 import validate_paths  # noqa: E402
 
 try:
-    paths = validate_paths.load(here / "paths")
+    paths = validate_paths.load(here / "paths") + validate_paths.load_allow(here / validate_paths.ALLOW)
 except (OSError, validate_paths.PathsError) as exc:
     sys.exit(f"tools/validate/homelab-validate: {exc}")
 os.execvp("homelab-validate", ["homelab-validate", "--root", str(here.parents[1]), *paths, *sys.argv[1:]])

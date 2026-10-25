@@ -96,3 +96,36 @@ def test_wrapper_passes_each_line_as_one_argument(tmp_path):
     r = subprocess.run([repo / "tools/validate/homelab-validate", "secrets"], capture_output=True, text=True,
                        env=env, check=True)
     assert r.stdout.splitlines() == ["--root", str(repo.resolve()), "--path", "prometheus=tn/monitoring/prometheus", "secrets"]
+
+
+def write_allow(directory, *lines):
+    f = directory / validate_paths.ALLOW
+    f.write_text("# comment\n\n" + "".join(f"{line}\n" for line in lines))
+    return f
+
+
+def test_each_allow_line_is_one_privacy_allow_value(tmp_path):
+    f = write_allow(tmp_path, r"git\+https://\S+", '^"x y"$')
+    assert validate_paths.load_allow(f) == ["--privacy-allow", r"git\+https://\S+", "--privacy-allow", '^"x y"$']
+
+
+def test_a_missing_allowlist_adds_nothing(tmp_path):
+    assert validate_paths.load_allow(tmp_path / validate_paths.ALLOW) == []
+
+
+def test_the_repo_allowlist_is_valid():
+    assert validate_paths.load_allow(TOOL_DIR / validate_paths.ALLOW)
+
+
+@pytest.mark.parametrize("line", ["(unclosed", " leading", "trailing "])
+def test_a_bad_allow_line_is_refused(tmp_path, line):
+    with pytest.raises(validate_paths.PathsError, match="line 3"):
+        validate_paths.load_allow(write_allow(tmp_path, line))
+
+
+def test_ci_output_carries_the_allowlist_beside_the_paths(tmp_path):
+    f = write(tmp_path, "prometheus=tn/monitoring/prometheus")
+    write_allow(tmp_path, '^"a b"$')
+    out = subprocess.run([sys.executable, TOOL_DIR / "validate_paths.py", f], capture_output=True, text=True,
+                         check=True).stdout
+    assert shlex.split(out) == ["--path", "prometheus=tn/monitoring/prometheus", "--privacy-allow", '^"a b"$']

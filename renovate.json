@@ -1,7 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "github>jbruns/homelab-components//renovate/repo-default#repo-ci-v1.0.1"
+    "github>jbruns/homelab-components//renovate/repo-default#repo-ci-v1.1.0"
   ],
   "packageRules": [
     {

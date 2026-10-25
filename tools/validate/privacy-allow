@@ -1,0 +1,11 @@
+# Load-bearing text the privacy check (ADR 0013) would otherwise flag, one Python regex per line, each passed as
+# --privacy-allow by tools/validate/homelab-validate and CI (.github/workflows/validate.yaml) through
+# validate_paths.py. A denylisted match is exempt only when it lies wholly inside a match of one of these.
+# Keep each as narrow as the text it exempts; prose that merely mentions a name is generalized instead.
+#
+# Install commands, which must name the repository they install from.
+git\+https://github\.com/[\w.-]+/[\w.-]+@[\w.-]+#subdirectory=[\w./-]+
+# A release download in a runbook command (host/README.md).
+https://github\.com/[\w.-]+/[\w.-]+/releases/download/\S+
+# The Grafana folder and tag of the provisioned dashboards, a string literal alone on its line in dashboards.py.
+^"home-ops"$

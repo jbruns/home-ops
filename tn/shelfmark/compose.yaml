@@ -1,4 +1,4 @@
-# SHELFMARK STACK (deployed by doco-cd). Moved from asotbz/ops tn/asot-media (#457).
+# SHELFMARK STACK (deployed by doco-cd). Moved from a sibling deployment repo (#457).
 # Hostnames are under this Stack's own DOMAIN; DOWNLOADER_DOMAIN is the qbittorrent and sabnzbd Stacks'.
 services:
   shelfmark:

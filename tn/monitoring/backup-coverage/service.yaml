@@ -4,7 +4,7 @@ services:
     # Per-volume and per-database backup coverage: is every path stack-back should back up in the
     # newest restic snapshot? A Custom Component (ADR 0008). Reads through the read-only
     # docker-socket-proxy.
-    # https://github.com/jbruns/homelab-components/tree/main/components/backup-coverage
+    # Source: components/backup-coverage in the Repo Tooling repo.
     extends:
       file: ../../_baseline.yaml
       service: baseline
