@@ -35,7 +35,6 @@ homeops_container_declared{stack="nextcloud",service="valkey-exporter",name="nex
 homeops_container_declared{stack="nextpvr",service="nextpvr",name="nextpvr",tier="warning"} 1
 homeops_container_declared{stack="open-webui",service="ollama",name="ollama",tier="info"} 1
 homeops_container_declared{stack="open-webui",service="open-webui",name="open-webui",tier="warning"} 1
-homeops_container_declared{stack="ops",service="portainer",name="portainer",tier="info"} 1
 homeops_container_declared{stack="ops",service="stack-back",name="stack-back",tier="critical"} 1
 homeops_container_declared{stack="ownfoil",service="ownfoil",name="ownfoil",tier="warning"} 1
 homeops_container_declared{stack="plex",service="plex",name="plex",tier="warning"} 1
