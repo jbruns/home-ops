@@ -1,17 +1,11 @@
 # OPS STACK (deployed by doco-cd)
-# Host-wide tooling: stack-back (volume and database backups) and Portainer (viewer here;
-# still deploys asotbz/ops Stacks to this and other hosts).
+# Host-wide tooling: stack-back (volume and database backups).
 
 networks:
   # stack-back and the databases it dumps; owned here (ADR-0002).
   backup:
     name: backup
     driver: bridge
-  # Traefik and the Exposed Services it routes to; owned by the edge Stack.
-  proxy:
-    name: proxy
-    external: true
 
 include:
-  - ./portainer/service.yaml
   - ./stack-back/service.yaml

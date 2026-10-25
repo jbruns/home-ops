@@ -37,7 +37,7 @@ pin updates, selection overrides, and recovery.
 | Stack | Services |
 |---|---|
 | `edge` | Traefik, CrowdSec, nginx (catch-all) |
-| `ops` | stack-back (backups), Portainer (viewer here; still deploys asotbz/ops Stacks) |
+| `ops` | stack-back (backups) |
 | `doco-cd` | doco-cd (self-updating), Apprise for deploy notifications |
 | `monitoring` | Prometheus, Alertmanager, Grafana, Loki, Alloy, blackbox-exporter (Probes, Dependency Probes), docker-socket-proxy, cAdvisor, node-exporter, dcgm-exporter, restic-exporter, backup-coverage, container-health-exporter |
 | `nextcloud` | Nextcloud (+ cron), MariaDB (+ mysqld_exporter), Valkey (+ redis_exporter) |
