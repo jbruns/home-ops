@@ -24,7 +24,8 @@ services:
       retries: 3
       start_period: 60s
       start_interval: 5s
-    # Restic repository, retention and schedule; INCLUDE_ALL_COMPOSE_PROJECTS backs up every Stack.
+    # Restic repository (the root of this Host's own B2 bucket, over the S3 API, ADR 0014), its
+    # read-write key, retention and schedule; INCLUDE_ALL_COMPOSE_PROJECTS backs up every Stack.
     env_file: ../stack-back.sops.env
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
@@ -33,7 +34,6 @@ services:
     volumes:
       - /var/run/docker.sock:/tmp/docker.sock:ro
       - backup_cache:/cache
-      - ${ZFS_POOL_ROOT_HDD}/docker-backups:/backups
     networks:
       - default
       # Dumps the databases (stack-back.mariadb label) over this network.

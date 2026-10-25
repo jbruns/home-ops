@@ -129,7 +129,7 @@ _Avoid_: Personal key, admin key
 ## Reliability
 
 **Backup**:
-A restic snapshot of a Stack's volumes and database dumps, taken nightly by stack-back and copied offsite; the only authoritative copy of a Stack's data. An app's own scheduled backups are part of its state, not Backups.
+A restic snapshot of a Stack's volumes and database dumps, taken nightly by stack-back and stored offsite; the only authoritative copy of a Stack's data. An app's own scheduled backups are part of its state, not Backups.
 _Avoid_: Dump, archive, copy, .bak
 
 **Tier**:

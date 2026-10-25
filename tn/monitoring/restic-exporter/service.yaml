@@ -19,8 +19,9 @@ services:
       retries: 3
       start_period: 60s
       start_interval: 5s
+    # The B2 repository stack-back writes to, and a read-only key for it (shared with backup-coverage).
+    env_file: ./b2.sops.env
     environment:
-      RESTIC_REPOSITORY: /backups
       RESTIC_PASSWORD_FILE: /run/secrets/restic_password
       REFRESH_INTERVAL: "3600"
       INCLUDE_PATHS: "true"
@@ -32,12 +33,18 @@ services:
       startup-order: "3"
 
     volumes:
-      # The local restic repository stack-back writes to; read-only, every restic call uses --no-lock.
-      - ${ZFS_POOL_ROOT_HDD}/docker-backups:/backups:ro
+      # restic's cache, kept across recreates so each refresh reads little from B2; not backed up.
+      - restic-exporter_cache:/root/.cache/restic
     secrets:
       - restic_password
     networks:
       - default
+
+volumes:
+  restic-exporter_cache:
+    name: monitoring_restic-exporter_cache
+    labels:
+      homeops.regenerable: "restic rebuilds its cache from the repository"
 
 # Stored encrypted in repo as <name>.sops.txt
 secrets:
