@@ -35,7 +35,9 @@ services:
 
       # Probe (GLOSSARY.md): the public path a user takes; see prometheus.yml
       probe.url: https://cwa.${DOMAIN}/health
-      probe.idp_url: https://cwa.${DOMAIN}/
+      # Native OIDC: CWA's own login path answers with the redirect to the IdP
+      probe.idp_url: https://cwa.${DOMAIN}/login/generic
+      probe.idp_auth: oidc
 
       traefik.enable: true
       traefik.docker.network: proxy
@@ -44,29 +46,32 @@ services:
       traefik.http.routers.calibre-web-automated-http.entrypoints: http
       traefik.http.routers.calibre-web-automated-http.middlewares: redirect-https
 
-      # The web UI is Protected: crowdsec-bouncer, then the IdP (ADR 0006)
+      # Security. Protected by native OIDC (ADR 0006): the web UI signs in at the IdP itself, so no
+      # forward auth and no Client Path. OPDS readers can't sign in at the IdP; /opds takes HTTP basic
+      # auth against CWA's local passwords, which ignore the disabled standard login. A user who needs
+      # OPDS sets a local password in their CWA profile; CrowdSec alone guards those guesses, as for
+      # Audiobookshelf. /health is public.
+      # Settings live in app.db, not env (Admin -> Basic Configuration; secrets only there):
+      #   Login type OAuth; generic provider, metadata URL
+      #   https://idp.<domain>/application/o/cwa/.well-known/openid-configuration, scopes openid profile email,
+      #   username mapper preferred_username, email mapper email, admin group cwa-admins (group admin
+      #   management on: membership grants and revokes admin at each sign-in); OAuth Redirect Host
+      #   https://cwa.<domain>; reverse-proxy header login OFF (with no forward auth, a client could
+      #   send the header itself); standard login disabled.
+      # Account linking: each sign-in picks the CWA user whose name equals preferred_username exactly
+      # (case-sensitive), else whose email matches, else creates one, and repoints the IdP subject's
+      # flask_dance_oauth row at it. The subject is not used to find the user, so renaming someone
+      # at the IdP gives them a new, empty CWA account: rename the CWA user to match first. The local
+      # break-glass admin has no IdP identity and, with standard login disabled, only OPDS access.
+      # Locked out: keep cwa.<domain> off the internet, then in /config/app.db set settings
+      # config_disable_standard_login=0 and config_login_type=0, restart, and if needed reset a
+      # password with python3 /app/calibre-web-automated/cps.py -p /config/app.db -s <user>:<pass>.
       traefik.http.routers.calibre-web-automated-https.rule: Host(`cwa.${DOMAIN}`)
       traefik.http.routers.calibre-web-automated-https.entrypoints: https
       traefik.http.routers.calibre-web-automated-https.tls: true
       traefik.http.routers.calibre-web-automated-https.tls.certresolver: ${CERT_RESOLVER}
       traefik.http.routers.calibre-web-automated-https.service: calibre-web-automated
-      traefik.http.routers.calibre-web-automated-https.middlewares: protected
-
-      # The Probe's path, without the IdP
-      traefik.http.routers.calibre-web-automated-health.rule: Host(`cwa.${DOMAIN}`) && Path(`/health`)
-      traefik.http.routers.calibre-web-automated-health.entrypoints: https
-      traefik.http.routers.calibre-web-automated-health.tls: true
-      traefik.http.routers.calibre-web-automated-health.tls.certresolver: ${CERT_RESOLVER}
-      traefik.http.routers.calibre-web-automated-health.service: calibre-web-automated
-      traefik.http.routers.calibre-web-automated-health.middlewares: crowdsec-bouncer,strip-idp-headers
-
-      # Client Path (GLOSSARY.md): OPDS readers, with CWA's own login
-      traefik.http.routers.calibre-web-automated-client-opds.rule: Host(`cwa.${DOMAIN}`) && PathPrefix(`/opds`)
-      traefik.http.routers.calibre-web-automated-client-opds.entrypoints: https
-      traefik.http.routers.calibre-web-automated-client-opds.tls: true
-      traefik.http.routers.calibre-web-automated-client-opds.tls.certresolver: ${CERT_RESOLVER}
-      traefik.http.routers.calibre-web-automated-client-opds.service: calibre-web-automated
-      traefik.http.routers.calibre-web-automated-client-opds.middlewares: crowdsec-bouncer,strip-idp-headers,client-ratelimit
+      traefik.http.routers.calibre-web-automated-https.middlewares: crowdsec-bouncer
 
       traefik.http.services.calibre-web-automated.loadbalancer.server.port: 8083
     volumes:
