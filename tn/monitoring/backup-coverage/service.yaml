@@ -10,7 +10,7 @@ services:
       service: baseline
     image: ghcr.io/jbruns/backup-coverage:1.0.0@sha256:ed5722b10e3f0bd0e9b90d51080d392467bb404116a97f490e7d97c014a96fe8
     container_name: backup-coverage
-    # Root, like restic-exporter: the repository files are root-only (0400).
+    # Root, like restic-exporter: its restic cache volume is root-owned.
     user: "0:0"
     deploy:
       resources:
@@ -30,11 +30,12 @@ services:
       retries: 3
       start_period: 60s
       start_interval: 5s
+    # The B2 repository and restic-exporter's read-only key for it.
+    env_file: ../restic-exporter/b2.sops.env
     environment:
       # GET /v1.44/containers/json, /containers/<id>/json, /volumes and /system/df; the proxy's
       # CONTAINERS, VOLUMES and SYSTEM allow them.
       DOCKER_HOST: tcp://docker-socket-proxy:2375
-      RESTIC_REPOSITORY: /backups
       RESTIC_PASSWORD_FILE: /run/secrets/restic_password
       RESTIC_CACHE_DIR: /cache
       REFRESH_INTERVAL: "3600"
@@ -46,7 +47,6 @@ services:
       tier: warning
       startup-order: "3"
     volumes:
-      - ${ZFS_POOL_ROOT_HDD}/docker-backups:/backups:ro
       # restic's cache, kept across recreates; not backed up (no stack-back label).
       - restic_cache:/cache
     secrets:

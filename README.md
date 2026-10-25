@@ -130,9 +130,10 @@ Alert and recording-rule behavioral suites live in `tools/validate/rules/` (`rul
 
 ## Backups
 
-- stack-back runs nightly (10:12 UTC). It dumps every container labeled `stack-back.mariadb: true` over the `backup` network, then backs up all named volumes into a restic repository at `${ZFS_POOL_ROOT_HDD}/docker-backups`.
+- stack-back runs nightly (10:12 UTC). It dumps every container labeled `stack-back.mariadb: true` over the `backup` network, then backs up all named volumes into a restic repository at the root of the Host's own Backblaze B2 bucket, over the S3-compatible API ([ADR-0014](docs/adr/0014-backups-go-straight-to-the-hosts-own-bucket.md)).
 - Only named volumes (Service config and state) are backed up. Media on bind mounts under `${ZFS_POOL_ROOT_HDD}` (books, audiobooks, music, ROMs) is not.
-- A TrueNAS Cloud Sync task pushes that dataset to Backblaze B2 daily at 04:00 (SYNC mode).
+- The bucket's lifecycle rule is "Keep only the last version of the file", so B2 deletes what restic prunes a day later.
+- `tn/ops/stack-back.sops.env` holds the repository URL, the restic password and stack-back's key, which can write and delete. restic-exporter and backup-coverage read with a separate read-only key (`tn/monitoring/restic-exporter/b2.sops.env`). The Operator's password manager also holds the restic password, since without it no Backup can be read.
 - restic-exporter feeds the `BackupStale` and `BackupMetricsMissing` alerts.
 - This restic repository is the only Backup; apps' own scheduled backups are part of their state ([ADR-0011](docs/adr/0011-restic-is-the-only-backup.md)).
 
