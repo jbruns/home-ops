@@ -51,7 +51,7 @@ services:
     extends:
       file: ../../_baseline.yaml
       service: baseline
-    image: oliver006/redis_exporter:v1.90.0@sha256:a129504e65b87c54f79bc92f1afc403475e8ff646a3d7512de469904ceddf986
+    image: oliver006/redis_exporter:v1.94.0@sha256:0842ef7110e62b40bbde2d5c11f38c6fbd99f7100c75e3866637c1b335a1eff7
     container_name: nextcloud-valkey-exporter
     user: ${HOME_UID}:${HOME_GID}
     deploy:
