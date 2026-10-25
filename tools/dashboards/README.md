@@ -1,8 +1,9 @@
 # dashboards
 
-Generates the Grafana dashboards provisioned from the repo (the `home-ops` folder, read-only in
-the UI). The generated JSON lives in `tn/monitoring/grafana/dashboards/`, where Grafana's
-provisioning reads it; edit the generator, never the JSON. Repo Tooling: it never runs on the Host.
+Generates the Grafana dashboards provisioned from the repo (in the folder that
+`grafana/provisioning/dashboards.yml` names, read-only in the UI). The generated JSON lives in
+`tn/monitoring/grafana/dashboards/`, where Grafana's provisioning reads it; edit the generator, never the JSON.
+Repo Tooling: it never runs on the Host.
 
 ## Run
 

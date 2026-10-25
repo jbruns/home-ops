@@ -10,7 +10,7 @@ What runs on the TrueNAS Host itself. doco-cd does not deploy any of it; install
 ## Runbook: install or upgrade startup-order
 
 The startup-order Custom Component lives in
-[`jbruns/homelab-components`](https://github.com/jbruns/homelab-components/tree/main/components/startup-order)
+the Repo Tooling repo, under `components/startup-order`
 (configuration, exit status and logs are in its README). The Host runs the release pinned in
 [`startup-order.pin`](startup-order.pin), installed at `/mnt/luna/homeops/bin/startup-order.sh`: on a pool
 dataset, so a TrueNAS update keeps it, and apart from its state and logs in `/mnt/luna/homeops/startup/`.

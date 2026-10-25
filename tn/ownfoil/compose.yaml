@@ -1,4 +1,4 @@
-# OWNFOIL STACK (deployed by doco-cd). Moved from asotbz/ops tn/asot-media (#457).
+# OWNFOIL STACK (deployed by doco-cd). Moved from a sibling deployment repo (#457).
 # Hostnames are under this Stack's own DOMAIN, not edge's.
 services:
   ownfoil:

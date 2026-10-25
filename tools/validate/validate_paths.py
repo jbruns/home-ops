@@ -1,7 +1,8 @@
 """Read tools/validate/paths as data: one `NAME=PATH` homelab-validate input per line, each becoming one `--path`.
+Read tools/validate/privacy-allow beside it the same way: one regex per line, each becoming one `--privacy-allow`.
 
 Run as a script, it prints the arguments shell-quoted (`shlex.join`) for the reusable workflow's `extra-args`,
-which splits them with `shlex.split`. Any malformed line fails, so the file cannot inject an option.
+which splits them with `shlex.split`. Any malformed line fails, so neither file can inject an option.
 """
 import re
 import shlex
@@ -9,7 +10,8 @@ import sys
 from pathlib import Path
 
 PATHS = Path(__file__).resolve().parent / "paths"
-# homelab-validate's inputs (validate-v1.0.1 README, "Inputs").
+ALLOW = "privacy-allow"
+# homelab-validate's inputs (validate-v1.2.0 README, "Inputs").
 NAMES = {
     "prometheus", "rule-tests", "alertmanager", "loki", "alloy", "grafana", "dashboards-json", "dashboards",
     "declared-containers", "blackbox", "traefik",
@@ -41,9 +43,29 @@ def load(path: Path = PATHS) -> list[str]:
     return args
 
 
+def load_allow(path: Path) -> list[str]:
+    """The privacy allowlist beside the paths file, as `--privacy-allow` arguments; none when the file is absent."""
+    path = Path(path)
+    if not path.exists():
+        return []
+    args: list[str] = []
+    for n, line in enumerate(path.read_text().split("\n"), 1):
+        if not line.strip() or line.startswith("#"):
+            continue
+        if line != line.strip():
+            raise PathsError(f"{path}: line {n}: want a regex with no leading or trailing whitespace")
+        try:
+            re.compile(line)
+        except re.error as exc:
+            raise PathsError(f"{path}: line {n}: not a valid regex: {exc}") from None
+        args += ["--privacy-allow", line]
+    return args
+
+
 def main(argv: list[str]) -> int:
+    paths = Path(argv[0]) if argv else PATHS
     try:
-        args = load(Path(argv[0]) if argv else PATHS)
+        args = load(paths) + load_allow(paths.with_name(ALLOW))
     except (OSError, PathsError) as exc:
         print(f"validate_paths: {exc}", file=sys.stderr)
         return 1

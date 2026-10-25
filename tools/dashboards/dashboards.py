@@ -19,6 +19,8 @@ OUT = Path(__file__).resolve().parents[2] / "tn/monitoring/grafana/dashboards"
 PROM = {"type": "prometheus", "uid": "prometheus"}
 LOKI = {"type": "loki", "uid": "loki"}
 REMOTE = {"type": "prometheus", "uid": "prometheus-remote"}  # nzbhydra2's machine (ADR 0005)
+# The Grafana folder (grafana/provisioning/dashboards.yml) and the tag every generated dashboard carries.
+FOLDER = "home-ops"
 MACHINE = {"type": "prometheus", "uid": "${ds}"}
 
 TIERS = ("critical", "warning", "info")
@@ -201,7 +203,7 @@ def dashboard(uid, title, panels, variables=(), links=(), time="now-24h", desc="
         "uid": uid,
         "title": title,
         "description": desc,
-        "tags": ["home-ops"],
+        "tags": [FOLDER],
         "editable": False,
         "graphTooltip": 1,
         "timezone": "browser",
@@ -217,7 +219,7 @@ def dashboard(uid, title, panels, variables=(), links=(), time="now-24h", desc="
 
 
 SERVICE_LINK = "/d/service/service?var-stack=${__data.fields.stack}&var-container=${__value.raw}&${__url_time_range}"
-DASH_LINKS = [{"type": "dashboards", "tags": ["home-ops"], "asDropdown": True, "title": "home-ops",
+DASH_LINKS = [{"type": "dashboards", "tags": [FOLDER], "asDropdown": True, "title": "Dashboards",
                "includeVars": False, "keepTime": True}]
 
 

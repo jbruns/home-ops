@@ -1,4 +1,4 @@
-# Home Ops
+# Self-hosted Services
 
 The self-hosted services running on the TrueNAS host, and how they are deployed, ordered, watched, and alerted on.
 

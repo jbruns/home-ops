@@ -1,4 +1,4 @@
-# home-ops
+# Self-hosted Services
 
 GitOps for the self-hosted Services on a single TrueNAS SCALE Host. Every Stack is a Docker Compose project in this repo. [Renovate](renovate.json) proposes image updates, and [doco-cd](https://doco.cd) deploys whatever is on `main`.
 
@@ -64,14 +64,14 @@ Other Stacks declare these networks `external: true`, so `edge`, `monitoring` an
 
 ## How changes reach the Host
 
-1. Open a PR. CI runs `homelab-validate` (secrets, env, compose, monitoring configs, Cloudflare IPs, isolation) and `homelab-declared-containers --check`, plus gitleaks, actionlint and the Renovate config validator. These are shared Repo Tooling from [jbruns/homelab-components](https://github.com/jbruns/homelab-components) ([ADR-0012](docs/adr/0012-shared-repo-tooling.md)), reading the Host from `hosts.yaml`.
+1. Open a PR. CI runs `homelab-validate` (secrets, env, compose, monitoring configs, Cloudflare IPs, isolation, privacy) and `homelab-declared-containers --check`, plus gitleaks, actionlint and the Renovate config validator. These are shared Repo Tooling from the Repo Tooling repo ([ADR-0012](docs/adr/0012-shared-repo-tooling.md)), reading the Host from `hosts.yaml`.
 2. Merge to `main`.
 3. Within 2 minutes doco-cd pulls `main`, decrypts each Stack's `.sops.env` and referenced `*.sops.*` files, and runs `docker compose up` for every Stack that changed. A failed deploy is retried with a forced recreate of that Stack.
 4. Results go to Discord through Apprise. Repeated failures raise the `DeployFailing` alert.
 
 Changes to `tn/doco-cd/` ship in their own PR (CI enforces this). doco-cd replaces itself with the `applier` strategy, which waits for in-flight Deploys to finish first. With `scale_out`, two deployers overlapped and left containers named `<id>_<name>`.
 
-To force-recreate one Service (for example after `ContainerLeftoverName`), run `hops recreate <stack>/<service>` ([hops](https://github.com/jbruns/homelab-components/blob/hops-v1.0.0/repo-tools/hops/README.md#lifecycle-commands)). It calls doco-cd's REST API from a container on the `metrics` network that is not being recreated. The key (`tn/doco-cd/api_secret.sops.txt`) is decrypted locally and sent on stdin.
+To force-recreate one Service (for example after `ContainerLeftoverName`), run `hops recreate <stack>/<service>` (lifecycle commands in the hops README). It calls doco-cd's REST API from a container on the `metrics` network that is not being recreated. The key (`tn/doco-cd/api_secret.sops.txt`) is decrypted locally and sent on stdin.
 
 Deleting a Stack folder removes the Stack from the Host but keeps its volumes. Volumes are named after the Stack that owns them, `<stack>_[<service>_]<purpose>` ([ADR-0010](docs/adr/0010-volumes-named-for-their-stack.md)). Some still carry a prefix from before the one-Stack-per-app split (e.g. `media_plex_config`) until their Stack is moved with `hops volume move` (#638); never rename one by copying.
 
@@ -89,15 +89,17 @@ Renovate runs every morning (America/Los_Angeles) with no hourly PR limit, pins 
 - doco-cd writes decrypted files as root with mode 0600. A non-root Service must therefore read secrets through `env_file`, not Compose `secrets`.
 - doco-cd parses `env_file` with the default format only; `format: raw` fails the Deploy. Single-quote values that contain `$`.
 
-Validate locally before pushing. It needs Docker and [`homelab-validate`](https://github.com/jbruns/homelab-components/blob/validate-v1.0.1/repo-tools/validate/README.md) with [`homelab-declared-containers`](https://github.com/jbruns/homelab-components/blob/declared-containers-v1.0.1/repo-tools/declared-containers/README.md) on `PATH`:
+Validate locally before pushing. It needs Docker and `homelab-validate` with `homelab-declared-containers` on `PATH` (each documented in its README under `repo-tools/` in the Repo Tooling repo):
 
 ```sh
-uv tool install "git+https://github.com/jbruns/homelab-components@validate-v1.0.1#subdirectory=repo-tools/validate"
-uv tool install "git+https://github.com/jbruns/homelab-components@declared-containers-v1.0.1#subdirectory=repo-tools/declared-containers"
+uv tool install "git+https://github.com/jbruns/homelab-components@validate-v1.2.0#subdirectory=repo-tools/validate"
+uv tool install "git+https://github.com/jbruns/homelab-components@declared-containers-v1.0.2#subdirectory=repo-tools/declared-containers"
 tools/validate/homelab-validate secrets env compose monitoring cloudflare
 ```
 
 `tools/validate/homelab-validate` runs `homelab-validate` with every input in `tools/validate/paths` passed as `--path`, so a moved or missing component fails its check instead of being skipped. CI, the pre-commit hook and `hops bump` (`hosts.yaml` `validate`) pass the same list; add a line there when the repo gains a component. CI runs the checks through the reusable workflows `.github/workflows/validate.yaml` pins; keep these install tags in step with its `repo-ci` pin.
+
+`privacy` fails CI when prose names a repository, person, login, hostname or domain ([ADR-0013](docs/adr/0013-prose-names-roles-not-names.md)). Its denylist is the `PRIVACY_DENYLIST` repository secret, never committed; locally the check skips unless `HOMELAB_PRIVACY_DENYLIST` holds the same patterns. `tools/validate/privacy-allow` holds the narrow patterns, one per line, that exempt load-bearing text such as install commands; the wrapper and CI pass each as `--privacy-allow`.
 
 `tools/cloudflare-ips` and `tools/dashboards` each have a README; `tools/validate/rules` holds the Prometheus rule tests. CI also runs the tools' tests and the `host/` runbook's (`pip install -r tools/requirements-test.txt`):
 
@@ -120,11 +122,11 @@ Prometheus keeps 400 days (capped at 60 GB). Daily Availability per Service is `
 
 Rules are in `tn/monitoring/prometheus/alerting-rules.yml` and routing in `tn/monitoring/alertmanager/config.yml`. Silence a Stack you are working on (e.g. `alertname=ContainerDown, stack=<stack>`) in Alertmanager.
 
-ContainerDown compares desired state with what is running: [`homelab-declared-containers`](https://github.com/jbruns/homelab-components/blob/declared-containers-v1.0.1/repo-tools/declared-containers/README.md) lists every Service in `tn/` as `homeops_container_declared` (node-exporter's textfile collector serves it), and the alert fires for a declared `critical` or `warning` Service whose container cAdvisor has not seen for 2 minutes, after 5 more. Removing a Service or Stack from `tn/` ends its ContainerDown with the deploy; no silence is needed. One-shot helpers and ad-hoc `docker run` containers are not declared, so they never raise it. Regenerate it with `homelab-declared-containers` and commit the file whenever a Service is added, removed or renamed; `homelab-validate monitoring` fails if it is stale.
+ContainerDown compares desired state with what is running: `homelab-declared-containers` lists every Service in `tn/` as `homeops_container_declared` (node-exporter's textfile collector serves it), and the alert fires for a declared `critical` or `warning` Service whose container cAdvisor has not seen for 2 minutes, after 5 more. Removing a Service or Stack from `tn/` ends its ContainerDown with the deploy; no silence is needed. One-shot helpers and ad-hoc `docker run` containers are not declared, so they never raise it. Regenerate it with `homelab-declared-containers` and commit the file whenever a Service is added, removed or renamed; `homelab-validate monitoring` fails if it is stale.
 
-Grafana dashboards in the `home-ops` folder are generated by `tools/dashboards/dashboards.py` and are read-only in the UI. Edit the generator, run `python3 tools/dashboards/dashboards.py`, and commit the JSON alongside it; `homelab-validate monitoring` fails if the two disagree. Dashboards reference datasources by the fixed uids in `grafana/provisioning/datasources.yml`; URLs and credentials come from `grafana/datasources.sops.env`. CI parses dashboard PromQL/LogQL and boots Grafana with the same provisioning and dummy secrets. The Overview (Tier overview) is Grafana's home page. All dashboards and datasources come from the repo; anything created in the UI is not kept.
+Grafana dashboards in the folder `grafana/provisioning/dashboards.yml` names are generated by `tools/dashboards/dashboards.py` and are read-only in the UI. Edit the generator, run `python3 tools/dashboards/dashboards.py`, and commit the JSON alongside it; `homelab-validate monitoring` fails if the two disagree. Dashboards reference datasources by the fixed uids in `grafana/provisioning/datasources.yml`; URLs and credentials come from `grafana/datasources.sops.env`. CI parses dashboard PromQL/LogQL and boots Grafana with the same provisioning and dummy secrets. The Overview (Tier overview) is Grafana's home page. All dashboards and datasources come from the repo; anything created in the UI is not kept.
 
-Alert and recording-rule behavioral suites live in `tools/validate/rules/` (`rule-tests` in `tools/validate/paths`) and run with the deployed `promtool` as part of `homelab-validate monitoring`. New or changed rules must include an updated behavioral case; see [monitoring validation](https://github.com/jbruns/homelab-components/blob/validate-v1.0.1/repo-tools/validate/README.md#monitoring-checks).
+Alert and recording-rule behavioral suites live in `tools/validate/rules/` (`rule-tests` in `tools/validate/paths`) and run with the deployed `promtool` as part of `homelab-validate monitoring`. New or changed rules must include an updated behavioral case; see "Monitoring checks" in the homelab-validate README.
 
 ## Backups
 
@@ -140,7 +142,7 @@ Don't copy data before a risky change (no `.bak`, dated or `pre-*` copies). Take
 
 ## Startup order
 
-Every Service has a `startup-order` label (0 edge, 1 Datastores and monitoring core, 2 Exposed Services, 3 sidecars). `homelab-validate compose` rejects a Service without one. The [startup-order](https://github.com/jbruns/homelab-components/tree/main/components/startup-order) Custom Component runs as TrueNAS Init/Shutdown Scripts (System → Advanced): `stop` at SHUTDOWN, `start` at POSTINIT. It keeps its state and logs in `/mnt/luna/homeops/startup/`. For a dry run, run `plan` with that `STARTUP_ORDER_DIR` (step 5 of the runbook linked below). See [ADR-0003](docs/adr/0003-startup-order-via-host-scripts.md).
+Every Service has a `startup-order` label (0 edge, 1 Datastores and monitoring core, 2 Exposed Services, 3 sidecars). `homelab-validate compose` rejects a Service without one. The startup-order Custom Component (`components/startup-order` in the Repo Tooling repo) runs as TrueNAS Init/Shutdown Scripts (System → Advanced): `stop` at SHUTDOWN, `start` at POSTINIT. It keeps its state and logs in `/mnt/luna/homeops/startup/`. For a dry run, run `plan` with that `STARTUP_ORDER_DIR` (step 5 of the runbook linked below). See [ADR-0003](docs/adr/0003-startup-order-via-host-scripts.md).
 
 doco-cd does not deploy it. The Host runs the release pinned in `host/startup-order.pin`, installed at `/mnt/luna/homeops/bin/startup-order.sh`; to install or upgrade it, follow the [runbook](host/README.md#runbook-install-or-upgrade-startup-order).
 
@@ -172,7 +174,7 @@ docker run --rm \
   -v /mnt/luna/homeops/age.key:/run/secrets/sops_age_key:ro \
   -e SOPS_AGE_KEY_FILE=/run/secrets/sops_age_key \
   -e SELF_UPDATE_ENABLED=true \
-  -e POLL_CONFIG="- url: https://github.com/jbruns/home-ops.git
+  -e POLL_CONFIG="- url: <the url in tn/doco-cd/compose.yaml>
   reference: main" \
   <image from tn/doco-cd/compose.yaml> apply-self --bootstrap
 ```

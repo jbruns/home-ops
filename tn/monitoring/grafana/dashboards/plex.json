@@ -26,7 +26,7 @@
         "home-ops"
       ],
       "asDropdown": true,
-      "title": "home-ops",
+      "title": "Dashboards",
       "includeVars": false,
       "keepTime": true
     },

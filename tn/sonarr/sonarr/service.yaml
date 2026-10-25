@@ -99,7 +99,7 @@ services:
 
   sonarr-queue-exporter:
     # Stuck Sonarr queue items (failed imports) for Prometheus: arr_queue_* with app="sonarr".
-    # https://github.com/jbruns/homelab-components/tree/main/components/arr-queue-exporter
+    # Source: components/arr-queue-exporter in the Repo Tooling repo.
     extends:
       file: ../../_baseline.yaml
       service: baseline

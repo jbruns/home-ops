@@ -1,7 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "github>jbruns/homelab-components//renovate/repo-default#repo-ci-v1.0.1"
+    "github>jbruns/homelab-components//renovate/repo-default#repo-ci-v1.1.0"
   ],
   "packageRules": [
     {
@@ -41,15 +41,15 @@
         "jbruns/homelab-components"
       ],
       "prBodyNotes": [
-        "After merging, install the new release on the Host: [runbook](https://github.com/jbruns/home-ops/blob/main/host/README.md#runbook-install-or-upgrade-startup-order)."
+        "After merging, install the new release on the Host: follow \"Runbook: install or upgrade startup-order\" in `host/README.md`."
       ]
     },
     {
-      "description": "The setup-agent-skills wrapper's own PR, apart from the repo-ci group the preset puts every homelab-components tag in",
+      "description": "The setup-agent-skills wrapper's own PR, apart from the repo-ci group the preset puts every Repo Tooling repo tag in",
       "matchFileNames": [
         "tools/agent-skills/setup-agent-skills"
       ],
-      "groupName": "homelab-components agent-skills"
+      "groupName": "Repo Tooling agent-skills"
     }
   ],
   "docker-compose": {
@@ -89,7 +89,7 @@
     },
     {
       "customType": "regex",
-      "description": "setup-agent-skills wrapper: shared Repo Tooling pinned by tag and commit (homelab-components repo-tools/agent-skills README)",
+      "description": "setup-agent-skills wrapper: shared Repo Tooling pinned by tag and commit (repo-tools/agent-skills README in the Repo Tooling repo)",
       "managerFilePatterns": [
         "/(^|/)tools/agent-skills/setup-agent-skills$/"
       ],

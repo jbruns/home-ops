@@ -1,5 +1,5 @@
 # The Hosts this repo's shared Repo Tooling (hops, homelab-validate, homelab-declared-containers) may reach
-# (ADR 0012). Schema: https://github.com/jbruns/homelab-components/blob/hosts-v1.1.0/repo-tools/hosts/README.md
+# (ADR 0012). Schema: repo-tools/hosts/README.md in the Repo Tooling repo, at hosts-v1.1.1.
 # Connection details stay in the gitignored .env as HOPS_TRUENAS_* (see .env.example).
 version: 1
 default_branch: main
