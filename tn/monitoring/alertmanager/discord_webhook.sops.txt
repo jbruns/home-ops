@@ -3,8 +3,12 @@
 	"sops": {
 		"age": [
 			{
-				"enc": "-----BEGIN AGE ENCRYPTED FILE-----\nYWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBZRFZYV1dSb3ZNZ1BLajho\nSTgydlFSQy9yOG81Vlg1Wmx1SXJNSTNsTnc0CnpaMmQ2VEVoNGR5TjJlYnptSkpr\nSEFtRXArUDlad1lvTjFCaHdnKzFEZlEKLS0tIEwxUlVNWHFWT3YyUFR0Ym41dEw1\nQXZnQnNzYnNxcE9PYmFYZ0FFbHp4ekkK3t7/e21UmkB6NcleuWD0V4pnq5Zvqulp\n1tba5L+M+FDoeD0dZfc6ga3S6WL9s+gMqtCZP07k0Tq1g4mdNf9uPg==\n-----END AGE ENCRYPTED FILE-----\n",
-				"recipient": "age16k57zw4p8z02uwtr9drz2h7dusmazph7wfcug64jd4pqt6quh90qvk3k6c"
+				"enc": "-----BEGIN AGE ENCRYPTED FILE-----\nYWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSAyYmJoN3RiRXc0R3AxdE45\nMXZBY0VtSlJSbWhJKzRJVTVsSHpaYnZLaFJrCnV0Z3dsZHlHZHpsYkRqRG5vUFVP\naUwzb3o4dEk3SjdWNmQ2bDVIV0MwMDAKLS0tIEpmZzRVVXU2RWlCZXBQNWwrTDhD\nRnBzcVVjVWdBbHNVTlVMYkxacHFNSjQKPF9mOSfNd9zXR/o6fNgEgyXCeksIg635\n6ioQ38inBsSQfbP67iqryTBdkvviTneyIkufD8qiiQWslCNDDx8+Xg==\n-----END AGE ENCRYPTED FILE-----\n",
+				"recipient": "age1laj753drygvud08339pu6puxt45vs9d9pcrz9f8edqauc2sxudhqd8cjz5"
+			},
+			{
+				"enc": "-----BEGIN AGE ENCRYPTED FILE-----\nYWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBFZ0FFYjhudm5zcUtGTVZt\nelYyc1A0SURLbkdRTjBYT1lRcWR6amsrWTNJCno4V3ZtVEtxdVlJU3VYYzVpNE1U\nTXkyQStkOStQTkM2ZElWRzllWUhsYk0KLS0tIDhVWjFzUVFnZFlCTUIrR0lwUlpp\nOEhVR21QRG5vSzJxWXhRZWhrTFhnRkkKHh4qmw89KFEq1bizo0d2E3eZ+m5SyKdI\nn9ozrjktwpBBtX1HiQTcRPNYpIQtEVLXy+8V4gICNG+W8t5EQroegA==\n-----END AGE ENCRYPTED FILE-----\n",
+				"recipient": "age1w8hlt2y067tpv0z5zk8q8n44ppc934vdk0p2ldjql5wdaw0r7esskw4pn0"
 			}
 		],
 		"lastmodified": "2026-10-16T21:24:46Z",

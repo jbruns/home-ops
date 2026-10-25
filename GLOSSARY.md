@@ -112,6 +112,20 @@ _Avoid_: Ad-hoc, orphan, leftover
 A ZFS snapshot taken before a risky change, recording the change it serves and a release date, and released once the change is verified. It replaces hand-made copies of data on the Host; it is never a Backup.
 _Avoid_: .bak, pre-change copy, safety copy
 
+## Secrets
+
+**Operator**:
+The person who edits this repo's secrets and holds the offline copies of its keys.
+_Avoid_: Admin, owner
+
+**Host Key**:
+The age key doco-cd decrypts SOPS files with on the Host; the only key the Host holds.
+_Avoid_: SOPS key, age key (ambiguous), deploy key
+
+**Operator Key**:
+The Operator's own age key, the second recipient of every SOPS file; it never goes on the Host.
+_Avoid_: Personal key, admin key
+
 ## Reliability
 
 **Backup**:

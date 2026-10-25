@@ -79,8 +79,10 @@ Renovate runs every morning (America/Los_Angeles) with no hourly PR limit, pins 
 
 ## Secrets
 
-- Every secret is SOPS-encrypted with age. The public key is in `.sops.yaml`.
-- The private key lives on the Host at `/mnt/luna/homeops/age.key` (root, 0400) and in an offline backup. Nowhere else.
+- Every secret is SOPS-encrypted with age to two recipients, both listed in `.sops.yaml`: the Host Key and the Operator Key.
+- The Host Key lets doco-cd decrypt on the Host. Its private key lives at `/mnt/luna/homeops/age.key` (root, 0400) and in the Operator's offline copy. Nowhere else. That file holds exactly one key, the Host Key.
+- The Operator Key lets the Operator edit secrets on their own machine. It never goes on the Host.
+- After changing either recipient in `.sops.yaml`, run `sops updatekeys -y` on every `*.sops.*` file under `tn/` and check each lists exactly those two recipients.
 - Edit a Stack's values with `sops tn/<stack>/.sops.env`. Add a new key to `env.template` too, or CI fails.
 - Files a Compose file mounts or loads (`env_file`, `secrets`) must be named `*.sops.*` and tracked. Plaintext `.env` and `*.txt` files under `tn/` are gitignored.
 - Home public addresses are whitelisted in CrowdSec by `tn/edge/crowdsec/home-whitelist.sops.yaml` (a parser, edited with `sops`). Only this Host carries it.
@@ -159,7 +161,7 @@ Label an ad-hoc `docker run` on the Host `startup-order=skip` so startup-order a
 
 1. Create the users and groups with `host/create_usersgroups.sh` (runbook: [host/README.md](host/README.md)). Configure the Apps service so Docker data is on SSD.
 2. Give the Host a second IP. The TrueNAS UI owns 80/443 on the primary address, so Traefik binds to `DOCKER_HOST_IPV4`.
-3. Place the age private key at `/mnt/luna/homeops/age.key` (root, 0400).
+3. Place the Host Key's private key at `/mnt/luna/homeops/age.key` (root, 0400).
 4. Bootstrap doco-cd once. After that it manages itself from `tn/doco-cd/`:
 
 ```sh

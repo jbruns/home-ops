@@ -5,13 +5,22 @@ sops:
     age:
         - enc: |
             -----BEGIN AGE ENCRYPTED FILE-----
-            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSB0UXFPNE9WaFB5eDAvRTAw
-            RlVzMFY5cTI0WHVLSHlDRU40b1VHOFBjU1VRCktkNVN0R2lLL0M0TUV5ZDIvRzIx
-            ZjYwc0I5bndxd3hBbW9NTWsrM1l1L00KLS0tIGZ4S0hHWGVBVnRHSUt5T2w3TlRI
-            OHdaR3U3d0UrZUtaak5yZXpQNTBibm8KLA3hAy1y7vJRlv0+u9GGmr+WTYqHgs4E
-            LckfhsiYbYPXfjjFcZv4PLR9mPOFehyMrUFRCOA31vCM2IQ+NTiGYA==
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBOWnJ2eUw0SzNPQTNiZ25R
+            WEhsZXM1djA2VHJDcElkbzVBWXVNbW11QWpFCkVBcWhsOHdNYWxRaXZoTmNUdHQ0
+            eUpTbTIrczJpR3REcGxROXA0dFNzVzAKLS0tIFVmb2M2b2l3RzVqYzJTN1YwV01o
+            YWVpY0NZcmdRM0c5Q01QdG1vdGFnVGcKtD6fRuQWmiZE3xxkIe2RYt0eiB/YNAb8
+            LzQ61KqBbaMDNI+5sDm1JHonuXB9zdwSAoz5m2PL81TXNoV3Gsnmcw==
             -----END AGE ENCRYPTED FILE-----
-          recipient: age16k57zw4p8z02uwtr9drz2h7dusmazph7wfcug64jd4pqt6quh90qvk3k6c
+          recipient: age1laj753drygvud08339pu6puxt45vs9d9pcrz9f8edqauc2sxudhqd8cjz5
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBwTVdMSEx0V2JaL3FPNTB6
+            OFJFemNkajRkU3B3eVY0cjRGbEZhRCs1eGtVCjlQVUNkOFRhTy9SZVowOXh4VGJr
+            blBKVTlzK09xRlNqci9GT2NqTEsxVHMKLS0tIDhKRTRLdXJTWEhvM1NuZnE5dUJx
+            Ui9VZkNhcVJnRW9YbWM2aG8wWU9USEkKDQBEPtGPTgU/XQdCqaSxJ8y2TKNf8ii/
+            YyUuHIFu2jfD28w3pk0VRLpO5prnecqZUCsnFN7tXQX8OZCOPghT7g==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1w8hlt2y067tpv0z5zk8q8n44ppc934vdk0p2ldjql5wdaw0r7esskw4pn0
     lastmodified: "2026-10-17T03:06:57Z"
     mac: ENC[AES256_GCM,data:yk4mp7QnF5fb+8+9v+yDtd1NMcZFRmuxFobszDFYveyMK+to81KADzGhcqv7CkTGHHp2xbtPgHR7n8dSBxEgPl8hdr5bzX1lgr8/xH7mvUE+w1Wmjr9594RaJsgD58Zz/wtONGBS+ob1Q0hoHGyEibh8CErb7+9np5YlaI6Fe9I=,iv:qm6ZtPwPgsc5UKsS0M7zN/rzwloXzhs13pPe2Vo8KXM=,tag:2sX3+bEVpT990t1AGMW88w==,type:str]
     unencrypted_suffix: _unencrypted
