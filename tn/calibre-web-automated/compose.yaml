@@ -33,7 +33,7 @@ services:
     # metadata fetch on ingest OFF. Fetch on ingest applies the provider's first search result
     # unchecked, and Hardcover ranks summaries and omnibuses first (0 of 5 test titles right), so it
     # would overwrite series, date, rating, identifiers, tags and description from another book.
-    # Fetch rich metadata per book in the book editor instead, where a person picks the result.
+    # Fetch rich metadata with tools/cwa-hardcover (checks each match first) or per book in the editor.
     env_file: ./calibre-web-automated.sops.env
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info

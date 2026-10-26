@@ -15,7 +15,7 @@ Terms used here (Stack, Service, Datastore, Tier, Page, Digest, ...) are defined
 | `.doco-cd.yml` | How doco-cd discovers and deploys Stacks |
 | `.env.example` | Keys for the gitignored repo-root `.env`: client-side Host access and Repo Tooling config, each with its purpose and consumer |
 | `host/` | Run on the Host itself: the startup-order pin and install runbook, and the identities runbook |
-| `tools/<name>/` | Repo Tooling (CI and contributor machines only), each with a README: `validate` (the checks CI runs on every PR), `hops` (ops and diagnostics on the Host over SSH), `cloudflare-ips`, `dashboards`, `declared-containers`, `agent-skills` |
+| `tools/<name>/` | Repo Tooling (CI and contributor machines only), each with a README: `validate` (the checks CI runs on every PR), `hops` (ops and diagnostics on the Host over SSH), `cloudflare-ips`, `dashboards`, `cwa-hardcover` (sent into the CWA container to match the library to Hardcover), `declared-containers`, `agent-skills` |
 
 ## Agent setup
 
@@ -101,7 +101,7 @@ tools/validate/homelab-validate secrets env compose monitoring cloudflare
 
 `privacy` fails CI when prose names a repository, person, login, hostname or domain ([ADR-0013](docs/adr/0013-prose-names-roles-not-names.md)). Its denylist is the `PRIVACY_DENYLIST` repository secret, never committed; locally the check skips unless `HOMELAB_PRIVACY_DENYLIST` holds the same patterns. `tools/validate/privacy-allow` holds the narrow patterns, one per line, that exempt load-bearing text such as install commands; the wrapper and CI pass each as `--privacy-allow`.
 
-`tools/cloudflare-ips` and `tools/dashboards` each have a README; `tools/validate/rules` holds the Prometheus rule tests. CI also runs the tools' tests and the `host/` runbook's (`pip install -r tools/requirements-test.txt`):
+`tools/cloudflare-ips`, `tools/cwa-hardcover` and `tools/dashboards` each have a README; `tools/validate/rules` holds the Prometheus rule tests. CI also runs the tools' tests and the `host/` runbook's (`pip install -r tools/requirements-test.txt`):
 
 ```sh
 python3 -m pytest tools host
