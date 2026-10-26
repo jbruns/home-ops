@@ -226,7 +226,7 @@ class Hardcover:
             self.last = time.monotonic()
             self.calls += 1
             req = urllib.request.Request(API, json.dumps({"query": query, "variables": variables}).encode(), {
-                "Content-Type": "application/json", "User-Agent": "home-ops-cwa-hardcover",
+                "Content-Type": "application/json", "User-Agent": "cwa-hardcover",
                 "authorization": f"Bearer {self.token}"})
             try:
                 with urllib.request.urlopen(req, timeout=30) as resp:
@@ -487,7 +487,7 @@ def drifted(rec, now):
 
 
 def download(url, dest):
-    req = urllib.request.Request(url, headers={"User-Agent": "home-ops-cwa-hardcover"})
+    req = urllib.request.Request(url, headers={"User-Agent": "cwa-hardcover"})
     with urllib.request.urlopen(req, timeout=60) as resp, open(dest, "wb") as out:
         out.write(resp.read())
     return image_area(dest) is not None
