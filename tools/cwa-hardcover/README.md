@@ -37,7 +37,7 @@ tool never clears a field Hardcover lacks.
 | pubdate | Hardcover's original release date, unless the book already has a date in that year (Hardcover often stores a year as January 1) |
 | rating | Hardcover's average, to the nearest half star, when at least 5 readers rated it |
 | tags | Replaced by Hardcover's genre tags with 2 or more votes (most carry one reader's vote), up to 10; left alone when none qualify |
-| cover | The largest Hardcover image, when it has more pixels than the current cover |
+| cover | The largest Hardcover image, when it has more pixels than the current cover once calibre shrinks it to fit 1650×2200 |
 
 ## Run
 

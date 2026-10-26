@@ -110,6 +110,16 @@ def test_unknown_cover_size_is_not_replaced():
     assert ch.new_fields(book(cover={"area": None}), detail(), None)["cover"] is None
 
 
+def test_rerun_after_apply_changes_nothing():
+    # calibre stores a 2000x3000 cover as 1466x2200 and strips the publisher name
+    huge = {"url": "https://img/h.jpg", "width": 2000, "height": 3000}
+    d = detail(image=huge, default_ebook_edition={"id": 77, "publisher": {"name": "Ballantine "}})
+    assert ch.new_fields(book(cover={"area": 3_000_000}), d, None)["cover"]["area"] == 1466 * 2200
+    applied = book(cover={"area": 1466 * 2200}, publisher="Ballantine")
+    n = ch.new_fields(applied, d, None)
+    assert (n["cover"], n["publisher"]) == (None, "Ballantine")
+
+
 def test_calibredb_fields():
     chg = {f: {"old": None, "new": v} for f, v in {
         "identifiers": {"isbn": "1", "hardcover-id": "2"}, "series": ["S", 2.5], "rating": 9,

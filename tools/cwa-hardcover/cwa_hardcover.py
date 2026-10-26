@@ -42,6 +42,7 @@ MAX_TAGS = 10
 MIN_TAG_VOTES = 2  # most Hardcover genre tags carry a single reader's vote
 MIN_RATINGS = 5
 GOODREADS_PLATFORM = 1
+MAX_COVER = (1650, 2200)  # calibre's maximum_cover_size: calibredb shrinks larger covers to fit
 # Study aids and summaries that title search ranks above the book itself
 JUNK = re.compile(r"\b(summary|summaries|analysis|study guide|sparknotes|cliffsnotes|workbook|trivia|quiz)\b")
 FIELDS = ("identifiers", "series", "description", "publisher", "pubdate", "rating", "tags", "cover")
@@ -328,6 +329,12 @@ def best_image(*images):
     return max(found, key=lambda i: i["width"] * i["height"], default=None)
 
 
+def stored_area(width, height):
+    """The area calibre keeps of a width x height cover."""
+    scale = min(1.0, MAX_COVER[0] / width, MAX_COVER[1] / height)
+    return int(width * scale) * int(height * scale)
+
+
 def pick_pubdate(old, release_date):
     """Hardcover's original release date, unless the book already has a date in that year: Hardcover
     often stores a year alone as January 1."""
@@ -359,14 +366,15 @@ def new_fields(book, detail, edition):
     rating = None
     if detail.get("rating") and (detail.get("ratings_count") or 0) >= MIN_RATINGS:
         rating = int(round(detail["rating"] * 2))
-    publisher = next((e["publisher"]["name"] for e in (edition, ebook, physical)
-                      if e and (e.get("publisher") or {}).get("name")), None)
+    publisher = next((e["publisher"]["name"].strip() for e in (edition, ebook, physical)
+                      if e and ((e.get("publisher") or {}).get("name") or "").strip()), None)
     image = best_image(detail.get("image"), edition.get("image"), (ebook or {}).get("image"),
                        (physical or {}).get("image"))
     cover = None
     if image:
-        area = image["width"] * image["height"]
-        if old["cover"] is None or (old["cover"].get("area") is not None and area > old["cover"]["area"]):
+        area = stored_area(image["width"], image["height"])
+        # A 1% margin absorbs calibre's rounding when it scales a cover down
+        if old["cover"] is None or (old["cover"].get("area") is not None and area > old["cover"]["area"] * 1.01):
             cover = {"url": image["url"], "area": area}
     return {
         "identifiers": ids,
