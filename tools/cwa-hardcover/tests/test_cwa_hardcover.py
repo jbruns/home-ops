@@ -86,7 +86,10 @@ def test_new_fields():
                       None)
     assert n["identifiers"] == {"goodreads": "1", "asin": "B0", "hardcover-id": "10", "hardcover-slug": "book-10",
                                 "hardcover-edition": "77", "isbn": "9780593135228"}
-    assert n["series"] == ["Hail Mary", 2.0]  # the book's own series name, Hardcover's position
+    assert n["series"] is None  # an existing series is never renamed or renumbered
+    assert ch.new_fields(book(), detail(book_series=[{"position": 2, "featured": False, "series": {"name": "Hail Mary"}},
+                                                     {"position": 1, "featured": True, "series": {"name": "Standalone"}}]),
+                         None)["series"] == ["Standalone", 1.0]
     assert n["description"] == "<p>One.</p><p>Two &amp; three.</p>"
     assert n["publisher"] == "Ballantine"
     assert n["pubdate"] == "2021-05-04"

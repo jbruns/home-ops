@@ -31,7 +31,7 @@ tool never clears a field Hardcover lacks.
 | Field | Value |
 |---|---|
 | identifiers | Adds `hardcover-id`, `hardcover-slug`, `hardcover-edition` (CWA's own types); adds `isbn` only when the book has none; keeps every other identifier |
-| series | Keeps the book's series name when Hardcover lists it (a series stays one series), with Hardcover's position; otherwise Hardcover's featured series |
+| series | Hardcover's featured series and position, only when the book has no series; an existing series is never renamed or renumbered (Hardcover's often disagree: omnibuses, novellas, reading order) |
 | description | Hardcover's, as HTML paragraphs |
 | publisher | The ISBN's edition, else the default e-book, else the default physical edition |
 | pubdate | Hardcover's original release date, unless the book already has a date in that year (Hardcover often stores a year as January 1) |

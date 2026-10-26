@@ -298,15 +298,11 @@ def description_html(text):
 
 
 def pick_series(old, book_series):
-    """Keep the book's own series name when Hardcover lists it, so a series stays one series in the
-    library; otherwise Hardcover's featured series."""
+    """Hardcover's featured series, only for a book without one: Hardcover's series names and
+    positions often disagree with a library's own (omnibuses, novellas, reading vs publication order)."""
     entries = [s for s in book_series or [] if (s.get("series") or {}).get("name")]
-    if not entries:
+    if old or not entries:
         return None
-    if old:
-        for s in entries:
-            if difflib.SequenceMatcher(None, norm(old[0]), norm(s["series"]["name"])).ratio() >= 0.85:
-                return [old[0], float(s["position"]) if s.get("position") is not None else old[1]]
     s = next((s for s in entries if s.get("featured")), entries[0])
     return [s["series"]["name"], float(s["position"]) if s.get("position") is not None else 1.0]
 
