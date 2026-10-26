@@ -26,6 +26,15 @@ services:
       - PUID=${CWA_UID}
       - PGID=${MEDIA_SHARED_GID}
       - TZ=${TZ}
+    # HARDCOVER_TOKEN: the same Hardcover API key as Shelfmark's HARDCOVER_API_KEY. CWA uses it for
+    # the Hardcover metadata provider and the scheduled Hardcover ID task.
+    # Settings live in cwa.db (Admin -> CWA Settings): metadata fetch on ingest ON, provider order
+    # hardcover, google, ibdb, dnb, smart application ON, title and authors updates OFF (keep the
+    # ingested names), other updates ON; Hardcover ID auto-fetch ON (weekly, confidence 0.85; lower
+    # matches queue for review). Fetch on ingest applies the first search result. Smart application
+    # only guards title, description (kept unless longer) and publisher (filled only if empty).
+    # Series, date, rating and identifiers are overwritten, tags appended, and covers untouched.
+    env_file: ./calibre-web-automated.sops.env
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: warning
