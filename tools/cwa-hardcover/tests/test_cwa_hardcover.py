@@ -109,6 +109,12 @@ def test_new_fields_keeps_what_hardcover_lacks_or_cannot_improve():
     assert set(ch.changes(b, n)) == {"identifiers", "publisher"}
 
 
+def test_pick_pubdate():
+    assert ch.pick_pubdate("2021-03-09", "2021-01-01") is None
+    assert ch.pick_pubdate(None, "0012-01-01") is None
+    assert ch.pick_pubdate("2020-02-02", "2021-05-04") == "2021-05-04"
+
+
 def test_unknown_cover_size_is_not_replaced():
     assert ch.new_fields(book(cover={"area": None}), detail(), None)["cover"] is None
 
@@ -129,7 +135,7 @@ def test_calibredb_fields():
         "pubdate": "2021-05-04", "tags": ["A", "B"], "cover": {"url": "u", "area": 1}}.items()}
     assert ch.calibredb_fields(chg, "/tmp/c.jpg") == [
         "--field", "identifiers:hardcover-id:2,isbn:1", "--field", "series:S", "--field", "series_index:2.5",
-        "--field", "rating:4.5", "--field", "pubdate:2021-05-04", "--field", "tags:A,B",
+        "--field", "rating:4.5", "--field", "pubdate:2021-05-04T00:00:00+00:00", "--field", "tags:A,B",
         "--field", "cover:/tmp/c.jpg"]
     assert not any(a.startswith("cover:") for a in ch.calibredb_fields(chg, None))
 
@@ -138,6 +144,15 @@ def test_drifted():
     rec = {"changes": {"tags": {"old": ["A"], "new": ["B"]}, "rating": {"old": None, "new": 8}}}
     assert ch.drifted(rec, book(tags=["A"])) == []
     assert ch.drifted(rec, book(tags=["A", "C"], rating=4)) == ["tags", "rating"]
+    # another book's write renamed shared items' case
+    rec = {"changes": {"tags": {"old": ["Adult", "Fantasy"], "new": ["B"]}, "publisher": {"old": "Daw", "new": "X"}}}
+    assert ch.drifted(rec, book(tags=["Fantasy", "adult"], publisher="DAW")) == []
+
+
+def test_lowercase_genres_are_capitalized():
+    d = detail(cached_tags={"Genre": [{"tag": "science fiction fantasy", "count": 3}, {"tag": "sci-fi", "count": 2},
+                                      {"tag": "LGBTQ", "count": 2}]})
+    assert ch.genres(d) == ["LGBTQ", "Sci-Fi", "Science Fiction Fantasy"]
 
 
 class StubHardcover:

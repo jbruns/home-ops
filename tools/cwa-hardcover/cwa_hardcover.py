@@ -314,6 +314,8 @@ def genres(detail):
         if not isinstance(t, dict) or (t.get("count") or 0) < MIN_TAG_VOTES:
             continue
         name = (t.get("tag") or "").strip()
+        if name == name.lower():
+            name = re.sub(r"(^|[\s/&-])([a-z])", lambda m: m.group(1) + m.group(2).upper(), name)
         if name and "," not in name and name.casefold() not in seen:
             seen.add(name.casefold())
             out.append(name)
@@ -333,9 +335,9 @@ def stored_area(width, height):
 
 def pick_pubdate(old, release_date):
     """Hardcover's original release date, unless the book already has a date in that year: Hardcover
-    often stores a year alone as January 1."""
+    often stores a year alone as January 1. Years before 1000 are Hardcover typos ("0012" for 2012)."""
     new = (release_date or "")[:10] or None
-    if new and old and old[:4] == new[:4]:
+    if new and (new[:4] < "1000" or (old and old[:4] == new[:4])):
         return None
     return new
 
@@ -468,7 +470,8 @@ def calibredb_fields(chg, cover_path=None):
         elif f == "publisher":
             args.append(f"publisher:{v}")
         elif f == "pubdate":
-            args.append(f"pubdate:{v}")
+            # A bare date goes through calibre's parse_only_date, which may move the day by one
+            args.append(f"pubdate:{v}T00:00:00+00:00")
         elif f == "rating":
             args.append(f"rating:{v / 2:g}")
         elif f == "tags":
@@ -478,8 +481,18 @@ def calibredb_fields(chg, cover_path=None):
     return [x for a in args for x in ("--field", a)]
 
 
+def folded(value):
+    """calibre's tags and publishers are case-insensitive and shared: writing "adult" on one book renames
+    "Adult" on every book, so drift ignores case."""
+    if isinstance(value, str):
+        return value.casefold()
+    if isinstance(value, list) and all(isinstance(v, str) for v in value):
+        return sorted(v.casefold() for v in value)
+    return value
+
+
 def drifted(rec, now):
-    return [f for f, c in rec["changes"].items() if now["fields"][f] != c["old"]]
+    return [f for f, c in rec["changes"].items() if folded(now["fields"][f]) != folded(c["old"])]
 
 
 def download(url, dest):

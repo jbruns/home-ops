@@ -34,7 +34,7 @@ tool never clears a field Hardcover lacks.
 | series | Hardcover's featured series and position, only when the book has no series; an existing series is never renamed or renumbered (Hardcover's often disagree: omnibuses, novellas, reading order) |
 | description | Hardcover's, as HTML paragraphs |
 | publisher | The ISBN's edition, else the default e-book, else the default physical edition |
-| pubdate | Hardcover's original release date, unless the book already has a date in that year (Hardcover often stores a year as January 1) |
+| pubdate | Hardcover's original release date, unless the book already has a date in that year (Hardcover often stores a year as January 1) or the year is before 1000 (a Hardcover typo) |
 | rating | Hardcover's average, to the nearest half star, when at least 5 readers rated it |
 | tags | Replaced by Hardcover's genre tags with 2 or more votes (most carry one reader's vote), up to 10; left alone when none qualify |
 | cover | The largest Hardcover image, when it has more pixels than the current cover once calibre shrinks it to fit 1650×2200 |
