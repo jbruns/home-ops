@@ -57,7 +57,9 @@ services:
       #   username mapper preferred_username, email mapper email, admin group cwa-admins (group admin
       #   management on: membership grants and revokes admin at each sign-in); OAuth Redirect Host
       #   https://cwa.<domain>; reverse-proxy header login OFF (with no forward auth, a client could
-      #   send the header itself); standard login disabled.
+      #   send the header itself); standard login disabled; session protection Basic (Strong binds a
+      #   session to the client IP, which CWA sees as Cloudflare's edge IP; it changes between
+      #   requests and signs the user out; TRUSTED_PROXY_COUNT=2 would also drop X-Forwarded-Proto).
       # Account linking: each sign-in picks the CWA user whose name equals preferred_username exactly
       # (case-sensitive), else whose email matches, else creates one, and repoints the IdP subject's
       # flask_dance_oauth row at it. The subject is not used to find the user, so renaming someone
