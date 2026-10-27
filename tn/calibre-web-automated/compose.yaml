@@ -28,11 +28,11 @@ services:
       - TZ=${TZ}
     # HARDCOVER_TOKEN: the same Hardcover API key as Shelfmark's HARDCOVER_API_KEY. CWA uses it for
     # the Hardcover metadata provider and the scheduled Hardcover ID task.
-    # Settings live in cwa.db (Admin -> CWA Settings): Hardcover ID auto-fetch ON (weekly, confidence
+    # Settings live in cwa.db (Admin -> CWA Settings): Hardcover ID auto-fetch ON (every 12 hours, confidence
     # 0.85 on title, author and ISBN; writes only Hardcover IDs; lower matches queue for review);
-    # metadata fetch on ingest OFF. Fetch on ingest applies the provider's first search result
-    # unchecked, and Hardcover ranks summaries and omnibuses first (0 of 5 test titles right), so it
-    # would overwrite series, date, rating, identifiers, tags and description from another book.
+    # metadata fetch on ingest OFF. Fetch on ingest searches title plus authors, for which Hardcover
+    # ranks summaries and omnibuses first, and applies the first result unchecked (0 of 5 test titles
+    # right; the editor's title-only search got 5 of 5), so it would overwrite series, date, rating, identifiers, tags and description from another book.
     # Fetch rich metadata with tools/cwa-hardcover (checks each match first) or per book in the editor.
     env_file: ./calibre-web-automated.sops.env
     labels:
