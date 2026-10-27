@@ -35,8 +35,20 @@ datasets:
     aclmode: DISCARD
     permissions: 0755 root:root
   andromeda/backups:
-    purpose: Device Backups written by other devices on the network; restructured by #728.
-    permissions: 0755 root:backups
+    purpose: Parent of one dataset per device that writes Device Backups; not shared itself.
+    permissions: 0750 root:backups
+  andromeda/backups/hassio:
+    purpose: Home Assistant's scheduled backups; Home Assistant prunes its own.
+    quota: 100 GiB
+    permissions: 2750 hassio:backups, default ACL group backups r-x
+  andromeda/backups/harpi-nodered:
+    purpose: The Node-RED Pi's scheduled backups, from a job on the device.
+    quota: 5 GiB
+    permissions: 2750 harpi-nodered:backups, default ACL group backups r-x
+  andromeda/backups/eisy:
+    purpose: eisy backups, saved by hand from its Admin Console (it has no scheduler).
+    quota: 1 GiB
+    permissions: 2750 eisy:backups, default ACL group backups r-x
   andromeda/docker-backups:
     purpose: none; the retired local restic repository, destroyed by #705.
     permissions: 0770 root:root
@@ -115,9 +127,9 @@ periodic_snapshot_tasks:
     naming_schema: misc-%Y-%m-%d_%H-%M
     allow_empty: true
   backups:
-    purpose: Restores Device Backups wiped by a compromised device, if noticed within 30 days; listed as Previous Versions.
+    purpose: Restores Device Backups wiped by a compromised device, if noticed within 30 days; listed as Previous Versions. A device can delete its files, not its snapshots.
     dataset: andromeda/backups
-    recursive: false
+    recursive: true
     schedule: 00:30 daily
     lifetime: 30 DAY
     naming_schema: backups-%Y-%m-%d_%H-%M

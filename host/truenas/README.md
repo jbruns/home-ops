@@ -18,6 +18,7 @@ API (JSON-RPC) names them.
 | `identities.yaml` | users and groups other than the media identities and TrueNAS's built-ins | `user.query`, `group.query` |
 | `network.yaml` | interfaces, addresses, routes | `interface.query`, `network.configuration.config` |
 | `identifiers.sops.yaml` | the values behind role names: `addresses.<role>`, `logins.<role>` and `names.<role>` (domain, certificate) | (SOPS, Operator Key only) |
+| `device-logins.sops.yaml` | `passwords.<device>`: each Device Backup login's SMB password, entered on the device | (SOPS, Operator Key only) |
 
 The media identities stay in [`../identities.tsv`](../identities.tsv). Users and groups that TrueNAS creates
 itself are not listed.

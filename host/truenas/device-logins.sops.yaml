@@ -1,0 +1,19 @@
+passwords:
+    eisy: ENC[AES256_GCM,data:zs6gwFeovqSG1uaUuj+K3XoIbNjkKvpajLXxHIdDlW8=,iv:F8LD2+qiK9alarG2l0AHoL6H9KBGAXPp+p8cPCKUBGA=,tag:931I0N13wkji7JJBfk15og==,type:str]
+    harpi-nodered: ENC[AES256_GCM,data:ySOmEE5ig41wCFPzgDl2L2t5KusH/J1N1jQs2W/Dt1g=,iv:ETP+oVoVjmmU6h8Z7kkBCp1Nv26vLwbQOFtXxK/mFes=,tag:NFErGWgg40KBwk5UhngGjA==,type:str]
+    hassio: ENC[AES256_GCM,data:qg+mg5N+tAVitTUFFtUp/Jq2nSKKVI8H3HCL3M1G//8=,iv:4JlbtKBdmwSr7Mucc5uS8DGhz+5Yu5M4jlHpcM5mMEY=,tag:eyvq/a0qYNYpFVsVSxZaqg==,type:str]
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBRNi9wL0Q4eDhmRkEvRExK
+            MjZtN1NweFd0ZnhEQWJrdDBGWTVWWjlSUFY4CjBHZ3ZRV2M2bDNkRWFqdHFHMndu
+            OFQ5aWp4L3NkZHhTMklHYWI2Y2RRRVUKLS0tIC9GTnhpdU9XUTFjdVBhNGlLY1F0
+            QWM4bUhLZEpBbHIxR3VRTmJOaUhpTjgKkph3y7R4+RAoL6X7Z4S2jyOSPHZd1LAa
+            IoWo4fYidc+j08HhbXC9RRL+cvGW/BX5bHp0vRthydhta4mOc+FVAw==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1w8hlt2y067tpv0z5zk8q8n44ppc934vdk0p2ldjql5wdaw0r7esskw4pn0
+    lastmodified: "2026-10-27T19:46:22Z"
+    mac: ENC[AES256_GCM,data:gMn76uJwudRCHjS9jVEq70RcJT2k7MauViJ6Gh+md/oxQc0LzD41eL3UxB4Ni2AoeNt6d9id2CdcRCluG/DR5ZWhrYkKnqx/NfA5fogilbyXv0zWzlvwLbZaG0w/RbBAjPAj3r841cxYkagpi156aLrOBTTIM9scGRm5SDAZsMg=,iv:HHXOgMzcvAfoHiNig65RxPCeAZMsOtaNg91yztTmltQ=,tag:qFPI4xhbTM/2tE3jpydaAA==,type:str]
+    unencrypted_suffix: _unencrypted
+    version: 3.13.3
