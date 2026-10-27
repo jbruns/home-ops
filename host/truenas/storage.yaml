@@ -8,15 +8,17 @@ pools:
     purpose: Bulk storage for media, Games, software and Backups.
     layout: 3× RAIDZ2 of 8× 20 TB HDD; SLOG mirror of 2× Optane
     autotrim: false
-    feature_flags: not all enabled; upgraded by #725
+    feature_flags: all enabled
   luna:
     purpose: Fast storage for the Docker data-root (the Stacks' volumes) and the Host Key.
     layout: mirror of 2× 3.84 TB NVMe
     autotrim: true
-    feature_flags: not all enabled; upgraded by #725
+    feature_flags: all enabled
   boot-pool:
     purpose: TrueNAS boot environments.
     layout: mirror of 2× 128 GB SATA SSD
+    feature_flags: limited by compatibility=grub2, so GRUB can still boot it; never upgrade beyond that set
+    boot_environments: the current release and the previous one only
 
 disks_outside_pools:
   spare-hdds:
