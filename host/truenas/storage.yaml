@@ -1,6 +1,7 @@
 # Storage: pools, datasets, Periodic Snapshot tasks, scrubs and disks outside pools. See README.md.
 # Datasets inherit compression, atime, acltype and aclmode from their pool's root dataset unless they list them.
 # `permissions` is the dataset's top directory, as `mode owner:group`, plus any ACL beyond the mode.
+# Datasets carry no user properties. The system dataset is on andromeda, and only its active children exist.
 
 pools:
   andromeda:
@@ -33,47 +34,34 @@ datasets:
   andromeda/backups:
     purpose: Device Backups written by other devices on the network; restructured by #728.
     permissions: 0755 root:backups
-    user_properties: [managedby]  # removed by #723
   andromeda/docker-backups:
     purpose: none; the retired local restic repository, destroyed by #705.
     permissions: 0770 root:root
-    user_properties: [comments, managedby]  # removed by #723
   andromeda/emulation:
     purpose: The curated, ready-to-play ES-DE tree; moved into the Games Library by #731.
     acltype: NFSV4
     aclmode: PASSTHROUGH
     permissions: 0775 operator:roms, NFSv4 ACL (owner@ full, group@ modify, everyone@ read)
-    user_properties: [comments, managedby]  # removed by #723
   andromeda/home:
     purpose: Home directories; narrowed to the Operator and the agent by #729.
     aclmode: DISCARD
     permissions: 0755 root:root
-    user_properties: [managedby]  # removed by #723
   andromeda/home/retrobox:
     purpose: none; removed by #729.
     permissions: 0775 retrobox:roms, ACL grants root user and group rwx
-    user_properties: [managedby]  # removed by #723
   andromeda/media:
     purpose: Libraries and the media pipeline's working folders (ADR 0009).
     recordsize: 1M
     permissions: 2550 media:media
-    user_properties: [managedby]  # removed by #723
   andromeda/misc:
     purpose: none; its contents move to andromeda/private and it is retired by #729.
     permissions: 0775 operator:operator, ACL
-    user_properties: [managedby]  # removed by #723
   andromeda/retronas:
     purpose: Software for retro PCs, relayed to SMB1 clients by another host; reworked by #730.
     permissions: 0775 retronas:retronas
-    user_properties: [managedby]  # removed by #723
-  andromeda/scratch:
-    purpose: none; empty, removed by #723.
-    permissions: 0755 operator:operator
-    user_properties: [managedby]  # removed by #723
   andromeda/software:
     purpose: Installers, OS images and deployment media.
-    permissions: 0775 operator:software; some folders group builtin_users, narrowed by #723
-    user_properties: [managedby]  # removed by #723
+    permissions: 0775 operator:software
   luna:
     purpose: Pool root; holds the Host Key and startup-order script (/mnt/luna/homeops) and the Docker data-root.
     compression: LZ4

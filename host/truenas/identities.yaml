@@ -39,17 +39,14 @@ users:
     shell: /usr/sbin/nologin
     smb: true
   retronas:
-    purpose: Owns the retronas dataset; the relay's NFS writes map to it from #730, which removes its SMB access.
+    purpose: Owns the retronas dataset; the relay's NFS writes map to it from #730.
     uid: 3256
     group: retronas
-    groups: [builtin_users]
+    groups: []
     home: /mnt/andromeda/retronas
     shell: /usr/sbin/nologin
-    smb: true
+    smb: false
     password_disabled: true
-
-# The media identities' TrueNAS state that differs from identities.tsv, corrected by #723:
-#   media: shell /usr/bin/bash, member of builtin_users.  qbittor, cwa: shell /usr/bin/zsh.
 
 groups:
   operator:
