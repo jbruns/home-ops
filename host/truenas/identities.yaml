@@ -51,7 +51,7 @@ users:
     uid: 1002
     group: retrobox
     groups: [roms, builtin_users]
-    home: /mnt/andromeda/home/retrobox/retrobox
+    home: /var/empty
     shell: /usr/sbin/nologin
     smb: true
   retronas:
