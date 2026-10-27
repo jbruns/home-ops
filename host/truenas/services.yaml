@@ -1,5 +1,5 @@
 # Services: which TrueNAS services run, and their settings. See README.md.
-# Services not listed here (FTP, iSCSI, NVMe-oF, SNMP, UPS) are disabled.
+# Services not listed here (FTP, iSCSI, NVMe-oF, SNMP, UPS) are disabled, with no leftover configuration.
 
 services:
   cifs:
@@ -13,17 +13,13 @@ services:
     enable: true
 
 ssh:
-  purpose: Key-based logins for the agent and the Operator.
+  purpose: Key logins for the agent and the Operator, and password logins for the Operator.
   tcpport: 22
-  passwordauth: true  # password logins for password_login_groups; turned off by #723
-  tcpfwd: true  # turned off by #723; hops tunnels over stdin
-  weak_ciphers: [AES128-CBC, NONE]  # emptied by #723
-  root_login: keys only  # turned off by #723 (root's ssh_password_enabled and authorized keys)
-
-ups:
-  purpose: none; the service is disabled and its old configuration is left over. Cleared by #723.
-  mode: MASTER
-  driver: snmp-ups
+  passwordauth: true
+  password_login_groups: [operator]  # the Operator only; the Host is on a private LAN
+  tcpfwd: false  # hops tunnels over stdin, not forwarding
+  weak_ciphers: []
+  # root has no password and no SSH key, so it cannot log in over SSH.
 
 two_factor:
   purpose: not used; logins are by SSH key or the UI behind the LAN.

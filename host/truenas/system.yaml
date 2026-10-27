@@ -12,11 +12,11 @@ general:
   usage_collection: false
 
 advanced:
-  purpose: Console, syslog and crash reporting.
+  purpose: Console and syslog; nothing is reported to the vendor.
   boot_scrub: 7
   consolemenu: true
-  anonstats: true
-  uploadcrash: true
+  anonstats: false
+  uploadcrash: false
   syslogservers: []
 
 update:
@@ -51,10 +51,6 @@ tunables:
     purpose: Room for containers that watch Library folders for changes.
     type: SYSCTL
     value: 524288
-  fs.inotify.max_user_instances:
-    purpose: none; equals the default. Removed by #723.
-    type: SYSCTL
-    value: 8192
 
 cron_jobs:
   smart-test:
@@ -65,8 +61,6 @@ cron_jobs:
 certificates:
   ui-certificate:
     purpose: The UI's certificate, from Let's Encrypt.
-  freenas_default:
-    purpose: none; expired, removed by #723.
 
 docker:
   purpose: Runs the Stacks; the TrueNAS app catalog is not used.
