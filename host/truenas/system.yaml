@@ -1,0 +1,76 @@
+# System: general and advanced settings, update, NTP, init/shutdown scripts, tunables, cron jobs and
+# certificates. See README.md.
+
+general:
+  purpose: The UI, served on the Host's own address with the Let's Encrypt certificate.
+  ui_address: [{address: host-v4}]
+  ui_v6address: [{address: host-v6}]
+  ui_httpsredirect: true
+  ui_httpsprotocols: [TLSv1.2, TLSv1.3]
+  ui_certificate: {name: ui-certificate}
+  timezone: America/Los_Angeles
+  usage_collection: false
+
+advanced:
+  purpose: Console, syslog and crash reporting.
+  boot_scrub: 7
+  consolemenu: true
+  anonstats: true
+  uploadcrash: true
+  syslogservers: []
+
+update:
+  purpose: Notify of new releases; the agent applies them in an agreed window (#725).
+  autocheck: true
+  profile: GENERAL
+
+ntp_servers:
+  purpose: Clock for logs, snapshot names and schedules.
+  servers: [0.debian.pool.ntp.org, 1.debian.pool.ntp.org, 2.debian.pool.ntp.org]
+
+network_announcement:
+  purpose: Lets the Operator's Mac (mDNS) and Windows computers (WS-Discovery) find the SMB shares.
+  netbios: false
+  mdns: true
+  wsd: true
+
+init_shutdown_scripts:
+  startup-order-start:
+    purpose: Start containers in startup-order (ADR 0003); see ../README.md.
+    when: POSTINIT
+    type: COMMAND
+    timeout: 60
+  startup-order-stop:
+    purpose: Stop containers in reverse startup-order (ADR 0003); see ../README.md.
+    when: SHUTDOWN
+    type: COMMAND
+    timeout: 300
+
+tunables:
+  fs.inotify.max_user_watches:
+    purpose: Room for containers that watch Library folders for changes.
+    type: SYSCTL
+    value: 524288
+  fs.inotify.max_user_instances:
+    purpose: none; equals the default. Removed by #723.
+    type: SYSCTL
+    value: 8192
+
+cron_jobs:
+  smart-test:
+    purpose: Weekly S.M.A.R.T. test of every disk; 25.10 has no SMART test schedule of its own.
+    user: root
+    schedule: 02:00 Monday
+
+certificates:
+  ui-certificate:
+    purpose: The UI's certificate, from Let's Encrypt.
+  freenas_default:
+    purpose: none; expired, removed by #723.
+
+docker:
+  purpose: Runs the Stacks; the TrueNAS app catalog is not used.
+  pool: luna
+  enable_image_updates: false
+  nvidia: true  # Plex and Emby transcodes, Open WebUI, dcgm-exporter
+  address_pools: [172.17.0.0/16 by /24, fdd0::/48 by /64]

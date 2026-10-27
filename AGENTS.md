@@ -26,12 +26,17 @@ Keep every secret value out of tool output, logs and commits, whether it comes f
 ### Host access
 
 Reach the Host through `hops`, shared Repo Tooling from the Repo Tooling repo (install with
-`uv tool install "git+https://github.com/jbruns/homelab-components@hops-v1.1.1#subdirectory=repo-tools/hops"`;
+`uv tool install "git+https://github.com/jbruns/homelab-components@hops-v1.2.0#subdirectory=repo-tools/hops"`;
 read its README, `repo-tools/hops/README.md` in the Repo Tooling repo at that tag, before first use), with
 `--json` when you parse its output. `hops` targets the only Host `hosts.yaml` declares. It changes runtime state
 only; declared state changes through a PR (ADR 0001). For anything `hops --help` lacks, use read-only
 `ssh … sudo -n docker …`. Reach TrueNAS through `hops` too (`hops truenas call <method>` for reads it lacks),
 never with the REST API or `curl` to `/api/v2.0`.
+
+The Host Configuration is declared in `host/truenas/` (ADR 0015). Change it with a PR. After the PR merges, apply it
+with `ssh … sudo -n midclt call <write method> … >/dev/null` and verify the result with `hops truenas call`. Use
+`midclt` only to write, never to read: it prints secrets unredacted. Before each batch, take a Rollback Snapshot of
+every dataset the batch touches, and ask the Operator for a configuration backup.
 
 When an agent runs `hops bump`, pass its co-author line with `--trailer` (see the "bump" section of the hops README).
 
