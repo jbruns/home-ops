@@ -1,0 +1,27 @@
+# Network: interfaces, addresses and routes. See README.md. Addresses are roles in identifiers.sops.yaml.
+
+interfaces:
+  br0:
+    purpose: The Host's LAN interface. A bridge left from a removed VM; collapsed onto enp129s0 by #724.
+    type: BRIDGE
+    description: LAN
+    bridge_members: [enp129s0]
+    stp: true
+    mtu: 1500
+    ipv4_dhcp: false
+    ipv6_auto: false
+    aliases:
+      - address: host-v4  # the UI, SMB, NFS and SSH
+      - address: traefik-v4  # Traefik's own address; the UI keeps 80/443 on host-v4
+      - address: host-v6
+      - address: traefik-v6
+  enp129s0:
+    purpose: The 10 GbE port to the LAN; bridged into br0 until #724.
+    type: PHYSICAL
+    mtu: 1500
+
+# eno1, eno2, enp129s0d1 and the BMC's USB NIC are unconfigured and down.
+
+global:
+  purpose: Default route and name resolution.
+  ipv4_gateway: {address: gateway-v4}

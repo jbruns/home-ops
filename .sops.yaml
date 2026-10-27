@@ -2,6 +2,10 @@
 # Recipients: the Host Key (doco-cd decrypts with it on the Host), then the Operator Key
 # (the Operator edits secrets with it).
 creation_rules:
+    # host/truenas/: the Host Configuration record (ADR 0015). Only agents and the Operator read it, never the
+    # Host, so the Operator Key alone.
+    - path_regex: ^host/truenas/.*\.sops\.yaml$
+      age: age1w8hlt2y067tpv0z5zk8q8n44ppc934vdk0p2ldjql5wdaw0r7esskw4pn0
     - path_regex: .*tn.*
       age: >-
         age1laj753drygvud08339pu6puxt45vs9d9pcrz9f8edqauc2sxudhqd8cjz5,

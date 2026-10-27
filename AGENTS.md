@@ -33,6 +33,11 @@ only; declared state changes through a PR (ADR 0001). For anything `hops --help`
 `ssh … sudo -n docker …`. Reach TrueNAS through `hops` too (`hops truenas call <method>` for reads it lacks),
 never with the REST API or `curl` to `/api/v2.0`.
 
+The Host Configuration is declared in `host/truenas/` (ADR 0015). Change it with a PR. After the PR merges, apply it
+with `ssh … sudo -n midclt call <write method> … >/dev/null` and verify the result with `hops truenas call`. Use
+`midclt` only to write, never to read: it prints secrets unredacted. Before each batch, take a Rollback Snapshot of
+every dataset the batch touches, and ask the Operator for a configuration backup.
+
 When an agent runs `hops bump`, pass its co-author line with `--trailer` (see the "bump" section of the hops README).
 
 ### Privacy
