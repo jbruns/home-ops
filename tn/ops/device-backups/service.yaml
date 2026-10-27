@@ -1,0 +1,54 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json
+services:
+  device-backups:
+    # Carries the Device Backup datasets into the nightly Backup (ADR 0011). stack-back backs up only
+    # named volumes (EXCLUDE_BIND_MOUNTS) of labelled containers other than its own, so this idle
+    # container mounts one read-only volume per device dataset and holds the label. It never reads
+    # them: it runs as nobody, and each dataset is closed to others.
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: busybox:1.38@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+    container_name: device-backups
+    user: "65534:65534"
+    deploy:
+      resources:
+        limits:
+          # New; busybox sleep holds under 1M
+          memory: 16M
+    network_mode: none
+    read_only: true
+    command: ["sleep", "infinity"]
+    # Unhealthy if a device dataset is no longer mounted.
+    healthcheck:
+      test: ["CMD-SHELL", "for d in hassio harpi-nodered eisy; do test -d /device-backups/$$d || exit 1; done"]
+      interval: 5m
+      timeout: 5s
+      retries: 2
+      start_period: 30s
+      start_interval: 5s
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: info
+      startup-order: "3"
+      stack-back.volumes: true
+      stack-back.volumes.include: "ops_device-backups_"
+    # One volume per dataset under andromeda/backups in host/truenas/storage.yaml; add a device in both.
+    volumes:
+      - device-backups_hassio:/device-backups/hassio:ro
+      - device-backups_harpi-nodered:/device-backups/harpi-nodered:ro
+      - device-backups_eisy:/device-backups/eisy:ro
+
+
+# External (ADR 0010): each is a bind of one device dataset, created before the first Deploy with
+#   docker volume create -d local -o type=none -o o=bind -o device=/mnt/andromeda/backups/<device> ops_device-backups_<device>
+volumes:
+  device-backups_hassio:
+    name: ops_device-backups_hassio
+    external: true
+  device-backups_harpi-nodered:
+    name: ops_device-backups_harpi-nodered
+    external: true
+  device-backups_eisy:
+    name: ops_device-backups_eisy
+    external: true
