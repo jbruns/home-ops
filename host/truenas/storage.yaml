@@ -1,4 +1,4 @@
-# Storage: pools, datasets, Periodic Snapshot tasks, scrubs and disks outside pools. See README.md.
+# Storage: pools, datasets, Periodic Snapshot tasks, scrubs and disk power settings. See README.md.
 # Datasets inherit compression, atime, acltype and aclmode from their pool's root dataset unless they list them.
 # `permissions` is the dataset's top directory, as `mode owner:group`, plus any ACL beyond the mode.
 # Datasets carry no user properties. The system dataset is on andromeda, and only its active children exist.
@@ -6,7 +6,7 @@
 pools:
   andromeda:
     purpose: Bulk storage for media, Games, software and Backups.
-    layout: 3× RAIDZ2 of 8× 20 TB HDD; SLOG mirror of 2× Optane
+    layout: 3× RAIDZ2 of 8× 20 TB HDD; SLOG mirror of 2× Optane; 2× 20 TB HDD hot spares
     autotrim: false
     feature_flags: all enabled
   luna:
@@ -20,10 +20,11 @@ pools:
     feature_flags: limited by compatibility=grub2, so GRUB can still boot it; never upgrade beyond that set
     boot_environments: the current release and the previous one only
 
-disks_outside_pools:
-  spare-hdds:
-    purpose: Two 20 TB HDDs matching andromeda's, kept as cold spares; added as hot spares by #726.
-    count: 2
+disks:
+  all:
+    purpose: Every disk stays spun up, so hot spares are ready at once and HDDs avoid wear from constant load and start cycles.
+    hddstandby: ALWAYS ON
+    advpowermgmt: DISABLED
 
 datasets:
   andromeda:

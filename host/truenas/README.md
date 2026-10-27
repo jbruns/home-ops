@@ -12,7 +12,7 @@ API (JSON-RPC) names them.
 | File | Items | Read with |
 |---|---|---|
 | `system.yaml` | general, advanced, update, NTP, init/shutdown scripts, tunables, cron jobs | `system.general.config`, `system.advanced.config`, `initshutdownscript.query`, `tunable.query`, `cronjob.query` |
-| `storage.yaml` | pools, datasets, Periodic Snapshot tasks, scrubs, disks outside pools | `pool.query`, `pool.dataset.query`, `pool.snapshottask.query`, `pool.scrub.query`, `disk.query` |
+| `storage.yaml` | pools, datasets, Periodic Snapshot tasks, scrubs, disk power settings | `pool.query`, `pool.dataset.query`, `pool.snapshottask.query`, `pool.scrub.query`, `disk.query` |
 | `sharing.yaml` | SMB and NFS service settings, SMB shares, NFS exports | `smb.config`, `nfs.config`, `sharing.smb.query`, `sharing.nfs.query` |
 | `services.yaml` | which services run, and their settings (SSH) | `service.query`, `ssh.config` |
 | `identities.yaml` | users and groups other than the media identities and TrueNAS's built-ins | `user.query`, `group.query` |
