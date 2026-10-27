@@ -82,6 +82,46 @@ periodic_snapshot_tasks:
     lifetime: 1 WEEK
     naming_schema: luna-%Y-%m-%d_%H-%M
     allow_empty: true
+  software:
+    purpose: Restores files deleted or encrypted over SMB; listed as Previous Versions.
+    dataset: andromeda/software
+    recursive: false
+    schedule: 00:30 daily
+    lifetime: 14 DAY
+    naming_schema: software-%Y-%m-%d_%H-%M
+    allow_empty: true
+  retronas:
+    purpose: Restores files deleted or encrypted over SMB or by the retronas relay; listed as Previous Versions.
+    dataset: andromeda/retronas
+    recursive: false
+    schedule: 00:30 daily
+    lifetime: 14 DAY
+    naming_schema: retronas-%Y-%m-%d_%H-%M
+    allow_empty: true
+  emulation:
+    purpose: Restores files deleted or encrypted over SMB or NFS; listed as Previous Versions. Replaced by #731.
+    dataset: andromeda/emulation
+    recursive: false
+    schedule: 00:30 daily
+    lifetime: 14 DAY
+    naming_schema: emulation-%Y-%m-%d_%H-%M
+    allow_empty: true
+  misc:
+    purpose: Restores files deleted or encrypted over SMB until #729 retires the dataset.
+    dataset: andromeda/misc
+    recursive: false
+    schedule: 00:30 daily
+    lifetime: 14 DAY
+    naming_schema: misc-%Y-%m-%d_%H-%M
+    allow_empty: true
+  backups:
+    purpose: Restores Device Backups wiped by a compromised device, if noticed within 30 days; listed as Previous Versions.
+    dataset: andromeda/backups
+    recursive: false
+    schedule: 00:30 daily
+    lifetime: 30 DAY
+    naming_schema: backups-%Y-%m-%d_%H-%M
+    allow_empty: true
 
 scrubs:
   andromeda:
