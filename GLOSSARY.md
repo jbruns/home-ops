@@ -46,7 +46,7 @@ _Avoid_: Backend, DB container
 ## Media
 
 **Library**:
-One kind of organized media that Media Servers present (e.g. TV, Movies, Music, Audiobooks, Games).
+One kind of organized media that Media Servers present (e.g. TV, Movies, Music, Audiobooks, Books, Games).
 _Avoid_: Collection, share, media folder
 
 **Requester**:
@@ -68,6 +68,22 @@ _Avoid_: Archive, romset, dump folder
 **Ingest Folder**:
 A folder outside a Library through which its Organizer takes over finished files that the Requester, not the Downloader, passes on (Calibre-Web-Automated's, which Shelfmark fills with Books; the `tv-ingest`, `movies-ingest` and `books-ingest` SMB shares, which people fill).
 _Avoid_: Drop folder, watch folder, import folder
+
+**Book**:
+One record in the Books Library: a single work as the Operator chooses to keep it. A work has one Book unless a second Edition is kept on purpose.
+_Avoid_: Title, entry, ebook (ambiguous with Format)
+
+**Edition**:
+One published version of a work (a translation, an abridgement, an annotated or illustrated release). A Book holds exactly one Edition.
+_Avoid_: Version, release, copy
+
+**Format**:
+The one file type a Book holds, chosen by its content: EPUB for reflowable text, or PDF only where no EPUB exists and the layout is the content (textbooks, manuals). Comics and magazines are not Books.
+_Avoid_: File, copy, version
+
+**Retail EPUB**:
+An EPUB as its publisher released it, rather than one a converter produced from another Format. The preferred EPUB when choosing between copies of a Book.
+_Avoid_: Original, clean copy
 
 **Media Server**:
 A Service that presents Libraries to users and only reads those it does not organize (Plex, Emby, Navidrome, Audiobookshelf).
