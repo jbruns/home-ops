@@ -36,7 +36,7 @@ datasets:
     permissions: 0755 root:root
   andromeda/backups:
     purpose: Parent of one dataset per device that writes Device Backups; not shared itself.
-    permissions: 0750 root:backups
+    permissions: 0751 root:backups  # others traverse into their own dataset but can't list this one
   andromeda/backups/hassio:
     purpose: Home Assistant's scheduled backups; Home Assistant prunes its own.
     quota: 100 GiB

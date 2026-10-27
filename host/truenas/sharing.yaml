@@ -23,52 +23,62 @@ smb_shares:
   misc:
     purpose: none; retired by #729.
     path: /mnt/andromeda/misc
+    share_acl: [deny devices, everyone]  # no device login can open it
   software:
     purpose: Installers and OS images for the Operator's computers.
     path: /mnt/andromeda/software
+    share_acl: [deny devices, everyone]  # no device login can open it
   hassio-backups:
     purpose: Home Assistant writes its Device Backups here.
     path: /mnt/andromeda/backups/hassio
     share_acl: [hassio]  # no other login can open it
-    audit: true
+    audit: {watch_list: [hassio]}  # TrueNAS needs a list; the device is the only login that can open it
   harpi-nodered-backups:
     purpose: The Node-RED Pi writes its Device Backups here.
     path: /mnt/andromeda/backups/harpi-nodered
     share_acl: [harpi-nodered]  # no other login can open it
-    audit: true
+    audit: {watch_list: [harpi-nodered]}  # TrueNAS needs a list; the device is the only login that can open it
   eisy-backups:
     purpose: The Operator, from eisy's Admin Console, writes its Device Backups here.
     path: /mnt/andromeda/backups/eisy
     share_acl: [eisy]  # no other login can open it
-    audit: true
+    audit: {watch_list: [eisy]}  # TrueNAS needs a list; the device is the only login that can open it
   home:
     purpose: none; home directories are no longer shared, removed by #729.
     path: /mnt/andromeda/home
+    share_acl: [deny devices, everyone]  # no device login can open it
     share_purpose: PRIVATE_DATASETS_SHARE
     browsable: false
     access_based_share_enumeration: true
   retronas:
     purpose: The Operator adds retro PC software; the retronas user's access is removed by #730.
     path: /mnt/andromeda/retronas
+    share_acl: [deny devices, everyone]  # no device login can open it
   roms:
     purpose: Raw ROM copies; reorganized into the Games Library by #731.
     path: /mnt/andromeda/roms
+    share_acl: [deny devices, everyone]  # no device login can open it
   emulation:
     purpose: The curated ES-DE tree for gaming appliances; moved into the Games Library by #731.
     path: /mnt/andromeda/emulation
+    share_acl: [deny devices, everyone]  # no device login can open it
     share_purpose: MULTIPROTOCOL_SHARE
   tv-ingest:
     purpose: Ingest Folder for TV episodes added by hand.
     path: /mnt/andromeda/media/tv/ingest
+    share_acl: [operator]
   movies-ingest:
     purpose: Ingest Folder for movies added by hand.
     path: /mnt/andromeda/media/movies/ingest
+    share_acl: [operator]
   books-ingest:
     purpose: Ingest Folder for books added by hand.
     path: /mnt/andromeda/media/books/ingest
+    share_acl: [operator]
 
-# Every share above has share_purpose DEFAULT_SHARE, browsable, read-write, no hostsallow, no audit and a share ACL
-# open to every login (access comes from file permissions) unless it says otherwise.
+# Every share above has share_purpose DEFAULT_SHARE, browsable, read-write, no hostsallow and no audit unless it says
+# otherwise. Its share_acl lists entries in order; `deny devices, everyone` denies the devices group, then allows every
+# other login (access comes from file permissions).
 
 nfs_exports:
   retronas:
