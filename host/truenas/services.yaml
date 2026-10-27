@@ -1,5 +1,6 @@
 # Services: which TrueNAS services run, and their settings. See README.md.
-# Services not listed here (FTP, iSCSI, NVMe-oF, SNMP, UPS) are disabled, with no leftover configuration.
+# Services not listed here (FTP, iSCSI, NVMe-oF, SNMP, UPS) are disabled. The UPS settings from an old network UPS
+# remain because TrueNAS requires a driver and port; they have no effect while the service is disabled.
 
 services:
   cifs:
