@@ -8,6 +8,10 @@ The self-hosted services running on the TrueNAS host, and how they are deployed,
 The single TrueNAS machine that runs every Service.
 _Avoid_: Server, NAS, box
 
+**Host Configuration**:
+The Host's own settings that no Stack declares (its storage layout, shares, users, services and network), each kept only for a recorded purpose.
+_Avoid_: TrueNAS settings, system config
+
 **Stack**:
 The unit of deployment: one or more Services plus the Datastores they need, deployed, isolated, and backed up together (e.g. nextcloud, vaultwarden, sonarr, edge).
 _Avoid_: Project, App Group, app
@@ -42,7 +46,7 @@ _Avoid_: Backend, DB container
 ## Media
 
 **Library**:
-One kind of organized media that Media Servers present (e.g. TV, Movies, Music, Audiobooks).
+One kind of organized media that Media Servers present (e.g. TV, Movies, Music, Audiobooks, Games).
 _Avoid_: Collection, share, media folder
 
 **Requester**:
@@ -54,8 +58,12 @@ A Service that fetches media and is responsible for each file until an Organizer
 _Avoid_: Download client (when meaning the role), grabber
 
 **Organizer**:
-A Service that takes over a Downloader's finished file, directly or through an Ingest Folder, moving it (or copying it while seeding must continue) into its own Library, and is responsible for it from then on (Sonarr for TV, Radarr for Movies, Shelfmark for Audiobooks, Calibre-Web-Automated for Books). It cannot change any other Library.
+A Service that takes over a Downloader's finished file, directly or through an Ingest Folder, moving it (or copying it while seeding must continue) into its own Library, and is responsible for it from then on (Sonarr for TV, Radarr for Movies, Shelfmark for Audiobooks, Calibre-Web-Automated for Books). It cannot change any other Library. The Operator is the Organizer of a Library that no Service organizes, curating it by hand (e.g. Games, Rarities).
 _Avoid_: arr, *arr, manager
+
+**Verified Set**:
+A raw collection that can be audited against its published DAT (e.g. Redump, No-Intro, MAME), kept with that DAT; the source from which the Operator curates the Games Library.
+_Avoid_: Archive, romset, dump folder
 
 **Ingest Folder**:
 A folder outside a Library through which its Organizer takes over finished files that the Requester, not the Downloader, passes on (Calibre-Web-Automated's, which Shelfmark fills with Books; the `tv-ingest`, `movies-ingest` and `books-ingest` SMB shares, which people fill).
@@ -112,6 +120,14 @@ _Avoid_: Ad-hoc, orphan, leftover
 A ZFS snapshot taken before a risky change, recording the change it serves and a release date, and released once the change is verified. It replaces hand-made copies of data on the Host; it is never a Backup.
 _Avoid_: .bak, pre-change copy, safety copy
 
+**Periodic Snapshot**:
+A ZFS snapshot taken on a schedule of data that people write to over a share, kept for a fixed period so they can restore what they deleted or overwrote themselves. It is neither a Backup nor a Rollback Snapshot.
+_Avoid_: Auto snapshot, shadow copy
+
+**Offline Copy**:
+A copy of data that can be obtained again but is costly to rebuild (Libraries, software), kept on disks disconnected from the Host between runs. It is never a Backup.
+_Avoid_: Cold backup, offline backup, external backup
+
 ## Secrets
 
 **Operator**:
@@ -129,8 +145,12 @@ _Avoid_: Personal key, admin key
 ## Reliability
 
 **Backup**:
-A restic snapshot of a Stack's volumes and database dumps, taken nightly by stack-back and stored offsite; the only authoritative copy of a Stack's data. An app's own scheduled backups are part of its state, not Backups.
+A restic snapshot of a Stack's volumes and database dumps, of Device Backups and of the Operator's private files, taken nightly by stack-back and stored offsite; the only authoritative copy of a Stack's data. An app's own scheduled backups are part of its state, not Backups.
 _Avoid_: Dump, archive, copy, .bak
+
+**Device Backup**:
+A backup that a device off the Host writes into its own space on the Host. A device can reach only its own Device Backups, never another's.
+_Avoid_: Backup (alone), device dump
 
 **Tier**:
 How much it matters when a Service is down: Critical, Warning, or Info.
