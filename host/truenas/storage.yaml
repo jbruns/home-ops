@@ -35,7 +35,7 @@ datasets:
     aclmode: DISCARD
     permissions: 0755 root:root
   andromeda/backups:
-    purpose: Parent of one dataset per device that writes Device Backups; not shared itself.
+    purpose: Parent of one dataset per device that writes Device Backups; not shared itself. The nightly Backup carries each child offsite (tn/ops/device-backups).
     permissions: 0751 root:backups  # others traverse into their own dataset but can't list this one
   andromeda/backups/hassio:
     purpose: Home Assistant's scheduled backups; Home Assistant prunes its own.
