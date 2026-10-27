@@ -2,7 +2,7 @@
 # Shares not listed here do not exist. Devices are roles in identifiers.sops.yaml.
 
 smb:
-  purpose: File access for the Operator's computers and for devices that write Device Backups.
+  purpose: File access for the Operator's computers and for devices that write Device Backups (one login and share per device).
   bindip: [{address: host-v4}, {address: host-v6}]
   enable_smb1: false  # SMB1 clients are served by the retronas relay on another host
   ntlmv1_auth: false
@@ -26,9 +26,20 @@ smb_shares:
   software:
     purpose: Installers and OS images for the Operator's computers.
     path: /mnt/andromeda/software
-  backups:
-    purpose: Device Backups; replaced by one share per device in #728.
-    path: /mnt/andromeda/backups
+  hassio-backups:
+    purpose: Home Assistant writes its Device Backups here.
+    path: /mnt/andromeda/backups/hassio
+    share_acl: [hassio]  # no other login can open it
+    audit: true
+  harpi-nodered-backups:
+    purpose: The Node-RED Pi writes its Device Backups here.
+    path: /mnt/andromeda/backups/harpi-nodered
+    share_acl: [harpi-nodered]  # no other login can open it
+    audit: true
+  eisy-backups:
+    purpose: The Operator, from eisy's Admin Console, writes its Device Backups here.
+    path: /mnt/andromeda/backups/eisy
+    share_acl: [eisy]  # no other login can open it
     audit: true
   home:
     purpose: none; home directories are no longer shared, removed by #729.
@@ -56,8 +67,8 @@ smb_shares:
     purpose: Ingest Folder for books added by hand.
     path: /mnt/andromeda/media/books/ingest
 
-# Every share above has share_purpose DEFAULT_SHARE, browsable, read-write, no hostsallow and no audit unless it
-# says otherwise.
+# Every share above has share_purpose DEFAULT_SHARE, browsable, read-write, no hostsallow, no audit and a share ACL
+# open to every login (access comes from file permissions) unless it says otherwise.
 
 nfs_exports:
   retronas:

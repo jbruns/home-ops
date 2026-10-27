@@ -23,11 +23,27 @@ users:
     ssh_key: true
     sudo_nopasswd: [/usr/bin/docker, /usr/bin/midclt]
   hassio:
-    purpose: Home Assistant writes its Device Backups over SMB; moved to backups/<device> by #728.
+    purpose: Home Assistant logs in as this to write its Device Backups over SMB, and can reach no other device's.
     uid: 1010
     group: hassio
     groups: [builtin_users]
-    home: /mnt/andromeda/backups/hassio
+    home: /var/empty
+    shell: /usr/sbin/nologin
+    smb: true
+  harpi-nodered:
+    purpose: The Node-RED Pi logs in as this to write its Device Backups over SMB, and can reach no other device's.
+    uid: 1011
+    group: harpi-nodered
+    groups: [builtin_users]
+    home: /var/empty
+    shell: /usr/sbin/nologin
+    smb: true
+  eisy:
+    purpose: The Operator, saving eisy backups by hand, logs in as this to write its Device Backups over SMB, and can reach no other device's.
+    uid: 1012
+    group: eisy
+    groups: [builtin_users]
+    home: /var/empty
     shell: /usr/sbin/nologin
     smb: true
   retrobox:
@@ -57,7 +73,7 @@ groups:
     gid: 1000
     members: [operator]
   backups:
-    purpose: Group of the Device Backup folders, so the Operator can read every device's backups.
+    purpose: Group of the Device Backup datasets, so the Operator can read every device's backups; never a device's login.
     gid: 1003
     members: [operator]
   roms:
@@ -79,6 +95,12 @@ groups:
   hassio:
     purpose: hassio's primary group.
     gid: 1010
+  harpi-nodered:
+    purpose: harpi-nodered's primary group.
+    gid: 1011
+  eisy:
+    purpose: eisy's primary group.
+    gid: 1012
   homeops-agent:
     purpose: The agent's primary group.
     gid: 3001
