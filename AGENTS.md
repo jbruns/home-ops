@@ -26,7 +26,7 @@ Keep every secret value out of tool output, logs and commits, whether it comes f
 ### Host access
 
 Reach the Host through `hops`, shared Repo Tooling from the Repo Tooling repo (install with
-`uv tool install "git+https://github.com/jbruns/homelab-components@hops-v1.1.1#subdirectory=repo-tools/hops"`;
+`uv tool install "git+https://github.com/jbruns/homelab-components@hops-v1.2.0#subdirectory=repo-tools/hops"`;
 read its README, `repo-tools/hops/README.md` in the Repo Tooling repo at that tag, before first use), with
 `--json` when you parse its output. `hops` targets the only Host `hosts.yaml` declares. It changes runtime state
 only; declared state changes through a PR (ADR 0001). For anything `hops --help` lacks, use read-only

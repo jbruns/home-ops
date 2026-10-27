@@ -1,0 +1,34 @@
+# Services: which TrueNAS services run, and their settings. See README.md.
+# Services not listed here (FTP, iSCSI, NVMe-oF, SNMP, UPS) are disabled.
+
+services:
+  cifs:
+    purpose: SMB shares (sharing.yaml).
+    enable: true
+  nfs:
+    purpose: NFS exports (sharing.yaml).
+    enable: true
+  ssh:
+    purpose: The agent's access (hops, midclt) and the Operator's shell.
+    enable: true
+
+ssh:
+  purpose: Key-based logins for the agent and the Operator.
+  tcpport: 22
+  passwordauth: true  # password logins for password_login_groups; turned off by #723
+  tcpfwd: true  # turned off by #723; hops tunnels over stdin
+  weak_ciphers: [AES128-CBC, NONE]  # emptied by #723
+  root_login: keys only  # turned off by #723 (root's ssh_password_enabled and authorized keys)
+
+ups:
+  purpose: none; the service is disabled and its old configuration is left over. Cleared by #723.
+  mode: MASTER
+  driver: snmp-ups
+
+two_factor:
+  purpose: not used; logins are by SSH key or the UI behind the LAN.
+  enabled: false
+
+audit:
+  purpose: Middleware, SMB and sudo audit events, kept for 7 days.
+  retention: 7

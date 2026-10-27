@@ -17,7 +17,7 @@ API (JSON-RPC) names them.
 | `services.yaml` | which services run, and their settings (SSH) | `service.query`, `ssh.config` |
 | `identities.yaml` | users and groups other than the media identities and TrueNAS's built-ins | `user.query`, `group.query` |
 | `network.yaml` | interfaces, addresses, routes | `interface.query`, `network.configuration.config` |
-| `identifiers.sops.yaml` | the values behind role names: `addresses.<role>` and `logins.<role>` | (SOPS, Operator Key only) |
+| `identifiers.sops.yaml` | the values behind role names: `addresses.<role>`, `logins.<role>` and `names.<role>` (domain, certificate) | (SOPS, Operator Key only) |
 
 The media identities stay in [`../identities.tsv`](../identities.tsv). Users and groups that TrueNAS creates
 itself are not listed.
@@ -31,10 +31,11 @@ itself are not listed.
   differ from TrueNAS's defaults. Anything not listed is left at TrueNAS's default.
 - **Lists are complete.** Datasets, shares, exports, snapshot tasks, scripts, cron jobs, tunables and
   non-built-in users and groups exist on the Host only if they are listed here.
-- **Addresses and the Operator's login are named by role** (ADR 0013). An address is written
-  `address: <role>`, for the Host's own addresses and for each device a share or export is limited to.
-  The Operator's login and its group are written `operator`. The real values are under `addresses.<role>`
-  and `logins.<role>` in `identifiers.sops.yaml`. SOPS leaves the keys in plain text, so read the file itself
-  to see which roles exist; decrypt it only to use a value, never to print one.
+- **Addresses, the domain and the Operator's login are named by role** (ADR 0013). An address is written
+  `address: <role>`, for the Host's own addresses and for each device a share or export is limited to. A
+  name that holds the domain is written `name: <role>`. The Operator's login and its group are written
+  `operator`. The real values are under `addresses.<role>`, `names.<role>` and `logins.<role>` in
+  `identifiers.sops.yaml`. SOPS leaves the keys in plain text, so read the file itself to see which roles
+  exist; decrypt it only to use a value, never to print one.
 - **No secrets.** Passwords, keys and certificates never go here. Neither does anything else the API reports
   as a credential.

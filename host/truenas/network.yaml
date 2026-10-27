@@ -25,3 +25,7 @@ interfaces:
 global:
   purpose: Default route and name resolution.
   ipv4_gateway: {address: gateway-v4}
+  ipv6_gateway: {address: gateway-v6}
+  nameservers: [{address: gateway-v4}, {address: gateway-v6}]
+  domain: {name: domain}
+  static_routes: []

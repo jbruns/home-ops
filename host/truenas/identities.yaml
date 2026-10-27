@@ -1,0 +1,97 @@
+# Identities: users and groups other than TrueNAS's built-ins and the media identities in ../identities.tsv.
+# See README.md. Users and groups not listed here, and not in identities.tsv, do not exist.
+
+users:
+  operator:
+    purpose: The Operator's own login, for SMB, SSH and the UI.
+    uid: 1000
+    group: operator
+    groups: [smbadmins, media, backups, roms, software, retrobox, retronas, builtin_administrators, builtin_users]
+    home: /mnt/andromeda/home/<operator>
+    shell: /usr/bin/zsh
+    smb: true
+    ssh_key: true
+  homeops-agent:
+    purpose: The agent's login, for hops and midclt over SSH (ADR 0015).
+    uid: 3000
+    group: homeops-agent
+    groups: [homeops-api]
+    home: /mnt/andromeda/home/homeops-agent
+    shell: /usr/bin/bash
+    smb: false
+    password_disabled: true
+    ssh_key: true
+    sudo_nopasswd: [/usr/bin/docker, /usr/bin/midclt]
+  hassio:
+    purpose: Home Assistant writes its Device Backups over SMB; moved to backups/<device> by #728.
+    uid: 1010
+    group: hassio
+    groups: [builtin_users]
+    home: /mnt/andromeda/backups/hassio
+    shell: /usr/sbin/nologin
+    smb: true
+  retrobox:
+    purpose: A gaming appliance reads ROMs over SMB; replaced by the read-only games user in #731.
+    uid: 1002
+    group: retrobox
+    groups: [roms, builtin_users]
+    home: /mnt/andromeda/home/retrobox/retrobox
+    shell: /usr/sbin/nologin
+    smb: true
+  retronas:
+    purpose: Owns the retronas dataset; the relay's NFS writes map to it from #730, which removes its SMB access.
+    uid: 3256
+    group: retronas
+    groups: [builtin_users]
+    home: /mnt/andromeda/retronas
+    shell: /usr/sbin/nologin
+    smb: true
+    password_disabled: true
+
+# The media identities' TrueNAS state that differs from identities.tsv, corrected by #723:
+#   media: shell /usr/bin/bash, member of builtin_users.  qbittor, cwa: shell /usr/bin/zsh.
+
+groups:
+  operator:
+    purpose: The Operator's primary group.
+    gid: 1001
+  smbadmins:
+    purpose: SMB administrators (smb admin_group); the Operator only.
+    gid: 1000
+    members: [operator]
+  backups:
+    purpose: Group of the Device Backup folders, so the Operator can read every device's backups.
+    gid: 1003
+    members: [operator]
+  roms:
+    purpose: Group of the ROM trees; replaced by the Games Library's groups in #731.
+    gid: 1004
+    members: [operator, retrobox]
+  software:
+    purpose: Group of the software dataset.
+    gid: 1005
+    members: [operator]
+  retrobox:
+    purpose: retrobox's primary group; removed with the user in #731.
+    gid: 1006
+    members: [operator, retrobox]
+  retronas:
+    purpose: Group of the retronas dataset.
+    gid: 3000
+    members: [operator, retronas]
+  hassio:
+    purpose: hassio's primary group.
+    gid: 1010
+  homeops-agent:
+    purpose: The agent's primary group.
+    gid: 3001
+  homeops-api:
+    purpose: Holds the agent's TrueNAS API key (hops), with READONLY_ADMIN, SNAPSHOT_WRITE and SNAPSHOT_DELETE.
+    gid: 3002
+    members: [homeops-agent]
+
+api_keys:
+  hops-homeops-agent:
+    purpose: hops' reads and Rollback Snapshots.
+    user: homeops-agent
+    expires: never

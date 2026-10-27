@@ -1,0 +1,75 @@
+# Sharing: SMB and NFS service settings, SMB shares and NFS exports. See README.md.
+# Shares not listed here do not exist. Devices are roles in identifiers.sops.yaml.
+
+smb:
+  purpose: File access for the Operator's computers and for devices that write Device Backups.
+  bindip: [{address: host-v4}, {address: host-v6}]
+  enable_smb1: false  # SMB1 clients are served by the retronas relay on another host
+  ntlmv1_auth: false
+  aapl_extensions: false
+  multichannel: false
+  encryption: DEFAULT
+  admin_group: smbadmins
+
+nfs:
+  purpose: The retronas relay's mount, and (until #731) client access to the ROM trees.
+  bindip: [{address: host-v4}]
+  protocols: [NFSV3, NFSV4]
+  servers: 32
+  allow_nonroot: true  # the `insecure` export option; narrowed by #730
+  userd_manage_gids: false
+
+smb_shares:
+  misc:
+    purpose: none; retired by #729.
+    path: /mnt/andromeda/misc
+  software:
+    purpose: Installers and OS images for the Operator's computers.
+    path: /mnt/andromeda/software
+  backups:
+    purpose: Device Backups; replaced by one share per device in #728.
+    path: /mnt/andromeda/backups
+    audit: true
+  home:
+    purpose: none; home directories are no longer shared, removed by #729.
+    path: /mnt/andromeda/home
+    share_purpose: PRIVATE_DATASETS_SHARE
+    browsable: false
+    access_based_share_enumeration: true
+  retronas:
+    purpose: The Operator adds retro PC software; the retronas user's access is removed by #730.
+    path: /mnt/andromeda/retronas
+  roms:
+    purpose: Raw ROM copies; reorganized into the Games Library by #731.
+    path: /mnt/andromeda/roms
+  emulation:
+    purpose: The curated ES-DE tree for gaming appliances; moved into the Games Library by #731.
+    path: /mnt/andromeda/emulation
+    share_purpose: MULTIPROTOCOL_SHARE
+  tv-ingest:
+    purpose: Ingest Folder for TV episodes added by hand.
+    path: /mnt/andromeda/media/tv/ingest
+  movies-ingest:
+    purpose: Ingest Folder for movies added by hand.
+    path: /mnt/andromeda/media/movies/ingest
+  books-ingest:
+    purpose: Ingest Folder for books added by hand.
+    path: /mnt/andromeda/media/books/ingest
+
+# Every share above has share_purpose DEFAULT_SHARE, browsable, read-write, no hostsallow and no audit unless it
+# says otherwise.
+
+nfs_exports:
+  retronas:
+    purpose: The retronas relay re-exports this to SMB1 clients.
+    path: /mnt/andromeda/retronas
+    hosts: [{address: retronas-relay}]
+    maproot: retrobox:retrobox  # moves to retronas by #730
+  emulation:
+    purpose: Gaming appliances that can't use SMB; open to any host, removed by #731.
+    path: /mnt/andromeda/emulation
+    hosts: []
+  roms:
+    purpose: Gaming appliances that can't use SMB; open to any host, removed by #731.
+    path: /mnt/andromeda/roms
+    hosts: []
