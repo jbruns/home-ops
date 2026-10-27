@@ -79,6 +79,12 @@ services:
         bind:
           create_host_path: false
       - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/media/rarities/library
+        target: /data/rarities
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
         source: ${ZFS_POOL_ROOT_HDD}/media/plex_recordings
         target: /recordings
         bind:

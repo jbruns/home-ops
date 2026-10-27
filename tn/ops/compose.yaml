@@ -1,6 +1,6 @@
 # OPS STACK (deployed by doco-cd)
-# Host-wide tooling: stack-back (volume and database backups) and device-backups (carries the Device
-# Backup datasets into them).
+# Host-wide tooling: stack-back (volume and database backups), and device-backups and private-files
+# (carry the Device Backup datasets and andromeda/private into them).
 
 networks:
   # stack-back and the databases it dumps; owned here (ADR-0002).
@@ -11,3 +11,4 @@ networks:
 include:
   - ./stack-back/service.yaml
   - ./device-backups/service.yaml
+  - ./private-files/service.yaml

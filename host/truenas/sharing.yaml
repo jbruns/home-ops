@@ -20,10 +20,10 @@ nfs:
   userd_manage_gids: false
 
 smb_shares:
-  misc:
-    purpose: none; retired by #729.
-    path: /mnt/andromeda/misc
-    share_acl: [deny devices, everyone]  # no device login can open it
+  private:
+    purpose: The Operator's own files.
+    path: /mnt/andromeda/private
+    share_acl: [operator]  # no other login can open it
   software:
     purpose: Installers and OS images for the Operator's computers.
     path: /mnt/andromeda/software
@@ -43,13 +43,6 @@ smb_shares:
     path: /mnt/andromeda/backups/eisy
     share_acl: [eisy]  # no other login can open it
     audit: {watch_list: [eisy]}  # TrueNAS needs a list; the device is the only login that can open it
-  home:
-    purpose: none; home directories are no longer shared, removed by #729.
-    path: /mnt/andromeda/home
-    share_acl: [deny devices, everyone]  # no device login can open it
-    share_purpose: PRIVATE_DATASETS_SHARE
-    browsable: false
-    access_based_share_enumeration: true
   retronas:
     purpose: The Operator adds retro PC software; the retronas user's access is removed by #730.
     path: /mnt/andromeda/retronas

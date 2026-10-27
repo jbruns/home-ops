@@ -58,19 +58,16 @@ datasets:
     aclmode: PASSTHROUGH
     permissions: 0775 operator:roms, NFSv4 ACL (owner@ full, group@ modify, everyone@ read)
   andromeda/home:
-    purpose: Home directories; narrowed to the Operator and the agent by #729.
+    purpose: Home directories of the two accounts that log in (the Operator and the agent); not shared. Data lives in andromeda/private.
     aclmode: DISCARD
-    permissions: 0755 root:root
-  andromeda/home/retrobox:
-    purpose: none; removed by #729.
-    permissions: 0775 retrobox:roms, ACL grants root user and group rwx
+    permissions: 0755 root:root; each home 0700 owner:primary group
   andromeda/media:
-    purpose: Libraries and the media pipeline's working folders (ADR 0009).
+    purpose: Libraries and the media pipeline's working folders (ADR 0009), including Rarities (media/rarities/library), which the Operator curates by hand.
     recordsize: 1M
     permissions: 2550 media:media
-  andromeda/misc:
-    purpose: none; its contents move to andromeda/private and it is retired by #729.
-    permissions: 0775 operator:operator, ACL
+  andromeda/private:
+    purpose: The Operator's own files (keys, console firmware and NAND images, papers); only the Operator can read it. The nightly Backup carries it offsite (tn/ops/private-files).
+    permissions: 0700 operator:operator
   andromeda/retronas:
     purpose: Software for retro PCs, relayed to SMB1 clients by another host; reworked by #730.
     permissions: 0775 retronas:retronas
@@ -118,13 +115,13 @@ periodic_snapshot_tasks:
     lifetime: 14 DAY
     naming_schema: emulation-%Y-%m-%d_%H-%M
     allow_empty: true
-  misc:
-    purpose: Restores files deleted or encrypted over SMB until #729 retires the dataset.
-    dataset: andromeda/misc
+  private:
+    purpose: Restores files deleted or encrypted over SMB; listed as Previous Versions.
+    dataset: andromeda/private
     recursive: false
     schedule: 00:30 daily
     lifetime: 14 DAY
-    naming_schema: misc-%Y-%m-%d_%H-%M
+    naming_schema: private-%Y-%m-%d_%H-%M
     allow_empty: true
   backups:
     purpose: Restores Device Backups wiped by a compromised device, if noticed within 30 days; listed as Previous Versions. A device can delete its files, not its snapshots.

@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json
+services:
+  private-files:
+    # Carries andromeda/private, the Operator's own files, into the nightly Backup (ADR 0011), the
+    # same way device-backups does: stack-back backs up only named volumes of labelled containers
+    # other than its own. It never reads them: it runs as nobody, and the dataset is 0700.
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: busybox:1.38@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+    container_name: private-files
+    user: "65534:65534"
+    deploy:
+      resources:
+        limits:
+          # New; busybox sleep holds under 1M
+          memory: 16M
+    network_mode: none
+    read_only: true
+    command: ["sleep", "infinity"]
+    # Unhealthy if the dataset is no longer mounted.
+    healthcheck:
+      test: ["CMD", "test", "-d", "/private"]
+      interval: 5m
+      timeout: 5s
+      retries: 2
+      start_period: 30s
+      start_interval: 5s
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: info
+      startup-order: "3"
+      stack-back.volumes: true
+      stack-back.volumes.include: "ops_private-files"
+    volumes:
+      - private-files:/private:ro
+
+
+# External (ADR 0010): a bind of andromeda/private, created before the first Deploy with
+#   docker volume create -d local -o type=none -o o=bind -o device=/mnt/andromeda/private ops_private-files
+volumes:
+  private-files:
+    name: ops_private-files
+    external: true
