@@ -327,6 +327,18 @@ groups:
           summary: "{{ $labels.container }} cannot read {{ $labels.app }}'s queue"
           description: "{{ $labels.app }}'s queue API has not answered for 10 minutes; ArrImportStuck is blind."
 
+  - name: books
+    rules:
+      # The gate runs every 5 minutes; a run fails as a whole only when Hardcover (e.g. a revoked token),
+      # the Library or the tag list can't be read. One Book failing does not fail the run.
+      - alert: BooksIngestGateStalled
+        expr: time() - cwa_ingest_gate_last_success_timestamp_seconds > 3600
+        labels:
+          tier: warning
+        annotations:
+          summary: The Books ingest gate has not finished a run for an hour
+          description: "cwa-ingest-gate's runs keep failing (its log names why), so new Books are not matched, merged or flagged."
+
   - name: host
     rules:
       # TrueNAS native alerts are the first line for pool and disk health; this is the second.
