@@ -217,9 +217,14 @@ def hc_author(name):
     ("Jurassic Park", "Jurassic Park", "A Novel", None),
     ("Time of Contempt", "The Time of Contempt", None, None),
     ("the last wish", "The Last Wish", None, None),
+    # Hardcover's has only words ours has: ours keeps its punctuation
+    ("Welcome to the Universe: An Astrophysical Tour", "Welcome to the Universe An Astrophysical Tour", None, None),
+    ("Tom Clancy's Line of Sight", "Tom Clancy Line of Sight", None, None),
+    ("The Renegade Star #1-3", "Renegade Star", None, None),
     # otherwise Hardcover's title, without its subtitle (often an edition or translation note)
     ("Last Wish.azw", "The Last Wish", "Introducing the Witcher", "The Last Wish"),
     ("Complete Intrepid Saga, The", "The Complete Intrepid Saga", None, "The Complete Intrepid Saga"),
+    ("Lies of the Beholder", "Legion: Lies of the Beholder", None, "Legion: Lies of the Beholder"),
     ("Old", "The past through tomorrow", None, "The Past Through Tomorrow"),
     ("Old", "Star Wars: The Prequel Trilogy  ", None, "Star Wars: The Prequel Trilogy"),
 ])
@@ -247,6 +252,9 @@ def test_authors_are_hardcovers_only_when_they_fix_ours(ours, theirs, new):
     ("C# 7.1 and .NET Core 2.0 - Third Edition", "C# 7.1 and .NET Core 2.0", False),
     ("Fahrenheit 451", "Fahrenheit 451", False),
     ("Dune", "Dune Messiah", False),
+    ("Jack Reacher: One Shot: A Novel", "Jack Reacher Novel One Shot Part 2", True),  # only theirs is a part
+    ("Alastair Stone Chronicles Box Set", "Alastair Stone Chronicles Box Set, Vol. 2", True),
+    ("Catalyst - A Rogue One Novel", "Catalyst: A Rogue One Novel", False),
 ])
 def test_numbered_titles_must_agree(ours, theirs, conflict):
     assert ch.numbers_conflict(ours, theirs) is conflict
@@ -271,9 +279,9 @@ def test_tags_fit_the_controlled_list():
 
 
 def test_plan_writes_titles_and_flags_unmatched_books():
-    books = [dict(book("Project Hail Mary.epub", tags=["Sci-Fi", "Junk"]), id=1),
+    books = [dict(book("Project Hail Mary, The", tags=["Sci-Fi", "Junk"]), id=1),
              dict(book("Unfindable", ["Nobody"], tags=["Fantasy", "Junk"]), id=2)]
-    hc = StubHardcover({10: detail(10)}, searches={"Project Hail Mary.epub": [cand(10, "Project Hail Mary", ["Andy Weir"])]})
+    hc = StubHardcover({10: detail(10)}, searches={"Project Hail Mary, The": [cand(10, "Project Hail Mary", ["Andy Weir"])]})
     recs = {r["book"]: r for r in ch.plan(books, hc, vocab=VOCAB)}
     assert recs[1]["changes"]["title"]["new"] == "Project Hail Mary"
     assert recs[1]["flags"] == [] and recs[1]["genres"] == ["Fiction", "Science Fiction"]

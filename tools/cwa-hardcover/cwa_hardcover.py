@@ -115,10 +115,15 @@ def numbers(title):
     return {int(t) if t.isdigit() else NUMBER_WORDS[t] for t in norm(title).split() if t.isdigit() or t in NUMBER_WORDS}
 
 
+PART = re.compile(r"\b(?:part|vol|volume|book)\s+(\w+)")
+
+
 def numbers_conflict(ours, theirs):
-    """Both titles number a part or volume, and neither's numbers include the other's: another volume."""
+    """The titles name different parts or volumes: both are numbered and neither's numbers include the
+    other's, or Hardcover's names a part or volume whose number ours lacks."""
     a, b = numbers(ours), numbers(theirs)
-    return bool(a and b and not a <= b and not b <= a)
+    parts = numbers(" ".join(PART.findall(norm(theirs))))
+    return bool(a and b and not a <= b and not b <= a) or not parts <= a
 
 
 def author_tokens(name):
@@ -432,6 +437,9 @@ def pick_title(old, detail):
     Hardcover's. Hardcover's subtitle is never written: it is often an edition, translation or blurb."""
     title = " ".join((detail.get("title") or "").split())
     if not title or main_title(title) == main_title(old):
+        return None
+    inverted = re.search(r",\s*(the|a|an)\b", old or "", re.I)  # "Complete Intrepid Saga, The"
+    if not inverted and set(norm(title).split()) <= set(norm(old).split()):
         return None
     if " " in title and title[1:] == title[1:].lower():  # Hardcover keeps some titles in sentence case
         title = title_case(title)

@@ -23,7 +23,8 @@ Strongest first. Every match must share an author with the book (surname plus fi
    users have. If nothing passes, the search is scored again with title and author swapped; a match
    that way writes Hardcover's title and author and is flagged.
 
-A match found by ID (1–3) needs a title as close as the search threshold. Statuses:
+A match found by ID (1–3) needs a title as close as the search threshold, and no match may name a
+different part or volume ("Part 2" against "Part 1" or none). Statuses:
 
 - `match`: apply writes every field below.
 - `review`: an ID names a book with no shared author or a different title, ISBNs name different
@@ -37,9 +38,11 @@ none of Hardcover's (`series: ours …, Hardcover …`; the library's stands), o
 books are not all held. A flagged book gets the `review` tag, which only the Operator removes. The
 plan gives each admin without one a private magic shelf, "Review", of books tagged `review`.
 
-An **omnibus** (a Hardcover compilation) whose series details ("1-3", "1-3, 5") name only positions
-other matched books hold is removed with `calibredb remove --permanent`, its reading history with
-it. Otherwise it is flagged with the positions not held.
+An **omnibus** is a Hardcover compilation whose series details ("1-3", "1-3, 5") name two or more
+whole positions; Hardcover marks some single novels and novella anthologies as compilations too.
+One whose positions other matched books all hold is removed with `calibredb remove --permanent`,
+its reading history with it. One whose positions they hold only some of is flagged; one whose
+positions they hold none of is how the library has those books, and stays.
 
 ## Fields
 
@@ -49,8 +52,8 @@ download carries them.
 
 | Field | Value |
 |---|---|
-| title | Hardcover's title, plus `: subtitle` when it has one; a sentence-case title is title-cased. Left alone when it differs only in case or punctuation |
-| authors | Hardcover's authors (not narrators or editors), each through `author-overrides.json` (`{"Hardcover name": "our name"}`). Left alone when they differ only in case or punctuation |
+| title | Hardcover's title (never its subtitle, often an edition, translation or blurb), only when our main title (before a colon or bracket) differs and Hardcover's has words ours lacks or ours has an inverted article ("Saga, The"); a sentence-case title is title-cased |
+| authors | Hardcover's authors (not narrators or editors), each through `author-overrides.json` (`{"Hardcover name": "our name"}`), only when they fix ours: ours share no author with them, or Hardcover names no more than ours. A co-author is never added (Hardcover's contributors include narrators) |
 | identifiers | Adds `hardcover-id`, `hardcover-slug`, `hardcover-edition` (CWA's own types); adds `isbn` only when the book has none; keeps every other identifier |
 | series | Hardcover's featured series and position, only when the book has no series; an existing series is never renamed or renumbered (Hardcover's often disagree: omnibuses, novellas, reading order) |
 | description | Hardcover's, as HTML paragraphs |
