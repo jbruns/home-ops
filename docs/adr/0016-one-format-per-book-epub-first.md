@@ -6,7 +6,7 @@ An inventory of the Books Library found 2,533 Books holding 13 Formats. 1,818 Bo
 - **New Books** come only as EPUB or PDF, with EPUB first. Shelfmark offers no other Format. CWA still converts anything an admin uploads to EPUB, and that converted EPUB is a candidate for a Retail EPUB replacement. This list stays restrictive until rehydration shows how often an English Book exists only in another Format.
 - **Choosing between copies** of a Book follows one deterministic ranking. The first difference decides, and every merge logs the step that decided it:
   1. the allowed Format for the content;
-  2. a Retail EPUB over a converted one;
+  2. a Retail EPUB over a converted one. A converted EPUB shows what conversion leaves in its content: calibre's `page_styles.css`, `index_split_*` files or `calibre` classes. Calibre named as producer in the OPF doesn't count on its own, because editing a file's metadata in calibre adds it too (#755);
   3. fewer `epubcheck` fatal errors and errors;
   4. a table of contents with more than one entry;
   5. the larger file;
