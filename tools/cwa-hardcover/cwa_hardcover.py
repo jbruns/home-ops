@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
 """Match the CWA library to Hardcover and write each match's metadata.
 
-Runs inside the calibre-web-automated container (see README.md), where the library, calibredb and
-HARDCOVER_TOKEN are. Three commands:
+Runs inside the calibre-web-automated container (see README.md), where the library, calibredb,
+app.db and HARDCOVER_TOKEN are. Four commands:
 
-  plan    read the library (read-only), match each book, print one JSON line per book: its match,
-          and every field's current and new value
+  plan    read the library and app.db (read-only), match each book, print one JSON line per book (its
+          match, flags, and every field's current and new value) and one per magic shelf to change
   report  turn a plan into CSV for review (runs anywhere)
-  apply   write the matched books of a reviewed plan with calibredb; skip a book whose fields
-          changed since the plan
+  tags    count a plan's Hardcover genres and what the controlled tag list maps each to (runs anywhere)
+  apply   write a reviewed plan with calibredb and to app.db; skip a book whose fields changed since
+          the plan
 
 Matching, strongest first: the book's ISBN names a Hardcover edition; its Goodreads ID maps to a
-Hardcover book; or a title search (as the book editor does) scores each result on title and
-author, and the best one passes the threshold. Every match must share an author with the book.
+Hardcover book; its hardcover-id identifier names one; or a title search (as the book editor does)
+scores each result on title and author, and the best one passes the threshold, trying the title and
+author swapped if neither way passes. Every match must share an author with the book, and a match
+not found by search must have a close title.
 """
 import argparse
 import csv
@@ -28,12 +31,16 @@ import sys
 import tempfile
 import time
 import unicodedata
+import uuid
 import urllib.error
 import urllib.request
-from collections import Counter
+from collections import Counter, defaultdict
+from datetime import datetime, timezone
 
 API = "https://api.hardcover.app/v1/graphql"
 LIBRARY = "/calibre-library"
+APP_DB = "/config/app.db"
+HERE = os.path.dirname(os.path.abspath(__file__))
 THRESHOLD = 0.85
 REQUEST_INTERVAL = 1.1  # Hardcover allows 60 requests a minute per token
 LOOKUP_BATCH = 100
@@ -45,7 +52,19 @@ GOODREADS_PLATFORM = 1
 MAX_COVER = (1650, 2200)  # calibre's maximum_cover_size: calibredb shrinks larger covers to fit
 # Study aids and summaries that title search ranks above the book itself
 JUNK = re.compile(r"\b(summary|summaries|analysis|study guide|sparknotes|cliffsnotes|workbook|trivia|quiz)\b")
-FIELDS = ("identifiers", "series", "description", "publisher", "pubdate", "rating", "tags", "cover")
+FIELDS = ("title", "authors", "identifiers", "series", "description", "publisher", "pubdate", "rating", "tags",
+          "cover")
+REVIEW_TAG = "review"  # every flagged book carries it; only the Operator removes it
+REVIEW_SHELF = "Review"
+REVIEW_RULES = {"condition": "AND", "rules": [{"id": "tag", "field": "tag", "type": "string", "input": "text",
+                                               "operator": "equal", "value": REVIEW_TAG}]}
+SMALL_WORDS = {"a", "an", "and", "as", "at", "but", "by", "for", "in", "nor", "of", "on", "or", "the", "to", "with"}
+NUMBER_WORDS = {
+    **{w: i for i, w in enumerate("one two three four five six seven eight nine ten eleven twelve".split(), 1)},
+    **{w: i for i, w in enumerate("first second third fourth fifth sixth seventh eighth ninth tenth".split(), 1)},
+    **{w: i for i, w in enumerate("ii iii iv".split(), 2)}, **{w: i for i, w in enumerate("vi vii viii ix".split(), 6)},
+}
+MAX_OMNIBUS = 200  # a wider range in series details is a typo, not an omnibus
 
 EDITION = "id isbn_13 isbn_10 release_date publisher{name} image{url width height}"
 SEARCH_QUERY = 'query($q:String!){search(query:$q,query_type:"Book",per_page:10){results}}'
@@ -54,7 +73,8 @@ ISBN_QUERY = ("query($i13:[String!],$i10:[String!]){editions(where:{_or:[{isbn_1
 GOODREADS_QUERY = ("query($e:[String!]){book_mappings(where:{platform_id:{_eq:%d},external_id:{_in:$e}})"
                    "{book_id external_id}}" % GOODREADS_PLATFORM)
 DETAIL_QUERY = ("query($ids:[Int!]){books(where:{id:{_in:$ids}}){id slug title description rating ratings_count "
-                "release_date cached_tags cached_contributors book_series{position featured series{name}} "
+                "release_date subtitle compilation cached_tags cached_contributors "
+                "book_series{position details featured series{id name}} "
                 "image{url width height} default_ebook_edition{" + EDITION + "} "
                 "default_physical_edition{" + EDITION + "}}}")
 
@@ -85,6 +105,20 @@ def title_variants(title):
 def title_similarity(ours, theirs):
     return max((difflib.SequenceMatcher(None, a, b).ratio()
                 for a in title_variants(ours) for t in theirs for b in title_variants(t)), default=0.0)
+
+
+def main_title(title):
+    return re.sub(r"^(the|a|an) ", "", norm(re.split(r"[:(\[]", title or "")[0]))
+
+
+def numbers(title):
+    return {int(t) if t.isdigit() else NUMBER_WORDS[t] for t in norm(title).split() if t.isdigit() or t in NUMBER_WORDS}
+
+
+def numbers_conflict(ours, theirs):
+    """Both titles number a part or volume, and neither's numbers include the other's: another volume."""
+    a, b = numbers(ours), numbers(theirs)
+    return bool(a and b and not a <= b and not b <= a)
 
 
 def author_tokens(name):
@@ -180,14 +214,16 @@ def current(db, library, book_id):
     publisher = one("select p.name from books_publishers_link l join publishers p on p.id=l.publisher where l.book=?")
     rating = one("select r.rating from books_ratings_link l join ratings r on r.id=l.rating where l.book=?")
     cover = os.path.join(library, path, "cover.jpg")
+    authors = many("select a.name from books_authors_link l join authors a on a.id=l.author where l.book=? order by l.id")
     return {
         "id": book_id,
         "title": title,
-        "authors": many("select a.name from books_authors_link l join authors a on a.id=l.author "
-                        "where l.book=? order by l.id"),
+        "authors": authors,
         "isbns": sorted({i for i in (isbn13(identifiers.get("isbn")),) if i}),
         "goodreads": goodreads_id(identifiers.get("goodreads")),
         "fields": {
+            "title": title,
+            "authors": authors,
             "identifiers": identifiers,
             "series": [series[0], float(series_index or 1)] if series else None,
             "description": comment[0] if comment else None,
@@ -348,7 +384,92 @@ def search_queries(book):
     return [q for q in dict.fromkeys(qs) if q]
 
 
-def new_fields(book, detail, edition):
+class Vocabulary:
+    """The controlled tag list with its synonyms (tags.json), and author-name overrides (author-overrides.json)."""
+
+    def __init__(self, doc, authors):
+        self.tags = {t.casefold(): t for t in doc["tags"]}
+        self.synonyms = {}
+        for name, targets in (doc.get("synonyms") or {}).items():
+            targets = [targets] if isinstance(targets, str) else list(targets)
+            unlisted = [t for t in targets if t.casefold() not in self.tags]
+            if unlisted:
+                raise ValueError(f"synonym {name!r} names unlisted tags {unlisted}")
+            self.synonyms[name.casefold()] = [self.tags[t.casefold()] for t in targets]
+        self.authors = authors
+
+    def map(self, names):
+        """Each name as the list writes it, through its synonyms; names neither listed nor synonyms go."""
+        out = []
+        for name in names:
+            key = name.casefold()
+            for t in [self.tags[key]] if key in self.tags else self.synonyms.get(key, []):
+                if t not in out:
+                    out.append(t)
+        return sorted(out[:MAX_TAGS])
+
+    def rewrite(self, name):
+        """The one listed tag a magic shelf rule's tag becomes, or None if the list has no single one."""
+        if name.casefold() == REVIEW_TAG:
+            return REVIEW_TAG
+        mapped = self.map([name])
+        return mapped[0] if len(mapped) == 1 else None
+
+
+def load_vocabulary(tags_path, authors_path):
+    with open(tags_path) as t, open(authors_path) as a:
+        return Vocabulary(json.load(t), json.load(a))
+
+
+def title_case(title):
+    words = title.split(" ")
+    return " ".join(w if i and w in SMALL_WORDS and not words[i - 1].endswith(":") else w[:1].upper() + w[1:]
+                    for i, w in enumerate(words))
+
+
+def pick_title(old, detail):
+    """Hardcover's title, only when the book's main title (before any colon or bracket) differs from
+    Hardcover's. Hardcover's subtitle is never written: it is often an edition, translation or blurb."""
+    title = " ".join((detail.get("title") or "").split())
+    if not title or main_title(title) == main_title(old):
+        return None
+    if " " in title and title[1:] == title[1:].lower():  # Hardcover keeps some titles in sentence case
+        title = title_case(title)
+    return title
+
+
+def pick_authors(old, detail, overrides):
+    """Hardcover's authors, only when they fix ours: ours share none of them, or Hardcover names no more.
+    A co-author is never added: Hardcover's contributors often include narrators."""
+    new = list(dict.fromkeys(overrides.get(a, a) for a in contributors(detail)))
+    if not new or any("," in a for a in new) or [norm(a) for a in new] == [norm(a) for a in old]:
+        return None
+    return None if authors_match(old, new) and len(new) > len(old) else new
+
+
+def series_dispute(old, book_series):
+    """A flag when the book's series and position are none of Hardcover's: the library's own stands."""
+    entries = [s for s in book_series or [] if (s.get("series") or {}).get("name")]
+    if not old or not entries:
+        return None
+    if any(norm(s["series"]["name"]) == norm(old[0]) and (s.get("position") is None or float(s["position"]) == old[1])
+           for s in entries):
+        return None
+    s = next((s for s in entries if s.get("featured")), entries[0])
+    pos = f"{float(s['position']):g}" if s.get("position") is not None else "?"
+    return f"series: ours {old[0]} #{old[1]:g}, Hardcover {s['series']['name']} #{pos}"
+
+
+def pick_tags(old, hardcover, vocab):
+    """Hardcover's genres, or failing those the book's own tags, as the controlled list names them.
+    The review tag stays."""
+    new = vocab.map(hardcover) or vocab.map(old)
+    if REVIEW_TAG in old:
+        new = sorted(new + [REVIEW_TAG])
+    return None if new == sorted(old) else new
+
+
+def new_fields(book, detail, edition, vocab):
     """The value each field would take. None means leave the field as it is: Hardcover never clears one."""
     old = book["fields"]
     ebook, physical = detail.get("default_ebook_edition"), detail.get("default_physical_edition")
@@ -375,23 +496,44 @@ def new_fields(book, detail, edition):
         if old["cover"] is None or (old["cover"].get("area") is not None and area > old["cover"]["area"] * 1.01):
             cover = {"url": image["url"], "area": area}
     return {
+        "title": pick_title(old["title"], detail),
+        "authors": pick_authors(old["authors"], detail, vocab.authors),
         "identifiers": ids,
         "series": pick_series(old["series"], detail.get("book_series")),
         "description": description_html(detail.get("description")),
         "publisher": publisher,
         "pubdate": pick_pubdate(old["pubdate"], detail.get("release_date")),
         "rating": rating,
-        "tags": genres(detail) or None,
+        "tags": pick_tags(old["tags"], genres(detail), vocab),
         "cover": cover,
     }
 
 
 def changes(book, new):
     return {f: {"old": book["fields"][f], "new": new[f]} for f in FIELDS
-            if new[f] is not None and new[f] != book["fields"][f]}
+            if new.get(f) is not None and new[f] != book["fields"][f]}
 
 
-def plan(books, hc, threshold=THRESHOLD):
+def search_match(book, hc, threshold, pool):
+    """The best candidate of every search so far, searching each of the book's queries until one passes.
+    pool caches each query's results, so a second try (title and author swapped) rescores them first."""
+    cand, s, ok = choose(book, [c for hits in pool.values() for c in hits], threshold)
+    for q in search_queries(book):
+        if ok:
+            break
+        if q not in pool:
+            pool[q] = hc.search(q)
+            cand, s, ok = choose(book, [c for hits in pool.values() for c in hits], threshold)
+    return cand, s, ok
+
+
+def swapped(book):
+    if len(book["authors"]) != 1:
+        return None
+    return dict(book, title=book["authors"][0], authors=[book["title"]])
+
+
+def match(books, hc, threshold):
     by_isbn = hc.editions_by_isbn({i for b in books for i in b["isbns"]})
     log(f"ISBN: {sum(1 for b in books if any(i in by_isbn for i in b['isbns']))} books")
     by_gr = hc.books_by_goodreads({b["goodreads"] for b in books if b["goodreads"]})
@@ -401,6 +543,7 @@ def plan(books, hc, threshold=THRESHOLD):
     for n, b in enumerate(books, 1):
         isbn_books = {by_isbn[i]["book_id"] for i in b["isbns"] if i in by_isbn}
         gr_book = by_gr.get(b["goodreads"])
+        own = b["fields"]["identifiers"].get("hardcover-id") or ""
         edition = next((by_isbn[i] for i in b["isbns"] if i in by_isbn), None)
         if len(isbn_books) > 1:
             picks[b["id"]] = {"status": "review", "reason": "ISBNs name different Hardcover books"}
@@ -410,15 +553,18 @@ def plan(books, hc, threshold=THRESHOLD):
             picks[b["id"]] = {"via": "isbn", "hid": hid, "edition": edition, "note": note}
         elif gr_book:
             picks[b["id"]] = {"via": "goodreads", "hid": gr_book}
+        elif own.isdigit():
+            picks[b["id"]] = {"via": "hardcover-id", "hid": int(own)}
         else:
-            best = (None, 0.0, False)
-            for q in search_queries(b):
-                cand, s, ok = choose(b, hc.search(q), threshold)
-                if cand and s > best[1]:
-                    best = (cand, s, ok)
-                if ok:
-                    break
-            cand, s, ok = best
+            pool = {}
+            cand, s, ok = search_match(b, hc, threshold, pool)
+            swap = None if ok else swapped(b)
+            if swap:
+                cand2, s2, ok2 = search_match(swap, hc, threshold, pool)
+                if ok2:
+                    picks[b["id"]] = {"via": "search", "hid": cand2["id"], "score": s2, "as": swap,
+                                      "flag": "title and author were swapped"}
+                    continue
             if ok:
                 picks[b["id"]] = {"via": "search", "hid": cand["id"], "score": s}
             else:
@@ -426,33 +572,186 @@ def plan(books, hc, threshold=THRESHOLD):
                                   "near": cand}
         if n % 25 == 0:
             log(f"matched {n}/{len(books)} ({hc.calls} requests)")
+    return picks
 
+
+def judge(b, p, d, threshold):
+    """A book's plan record before any changes: its match and why."""
+    rec = {"book": b["id"], "title": b["title"], "authors": b["authors"], "status": p.get("status"),
+           "via": p.get("via"), "score": p.get("score"), "reason": p.get("reason"), "flags": [],
+           "genres": genres(d) if d else []}
+    near = p.get("near")
+    if near:
+        rec["hardcover"] = {"id": near["id"], "title": near["title"], "authors": near["authors"]}
+    if "hid" in p and not d:
+        rec.update(status="review", reason="Hardcover book not found")
+    elif d:
+        ours = p.get("as", b)
+        authors = contributors(d)
+        rec["hardcover"] = {"id": d["id"], "title": d["title"], "authors": authors,
+                            "url": f"https://hardcover.app/books/{d.get('slug') or d['id']}"}
+        theirs = [d["title"]] + ([f"{d['title']}: {d['subtitle']}"] if d.get("subtitle") else [])
+        sim = round(title_similarity(ours["title"], theirs), 3)
+        if rec["score"] is None:
+            rec["score"] = sim
+        if not authors_match(ours["authors"], authors):
+            rec.update(status="review", reason="no shared author")
+        elif p["via"] != "search" and sim < threshold:
+            rec.update(status="review", reason=f"title differs ({sim})")
+        elif numbers_conflict(ours["title"], d["title"]):
+            rec.update(status="review", reason="title differs (part or volume)")
+        else:
+            rec.update(status="match", reason=(p.get("note") or "").strip() or None)
+            if p.get("flag"):
+                rec["flags"].append(p["flag"])
+    return rec
+
+
+def share(recs):
+    """Two books matching one Hardcover book are duplicates or a wrong match: both go to review."""
+    by_hid = defaultdict(list)
+    for r in recs:
+        if r["status"] == "match":
+            by_hid[r["hardcover"]["id"]].append(r["book"])
+    for r in recs:
+        hid = (r.get("hardcover") or {}).get("id")
+        others = [str(i) for i in by_hid.get(hid, []) if i != r["book"]] if r["status"] == "match" else []
+        if others:
+            r.update(status="review", reason=f"Hardcover book {hid} also matched by {', '.join(others)}")
+
+
+def positions(details):
+    """The series positions an omnibus's details name ("1-3", "1-3, 5"), or None if they name none clearly."""
+    out = set()
+    for part in re.split(r",|&|\band\b", details or ""):
+        m = re.fullmatch(r"\s*(\d+)\s*(?:[-–]\s*(\d+)\s*)?", part)
+        if not m:
+            return None
+        lo, hi = int(m.group(1)), int(m.group(2) or m.group(1))
+        if hi < lo or hi - lo > MAX_OMNIBUS:
+            return None
+        out.update(range(lo, hi + 1))
+    return out or None
+
+
+def collected(detail):
+    """Each series entry of an omnibus (a compilation naming 2 or more whole positions), with its positions.
+    Hardcover marks some single novels and novella anthologies as compilations too."""
+    if not detail.get("compilation"):
+        return []
+    out = []
+    for s in detail.get("book_series") or []:
+        want = positions(s.get("details")) if (s.get("series") or {}).get("id") else None
+        if want and len(want) > 1:
+            out.append((s, want))
+    return out
+
+
+def omnibuses(recs, details):
+    """A matched omnibus goes when other matched books hold every book it collects, and is flagged when
+    they hold only some. One whose books are held nowhere else is how the library has them."""
+    matched = [(r, details[r["hardcover"]["id"]]) for r in recs if r["status"] == "match"]
+    held = defaultdict(set)
+    for r, d in matched:
+        for s in [] if collected(d) else d.get("book_series") or []:
+            pos = s.get("position")
+            if (s.get("series") or {}).get("id") and pos is not None and float(pos).is_integer():
+                held[s["series"]["id"]].add(int(pos))
+    for r, d in matched:
+        entries = [(s, want, want - held[s["series"]["id"]]) for s, want in collected(d)]
+        if not entries:
+            continue
+        if not any(missing for _, _, missing in entries):
+            r["delete"] = "omnibus: holds " + "; ".join(f"{s['series']['name']} {s['details']}" for s, _, _ in entries)
+        elif any(want - missing for _, want, missing in entries):
+            r["flags"] += [f"omnibus: {s['series']['name']} {', '.join(map(str, sorted(missing)))} not held"
+                           for s, _, missing in entries if missing]
+
+
+def plan(books, hc, vocab, threshold=THRESHOLD):
+    picks = match(books, hc, threshold)
     details = hc.details({p["hid"] for p in picks.values() if "hid" in p})
-    for b in books:
-        p = picks[b["id"]]
-        rec = {"book": b["id"], "title": b["title"], "authors": b["authors"], "status": p.get("status"),
-               "via": p.get("via"), "score": p.get("score"), "reason": p.get("reason")}
-        near = p.get("near")
-        if near:
-            rec["hardcover"] = {"id": near["id"], "title": near["title"], "authors": near["authors"]}
-        d = details.get(p.get("hid"))
-        if "hid" in p and not d:
-            rec.update(status="review", reason="Hardcover book not found")
-        elif d:
-            authors = contributors(d)
-            rec["hardcover"] = {"id": d["id"], "title": d["title"], "authors": authors,
-                                "url": f"https://hardcover.app/books/{d.get('slug') or d['id']}"}
-            sim = round(title_similarity(b["title"], [d["title"]]), 3)
-            if rec["score"] is None:
-                rec["score"] = sim
-            if not authors_match(b["authors"], authors):
-                rec.update(status="review", reason="no shared author")
-            elif p["via"] != "search" and sim < 0.5:
-                rec.update(status="review", reason=f"title differs ({sim})")
-            else:
-                rec.update(status="match", reason=(p.get("note") or "").strip() or None)
-            rec["changes"] = changes(b, new_fields(b, d, p.get("edition")))
-        yield rec
+    recs = [judge(b, picks[b["id"]], details.get(picks[b["id"]].get("hid")), threshold) for b in books]
+    share(recs)
+    omnibuses(recs, details)
+    for b, r in zip(books, recs):
+        if r.get("delete"):
+            r["changes"] = {}
+            yield r
+            continue
+        old = b["fields"]
+        if r["status"] == "match":
+            p = picks[b["id"]]
+            new = new_fields(b, details[p["hid"]], p.get("edition"), vocab)
+            dispute = series_dispute(old["series"], details[p["hid"]].get("book_series"))
+            if dispute:
+                r["flags"].append(dispute)
+        else:
+            new = {"tags": pick_tags(old["tags"], [], vocab)}
+            r["flags"].insert(0, f"{'unmatched' if r['status'] == 'none' else 'review'}: {r['reason']}")
+        tags = new["tags"] if new.get("tags") is not None else sorted(old["tags"])
+        if r["flags"] and REVIEW_TAG not in tags:
+            tags = sorted(tags + [REVIEW_TAG])
+        r["changes"] = changes(b, dict(new, tags=tags))
+        yield r
+
+
+# --- magic shelves ---------------------------------------------------------------------------
+
+def rule_tags(rules):
+    if "rules" in rules:
+        for r in rules["rules"]:
+            yield from rule_tags(r)
+    elif (rules.get("field") or rules.get("id")) == "tag" and isinstance(rules.get("value"), str):
+        yield rules["value"]
+
+
+def rewrite_rules(rules, mapping):
+    if "rules" in rules:
+        for r in rules["rules"]:
+            rewrite_rules(r, mapping)
+    elif (rules.get("field") or rules.get("id")) == "tag" and rules.get("value") in mapping:
+        rules["value"] = mapping[rules["value"]]
+
+
+def shelf_plan(app_db, vocab):
+    """Every magic shelf rule naming a tag the list lacks, with its rewrite (None if the list has none),
+    and a private Review shelf for each admin without one."""
+    db = sqlite3.connect(f"file:{app_db}?mode=ro", uri=True)
+    for sid, name, rules in db.execute("select id, name, rules from magic_shelf order by id"):
+        tags = dict.fromkeys(rule_tags(json.loads(rules or "{}")))
+        rewrites = [[t, vocab.rewrite(t)] for t in tags if vocab.rewrite(t) != t]
+        if rewrites:
+            yield {"kind": "shelf", "shelf": sid, "name": name, "rewrites": rewrites}
+    have = {u for (u,) in db.execute("select user_id from magic_shelf where name=? and not is_system", (REVIEW_SHELF,))}
+    for (uid,) in db.execute("select id from user where role & 1 order by id"):
+        if uid not in have:
+            yield {"kind": "shelf", "create": REVIEW_SHELF, "user": uid}
+
+
+def apply_shelves(records, app_db):
+    db = sqlite3.connect(app_db)
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat(sep=" ")
+    for r in records:
+        if "create" in r:
+            db.execute("insert into magic_shelf (uuid, name, is_public, is_system, user_id, icon, rules, kobo_sync, "
+                       "created, last_modified) values (?, ?, 0, 0, ?, ?, ?, 0, ?, ?)",
+                       (str(uuid.uuid4()), r["create"], r["user"], "🔍", json.dumps(REVIEW_RULES), now, now))
+            out = {"shelf": r["create"], "user": r["user"], "result": "created"}
+        else:
+            mapping = {old: new for old, new in r["rewrites"] if new}
+            row = db.execute("select rules from magic_shelf where id=?", (r["shelf"],)).fetchone()
+            if not row or not mapping:
+                print(json.dumps({"shelf": r["shelf"], "result": "skipped"}), flush=True)
+                continue
+            rules = json.loads(row[0])
+            rewrite_rules(rules, mapping)
+            db.execute("update magic_shelf set rules=?, last_modified=? where id=?", (json.dumps(rules), now, r["shelf"]))
+            if db.execute("select 1 from sqlite_master where name='magic_shelf_cache'").fetchone():
+                db.execute("delete from magic_shelf_cache where shelf_id=?", (r["shelf"],))
+            out = {"shelf": r["shelf"], "result": "rewritten", "rewrites": sorted(mapping.items())}
+        print(json.dumps(out, ensure_ascii=False), flush=True)
+    db.commit()
 
 
 # --- applying --------------------------------------------------------------------------------
@@ -461,7 +760,11 @@ def calibredb_fields(chg, cover_path=None):
     args = []
     for f, c in chg.items():
         v = c["new"]
-        if f == "identifiers":
+        if f == "title":
+            args.append(f"title:{v}")
+        elif f == "authors":
+            args.append("authors:" + " & ".join(v))
+        elif f == "identifiers":
             args.append("identifiers:" + ",".join(f"{k}:{val}" for k, val in sorted(v.items())))
         elif f == "series":
             args += [f"series:{v[0]}", f"series_index:{v[1]:g}"]
@@ -502,19 +805,28 @@ def download(url, dest):
     return image_area(dest) is not None
 
 
-def apply(records, library, only=None):
+def run_calibredb(args):
+    r = subprocess.run(args, capture_output=True, text=True, env=dict(os.environ, HOME=tempfile.gettempdir()))
+    return r.returncode, (r.stderr or r.stdout).strip()
+
+
+def apply(records, library, only=None, run=run_calibredb):
+    """Write each book's changes then embed them in its files, and remove each omnibus marked to go."""
     db = connect(library)
-    env = dict(os.environ, HOME=tempfile.gettempdir())
     counts = Counter()
+    cli = ["calibredb", "--with-library", library]
     with tempfile.TemporaryDirectory() as tmp:
         for rec in records:
-            if rec["status"] != "match" or not rec.get("changes") or (only and rec["book"] not in only):
+            if (only and rec["book"] not in only) or not (rec.get("changes") or rec.get("delete")):
                 continue
             now = current(db, library, rec["book"])
             out = {"book": rec["book"], "title": rec["title"]}
             moved = drifted(rec, now) if now else ["book"]
             if moved:
                 out.update(result="skipped", reason="changed since plan: " + ",".join(moved))
+            elif rec.get("delete"):
+                rc, msg = run([*cli, "remove", "--permanent", str(rec["book"])])
+                out.update(result="failed", reason=msg.splitlines()[-1:]) if rc else out.update(result="removed")
             else:
                 cover = None
                 if "cover" in rec["changes"]:
@@ -524,15 +836,15 @@ def apply(records, library, only=None):
                             cover = None
                     except Exception:
                         cover = None
-                fields = calibredb_fields(rec["changes"], cover)
-                r = subprocess.run(["calibredb", "--with-library", library, "set_metadata", str(rec["book"]), *fields],
-                                   capture_output=True, text=True, env=env)
-                if r.returncode:
-                    out.update(result="failed", reason=(r.stderr or r.stdout).strip().splitlines()[-1:])
+                rc, msg = run([*cli, "set_metadata", str(rec["book"]), *calibredb_fields(rec["changes"], cover)])
+                if not rc:
+                    rc, msg = run([*cli, "embed_metadata", str(rec["book"])])
+                if rc:
+                    out.update(result="failed", reason=msg.splitlines()[-1:])
                 else:
                     out.update(result="applied", fields=sorted(f for f in rec["changes"] if f != "cover" or cover))
             counts[out["result"]] += 1
-            print(json.dumps(out), flush=True)
+            print(json.dumps(out, ensure_ascii=False), flush=True)
     log(" ".join(f"{k}={v}" for k, v in sorted(counts.items())) or "nothing to apply")
     return 1 if counts["failed"] else 0
 
@@ -553,21 +865,37 @@ def show(v):
 
 def report(records, out):
     w = csv.writer(out)
-    w.writerow(["book", "status", "via", "score", "reason", "title", "authors", "hardcover_title",
+    w.writerow(["book", "status", "via", "score", "reason", "flags", "delete", "title", "authors", "hardcover_title",
                 "hardcover_authors", "url", *[f"{f}_{s}" for f in FIELDS for s in ("old", "new")]])
-    status, removed = Counter(), Counter()
+    status, removed, flags = Counter(), Counter(), Counter()
     for r in records:
+        if r.get("kind") == "shelf":
+            log(f"shelf   {json.dumps({k: v for k, v in r.items() if k != 'kind'}, ensure_ascii=False)}")
+            continue
         status[(r["status"], r.get("via"))] += 1
+        flags.update(f.split(":")[0] for f in r.get("flags") or [])
+        flags.update(["delete"] if r.get("delete") else [])
         hc, chg = r.get("hardcover") or {}, r.get("changes") or {}
         if r["status"] == "match" and "tags" in chg:
             removed.update(set(chg["tags"]["old"]) - set(chg["tags"]["new"]))
         w.writerow([r["book"], r["status"], r.get("via") or "", r.get("score") or "", r.get("reason") or "",
-                    r["title"], ", ".join(r["authors"]), hc.get("title", ""), ", ".join(hc.get("authors", [])),
+                    "; ".join(r.get("flags") or []), r.get("delete") or "", r["title"], ", ".join(r["authors"]), hc.get("title", ""), ", ".join(hc.get("authors", [])),
                     hc.get("url", ""), *[show(chg[f][s]) if f in chg else "" for f in FIELDS for s in ("old", "new")]])
     for (s, via), n in sorted(status.items(), key=lambda x: (x[0][0], x[0][1] or "")):
         log(f"{s:7} {via or '':10} {n}")
     if removed:
         log("tags removed most: " + ", ".join(f"{t} ({n})" for t, n in removed.most_common(10)))
+    if flags:
+        log("flags: " + ", ".join(f"{f} ({n})" for f, n in flags.most_common()))
+
+
+def tag_report(records, vocab, out):
+    """Each Hardcover genre in a plan, how many books carry it, and the listed tags it maps to."""
+    counts = Counter(g for r in records if r.get("kind") != "shelf" for g in r.get("genres") or [])
+    w = csv.writer(out)
+    w.writerow(["genre", "books", "maps_to"])
+    for g, n in sorted(counts.items(), key=lambda x: (-x[1], x[0])):
+        w.writerow([g, n, " & ".join(vocab.map([g]))])
 
 
 # --- CLI -------------------------------------------------------------------------------------
@@ -575,29 +903,44 @@ def report(records, out):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
-    p = sub.add_parser("plan", help="match books; print one JSON line per book")
+    p = sub.add_parser("plan", help="match books; print one JSON line per book and per magic shelf to change")
     p.add_argument("--library", default=LIBRARY)
+    p.add_argument("--app-db", default=APP_DB)
     p.add_argument("--sample", type=int, help="this many random books")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--ids", help="comma-separated book ids")
     p.add_argument("--threshold", type=float, default=THRESHOLD)
-    a = sub.add_parser("apply", help="write a reviewed plan (stdin) with calibredb")
+    a = sub.add_parser("apply", help="write a reviewed plan (stdin) with calibredb and to app.db")
     a.add_argument("--library", default=LIBRARY)
-    a.add_argument("--only", help="comma-separated book ids")
+    a.add_argument("--app-db", default=APP_DB)
+    a.add_argument("--only", help="comma-separated book ids; magic shelves are left alone")
     sub.add_parser("report", help="plan (stdin) to CSV (stdout)")
+    t = sub.add_parser("tags", help="plan (stdin) to a CSV of Hardcover genres (stdout)")
+    for x in (p, t):
+        x.add_argument("--tags", default=os.path.join(HERE, "tags.json"), help="the controlled tag list")
+        x.add_argument("--author-overrides", default=os.path.join(HERE, "author-overrides.json"))
     args = ap.parse_args(argv)
+    lines = lambda: (json.loads(line) for line in sys.stdin if line.strip())  # noqa: E731
 
     if args.cmd == "report":
-        report((json.loads(line) for line in sys.stdin if line.strip()), sys.stdout)
+        report(lines(), sys.stdout)
+        return 0
+    if args.cmd == "tags":
+        tag_report(lines(), load_vocabulary(args.tags, args.author_overrides), sys.stdout)
         return 0
     if args.cmd == "apply":
         only = {int(x) for x in args.only.split(",")} if args.only else None
-        return apply((json.loads(line) for line in sys.stdin if line.strip()), args.library, only)
+        records = list(lines())
+        rc = apply([r for r in records if r.get("kind") != "shelf"], args.library, only)
+        if not only:
+            apply_shelves([r for r in records if r.get("kind") == "shelf"], args.app_db)
+        return rc
 
     token = os.environ.get("HARDCOVER_TOKEN")
     if not token:
         log("HARDCOVER_TOKEN is not set")
         return 2
+    vocab = load_vocabulary(args.tags, args.author_overrides)
     db = connect(args.library)
     ids = [r[0] for r in db.execute("select id from books order by id")]
     if args.ids:
@@ -606,7 +949,9 @@ def main(argv=None):
         ids = sorted(random.Random(args.seed).sample(ids, min(args.sample, len(ids))))
     books = [b for b in (current(db, args.library, i) for i in ids) if b]
     log(f"planning {len(books)} books")
-    for rec in plan(books, Hardcover(token), args.threshold):
+    for rec in plan(books, Hardcover(token), vocab, args.threshold):
+        print(json.dumps(rec, ensure_ascii=False), flush=True)
+    for rec in shelf_plan(args.app_db, vocab):
         print(json.dumps(rec, ensure_ascii=False), flush=True)
     return 0
 
