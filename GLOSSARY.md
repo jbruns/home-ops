@@ -65,6 +65,26 @@ _Avoid_: arr, *arr, manager
 A raw collection that can be audited against its published DAT (e.g. Redump, No-Intro, MAME), kept with that DAT; the source from which the Operator curates the Games Library.
 _Avoid_: Archive, romset, dump folder
 
+**DAT Revision**:
+One particular edition of a published inventory of expected game files and their identifying checksums. A newer revision does not replace the reference used by an earlier Audit or Selection.
+
+**Audit**:
+An assessment of a Verified Set against a particular DAT Revision, recording discrepancies and the verification evidence actually obtained. The name Verified Set alone does not mean its current contents have passed an Audit.
+
+**Selection Profile**:
+The Operator's rules for including or excluding releases and choosing preferred releases of a game.
+_Avoid_: Filtered DAT (when meaning the rules)
+
+**Selection**:
+The exact releases chosen from a particular DAT Revision using a Selection Profile and any explicit Operator overrides.
+_Avoid_: Profile (when meaning the chosen releases)
+
+**Operator Addition**:
+An item the Operator approves for management in the Games Library independently of an official DAT, such as a ROM hack. Its recorded provenance and local integrity checks do not make it an official DAT match.
+
+**Change Plan**:
+A proposed set of changes that the Operator approves before a Verified Set is repaired or a Selection is published into the Games Library. Approval to repair a Verified Set is separate from approval to publish into the Library.
+
 **Ingest Folder**:
 A folder outside a Library through which its Organizer takes over finished files that the Requester, not the Downloader, passes on (Calibre-Web-Automated's, which Shelfmark fills with Books; the `tv-ingest`, `movies-ingest` and `books-ingest` SMB shares, which people fill).
 _Avoid_: Drop folder, watch folder, import folder
