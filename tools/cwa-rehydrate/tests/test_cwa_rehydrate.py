@@ -1,6 +1,7 @@
 """Tests for cwa_rehydrate.py against a stub library (metadata.db and real EPUB files), a stub release search
 and a stub downloader; they need no CWA, Shelfmark or network."""
 import json
+import re
 import sqlite3
 import sys
 import zipfile
@@ -22,14 +23,21 @@ create table identifiers (id integer primary key, book int, type text, val text)
 PRODUCER = '<dc:contributor opf:role="bkp">calibre (4.99.5) [https://calibre-ebook.com]</dc:contributor>'
 
 
-def epub(path, converted=False, producer=False, lang="en", broken=False):
+def epub(path, converted=False, producer=False, lang="en", broken=False, title="Project Hail Mary",
+         creators=("Andy Weir",)):
     if broken:
         Path(path).write_bytes(b"not a zip")
         return
     with zipfile.ZipFile(path, "w") as z:
         z.writestr("mimetype", "application/epub+zip")
-        meta = f"<dc:language>{lang}</dc:language>" + (PRODUCER if producer else "")
-        z.writestr("OEBPS/content.opf", f"<package><metadata>{meta}</metadata></package>")
+        meta = (f"<dc:title>{title}</dc:title>" + "".join(f"<dc:creator>{a}</dc:creator>" for a in creators)
+                + '<dc:identifier id="uid">urn:uuid:1</dc:identifier>'
+                + '<dc:identifier opf:scheme="ISBN">9780593135204</dc:identifier>'
+                + '<dc:identifier opf:scheme="GOODREADS">54493401</dc:identifier>'
+                + f"<dc:language>{lang}</dc:language>" + (PRODUCER if producer else ""))
+        z.writestr("OEBPS/content.opf", f'<package unique-identifier="uid" xmlns="http://www.idpf.org/2007/opf">'
+                   f'<metadata xmlns:dc="http://purl.org/dc/elements/1.1/" '
+                   f'xmlns:opf="http://www.idpf.org/2007/opf">{meta}</metadata></package>')
         z.writestr("OEBPS/text.xhtml", '<html><body><p class="calibre1">x</p></body></html>' if converted
                    else "<html><body><p>x</p></body></html>")
 
@@ -71,7 +79,8 @@ def release(md5, fmt="epub", lang="en", source="direct_download"):
 
 
 class Shop:
-    """Stub search and downloader: releases per Hardcover ID, and what each md5 downloads as."""
+    """Stub search and downloader: releases per Hardcover ID, and what each md5 downloads as: a kind, or a kind
+    with the title and creators its OPF names."""
 
     def __init__(self, releases=None, files=None, left=900):
         self.releases, self.files, self.left = releases or {}, files or {}, left
@@ -85,14 +94,16 @@ class Shop:
 
     def download(self, rel, dest):
         self.downloaded.append(rel["source_id"])
-        kind = self.files[rel["source_id"]]
+        kind, *named = self.files[rel["source_id"]] if isinstance(self.files[rel["source_id"]], tuple) \
+            else (self.files[rel["source_id"]],)
         if kind == "error":
             raise cr.DownloadError("HTTP 502")
         if kind == "quota":
             raise cr.QuotaError("No downloads left")
         if kind == "truncated":
             raise ValueError("https://aa.example/dyn/api/fast_download.json?key=SECRET")
-        epub(dest, converted=kind == "converted", lang="fr" if kind == "french" else "en")
+        epub(dest, converted=kind == "converted", lang="fr" if kind == "french" else "en",
+             **dict(zip(("title", "creators"), named)))
         self.left -= 1
         return self.left
 
@@ -263,3 +274,72 @@ def test_report_lists_every_book_the_after_plan_still_lacks_a_retail_epub_for():
         (2, "no retail"), (3, "no epub"), (4, "no hardcover id"), (5, "retail copy not merged"), (6, "not tried")]
     assert fallback[1] == {"id": 3, "title": "Atlas", "authors": "Andy Weir", "kind": "no epub",
                            "result": "no epub", "available": "pdf en 2"}
+
+
+def test_a_download_of_another_book_is_not_ingested_and_the_next_release_tried(run):
+    title = "The Eternal Champion: The Eternal Champion Sequence 1"
+    shop = Shop({10: [release("a"), release("b"), release("c")]},
+                {"a": ("retail", "The Dragon in the Sword", ["Michael Moorcock"]),
+                 "b": ("retail", title, ["Somebody Else"]),
+                 "c": ("retail", "The Eternal Champion", ["Moorcock, Michael"])})
+    _, [row] = run([dict(cand(1, title=title), authors="Michael Moorcock")], shop)
+    assert row["result"] == "retail" and row["ingested"] == "c"
+    assert [t.get("wrong book") for t in row["tries"]] == ["The Dragon in the Sword / Michael Moorcock",
+                                                           f"{title} / Somebody Else", None]
+
+
+def test_a_converted_fallback_must_be_the_same_book_too(run):
+    shop = Shop({10: [release("a")]}, {"a": ("converted", "Warlord 3 Excalibur", ["Bernard Cornwell"])})
+    _, [row] = run([dict(cand(1, kind="no epub", title="Warlord Chronicles"), authors="Bernard Cornwell")], shop)
+    assert row["result"] == "failed" and list(run.ingest.iterdir()) == []
+
+
+@pytest.mark.parametrize("ours, theirs", [
+    ("The Housemaid Is Watching", "The Housemaid Is Watching: An absolutely gripping thriller"),
+    ("Good-bye Stacey, Good-bye", "[The Baby-Sitters Club 13] \u2022 Good-Bye Stacey, Good-Bye"),
+    ("Rebirth (Star Wars: The New Jedi Order, #8)", "Rebirth: Edge of Victory II"),
+    ("The Crystal Caverns: A Branches Book", "The Last Firehawk #2: The Crystal Caverns"),
+])
+def test_a_download_whose_title_holds_the_books_main_title_is_the_same_book(ours, theirs):
+    assert cr.same_book({"title": ours, "authors": "A Writer"}, {"title": theirs, "authors": ["Writer, A."]})
+
+
+@pytest.mark.parametrize("ours, theirs", [
+    ("The Eternal Champion: The Eternal Champion Sequence 1", "The Dragon in the Sword"),
+    ("Warlord Chronicles", "Warlord 3 Excalibur"),
+    ("Warlord Chronicles", None),
+])
+def test_a_download_with_another_or_no_title_is_another_book(ours, theirs):
+    assert not cr.same_book({"title": ours, "authors": "A Writer"}, {"title": theirs, "authors": ["A Writer"]})
+
+
+def test_the_ingested_copy_carries_the_books_title_authors_and_hardcover_id_and_no_other_identifier(run):
+    shop = Shop({10: [release("a")]}, {"a": ("retail", "Project Hail Mary: A Novel", ["Weir, Andy"])})
+    run([dict(cand(1), authors="Andy Weir & Ann Other")], shop)
+    [f] = run.ingest.iterdir()
+    with zipfile.ZipFile(f) as z:
+        first = z.infolist()[0]
+        opf = z.read("OEBPS/content.opf").decode()
+    assert (first.filename, first.compress_type) == ("mimetype", zipfile.ZIP_STORED)
+    info = cr.inspect_epub(f)
+    assert (info["title"], info["authors"], info["retail"]) == ("Project Hail Mary", ["Andy Weir", "Ann Other"], True)
+    assert 'opf:scheme="hardcover-id">10</dc:identifier>' in opf and re.search(r'id="uid">urn:uuid:[0-9a-f-]{36}<', opf)
+    assert "9780593135204" not in opf and "54493401" not in opf
+
+
+@pytest.mark.parametrize("fonts", [False, True])
+def test_an_isbn_package_id_is_replaced_unless_obfuscated_fonts_are_keyed_to_it(tmp_path, fonts):
+    f = tmp_path / "a.epub"
+    with zipfile.ZipFile(f, "w") as z:
+        z.writestr("mimetype", "application/epub+zip")
+        z.writestr("content.opf", '<package unique-identifier="pub-id"><metadata><dc:title>X</dc:title>'
+                   '<dc:identifier id="pub-id" opf:scheme="ISBN">urn:isbn:9781466862661</dc:identifier>'
+                   '<dc:identifier>urn:uuid:fa75891d-41d9-4bb7-be6f-d1bbafb9dbf9</dc:identifier>'
+                   '<dc:identifier>isbn:9781466862661</dc:identifier></metadata></package>')
+        if fonts:
+            z.writestr("META-INF/encryption.xml", "<encryption/>")
+    cr.stamp(f, {"title": "X", "authors": "A Writer", "hardcover_id": 7})
+    opf = zipfile.ZipFile(f).read("content.opf").decode()
+    assert opf.count("9781466862661") == fonts and ("urn:uuid:fa75891d" in opf) == fonts
+    assert ('opf:scheme="ISBN"' in opf) == fonts
+    assert re.search(r'id="pub-id">urn:uuid:[0-9a-f-]{36}<', opf) or fonts
