@@ -195,6 +195,14 @@ def test_single_epub_needs_nothing(lib):
 
 # --- duplicates ------------------------------------------------------------------------------
 
+def test_calibre_named_as_producer_alone_does_not_make_an_epub_converted(tmp_path):
+    p = tmp_path / "edited.epub"
+    with zipfile.ZipFile(p, "w") as z:
+        z.writestr("OEBPS/content.opf", CONVERTED_OPF.format(lang="en"))
+        z.writestr("OEBPS/text.xhtml", "<html><body><p>x</p></body></html>")
+    assert cc.inspect_epub(str(p))["retail"] is True
+
+
 def test_title_and_first_author_group_survivor_holds_retail_epub(lib):
     conv = lib.add("Project Hail Mary", retail=False, pad=5000)
     retail = lib.add("Project Hail Mary [Unabridged]", author="Weir, Andy", formats=("EPUB", "MOBI"))

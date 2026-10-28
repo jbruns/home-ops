@@ -27,7 +27,8 @@ title and its part before or after a colon agree). Each member of a review group
 
 1. **Format:** EPUB, AZW3, MOBI, AZW, FB2, LIT, TXT, RTF, DOCX, then PDF. Anything else (KFX and its
    MD containers, ZIP, ORIGINAL_*) is unusable, and so is an EPUB that won't open.
-2. **Retail EPUB:** no marks of a calibre conversion.
+2. **Retail EPUB:** no marks of a calibre conversion in the content (`page_styles.css`, `index_split_*`, `calibre`
+   classes). Calibre named as producer alone doesn't count.
 3. **epubcheck:** fewer fatal errors, then fewer errors.
 4. **Table of contents:** more than one entry.
 5. **Larger file.**
