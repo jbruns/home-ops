@@ -16,6 +16,7 @@ import argparse
 import html
 import collections
 import csv
+import difflib
 import hashlib
 import json
 import os
@@ -96,14 +97,17 @@ def names_book(title, main):
 
 def same_book(c, info):
     """Whether a download is the planned Book: one title's main title (before any ":" or "(") runs through the
-    other title, and, when the download names its authors, they share a surname.
+    other title, and, when the download names its authors, one of the Book's surnames appears in them or in the
+    download's title, spelt alike (a ratio of at least 0.8 forgives a typo like "Chrichton").
 
     A search by Hardcover ID can return other Books of the same series, or a Book an omnibus collects.
     """
     if not (names_book(info["title"], main_title(c["title"])) or names_book(c["title"], main_title(info["title"]))):
         return False
     surnames = {words(a)[-1] for a in authors(c) if words(a)}
-    return not info["authors"] or bool(surnames & {w for a in info["authors"] for w in words(a)})
+    theirs = {w for a in info["authors"] for w in words(a)} | set(words(info["title"]))
+    return not info["authors"] or any(difflib.SequenceMatcher(None, s, w).ratio() >= 0.8
+                                      for s in surnames for w in theirs)
 
 
 FONT_MANGLING = {"http://www.idpf.org/2008/embedding": 1040, "http://ns.adobe.com/pdf/enc#RC": 1024}

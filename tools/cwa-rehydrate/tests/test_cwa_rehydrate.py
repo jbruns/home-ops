@@ -413,3 +413,13 @@ def test_fonts_listed_but_missing_from_the_zip_need_no_restoring(tmp_path):
     cr.stamp(f, {"title": "X", "authors": "A Writer", "hardcover_id": 7})
     z = zipfile.ZipFile(f)
     assert "META-INF/encryption.xml" not in z.namelist() and "9781466862661" not in z.read("OEBPS/content.opf").decode()
+
+
+@pytest.mark.parametrize("theirs, authors, same", [
+    ("Michael Crichton - The Terminal Man", ["The Terminal Man"], True),
+    ("The Lost World", ["Chrichton, Michael"], True),
+    ("The Lost World", ["Margaret Weis"], False),
+])
+def test_the_authors_surname_may_sit_in_the_title_or_be_misspelt_but_not_be_another_name(theirs, authors, same):
+    c = {"title": theirs.split(" - ")[-1], "authors": "Michael Crichton & Andy Weir"}
+    assert cr.same_book(c, {"title": theirs, "authors": authors}) == same

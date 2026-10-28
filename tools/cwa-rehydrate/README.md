@@ -21,7 +21,8 @@ whose only file is a PDF takes only a Retail EPUB, because its layout may be the
 
 **Same Book:** a search by Hardcover ID can return other Books of the series, or one Book an omnibus collects. A
 download counts only when one title's main title (before any `:` or `(`) runs through the other's, word for word,
-and, when its OPF names authors, one shares a surname with the Book's. Otherwise it's recorded as `wrong book`
+and, when its OPF names authors, one of the Book's surnames appears in them or in its title, spelt alike (a typo
+like "Chrichton" passes). Otherwise it's recorded as `wrong book`
 with its title and authors, deleted, and the next release tried. Text in `(…)` or `[…]` doesn't count, and
 neither does the Book's title followed by a number, `Book`, `Volume` or `Part`: "The Eternal Champion 3: The Dragon
 in the Sword" is another Book than "The Eternal Champion".
