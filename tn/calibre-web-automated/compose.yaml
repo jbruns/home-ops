@@ -34,6 +34,14 @@ services:
     # ranks summaries and omnibuses first, and applies the first result unchecked (0 of 5 test titles
     # right; the editor's title-only search got 5 of 5), so it would overwrite series, date, rating, identifiers, tags and description from another book.
     # Fetch rich metadata with tools/cwa-hardcover (checks each match first) or per book in the editor.
+    # Ingest (cwa.db, ADR 0016: one Format per Book, EPUB first): auto-convert ON with target EPUB, the
+    # safety net for whatever an admin uploads; auto-convert ignores cbz,cbr,pdf, so a PDF stays a PDF;
+    # auto-ingest ignores docx,html,htmlz,rtf,cbz,cbr (comics are not Books); retained formats epub
+    # only (no original kept beside its conversion); automerge new_record (duplicates are folded by
+    # Hardcover ID outside CWA, not by CWA's title match).
+    # Roles (app.db, Admin -> Users; ADR 0017: only admins edit): exactly two admins, both from the
+    # cwa-admins IdP group. Every other user, and the default role for new users, is download, Send
+    # to Kindle (needs download), edit shelves and change password (role 338): no upload, edit or delete.
     env_file: ./calibre-web-automated.sops.env
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
@@ -72,11 +80,11 @@ services:
       # Account linking: each sign-in picks the CWA user whose name equals preferred_username exactly
       # (case-sensitive), else whose email matches, else creates one, and repoints the IdP subject's
       # flask_dance_oauth row at it. The subject is not used to find the user, so renaming someone
-      # at the IdP gives them a new, empty CWA account: rename the CWA user to match first. The local
-      # break-glass admin has no IdP identity and, with standard login disabled, only OPDS access.
+      # at the IdP gives them a new, empty CWA account: rename the CWA user to match first. There is
+      # no local break-glass admin: every user comes from the IdP.
       # Locked out: keep cwa.<domain> off the internet, then in /config/app.db set settings
-      # config_disable_standard_login=0 and config_login_type=0, restart, and if needed reset a
-      # password with python3 /app/calibre-web-automated/cps.py -p /config/app.db -s <user>:<pass>.
+      # config_disable_standard_login=0 and config_login_type=0, restart, and set a local password on
+      # the Operator's own user with python3 /app/calibre-web-automated/cps.py -p /config/app.db -s <user>:<pass>.
       traefik.http.routers.calibre-web-automated-https.rule: Host(`cwa.${DOMAIN}`)
       traefik.http.routers.calibre-web-automated-https.entrypoints: https
       traefik.http.routers.calibre-web-automated-https.tls: true

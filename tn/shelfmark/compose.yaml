@@ -48,6 +48,8 @@ services:
       - HARDCOVER_ENABLED=true
       - CALIBRE_WEB_URL=https://cwa.${DOMAIN}
       - AUDIOBOOK_LIBRARY_URL=https://abs.${DOMAIN}
+      # Books are EPUB, else PDF (ADR 0016): no Kindle Formats, FB2, DJVU or comics. EPUB first.
+      - SUPPORTED_FORMATS=epub,pdf
       # Books Requester: into CWA's Ingest Folder (INGEST_DIR is the Destination setting's env name).
       - INGEST_DIR=/cwa-book-ingest
       # Organizer for Audiobooks (ADR 0009): a folder per book, as Audiobookshelf needs outside the
