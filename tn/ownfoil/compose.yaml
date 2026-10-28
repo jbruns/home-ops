@@ -9,7 +9,8 @@ services:
     image: a1ex4/ownfoil:2.5.0@sha256:123130aad6a260b1eeacf3968b6b56fbf510662034faab2f4cd2da08d967f3f7
     container_name: ownfoil
     # run.sh only adds a user, chowns /app and sudo's to PUID; start the app as that user instead,
-    # so no caps. /app/data (TitleDB, rebuilt at start) was chowned by run.sh; it is a tmpfs now.
+    # so no caps. /app/data (TitleDB, rebuilt at start) was chowned by run.sh; it is a tmpfs now,
+    # except its eShop image cache in data/media, which outgrew it and lives on ownfoil_media.
     user: ${OWNFOIL_UID}:${MEDIA_SHARED_GID}
     # Reads the Games Library's switch/ through group gaming (host/truenas/identities.yaml).
     group_add:
@@ -77,6 +78,7 @@ services:
         bind:
           create_host_path: false
       - ownfoil_config:/app/config
+      - ownfoil_media:/app/data/media
     networks:
       - default
       - proxy
@@ -85,6 +87,11 @@ volumes:
   # Created by the asot-media Stack; the explicit name keeps them across the move.
   ownfoil_config:
     name: ownfoil_config
+    external: true
+  # Its contents are regenerable (eShop images, fetched again on demand), but the image doesn't
+  # create the mount point with ownfoil's owner, so the volume is created and chowned once.
+  ownfoil_media:
+    name: ownfoil_media
     external: true
 
 networks:
