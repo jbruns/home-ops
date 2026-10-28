@@ -5,7 +5,7 @@ Commands (see README.md for where each runs):
 
   plan    read the library (read-only); print the counts, then one JSON line per Book without a Retail EPUB
   fetch   for each planned Book, download up to --tries Anna's Archive EPUBs into staging and put the first
-          Retail EPUB in the Ingest Folder; the ingest gate merges it into the Book. Resumable.
+          Retail EPUB of the same Book, stamped with the Book's identity, in the Ingest Folder. Resumable.
   report  the availability report (Markdown) and the list to fetch by hand (CSV)
 
 A converted EPUB shows what conversion leaves in its content: calibre's page_styles.css, index_split files or
@@ -13,8 +13,10 @@ calibre classes. Calibre named as producer alone only means it edited the file.
 """
 
 import argparse
+import html
 import collections
 import csv
+import hashlib
 import json
 import os
 import re
@@ -25,6 +27,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 import zipfile
 from pathlib import Path
 
@@ -42,7 +45,7 @@ class QuotaError(DownloadError):
 
 
 def inspect_epub(path):
-    """Retail or converted, the markers found, and the declared language; broken if unreadable."""
+    """Retail or converted, the markers found, the declared language, title and authors; broken if unreadable."""
     try:
         with zipfile.ZipFile(path) as z:
             names = z.namelist()
@@ -57,10 +60,138 @@ def inspect_epub(path):
             if pages and re.search(r'class="calibre\d*"', z.read(pages[len(pages) // 2]).decode("utf8", "replace")):
                 markers.append("calibre classes")
             lang = re.search(r"<dc:language[^>]*>\s*([^<\s]+)", opf_text)
+            title = re.search(r"<dc:title[^>]*>([^<]*)</dc:title>", opf_text)
             return {"retail": not markers, "markers": markers, "lang": lang.group(1).casefold() if lang else None,
-                    "broken": False}
+                    "broken": False, "title": html.unescape(title.group(1)).strip() if title else None,
+                    "authors": [html.unescape(a).strip()
+                                for a in re.findall(r"<dc:creator[^>]*>([^<]*)</dc:creator>", opf_text)]}
     except Exception:  # a download is untrusted: any failure to read it means it's broken
-        return {"retail": False, "markers": ["unreadable"], "lang": None, "broken": True}
+        return {"retail": False, "markers": ["unreadable"], "lang": None, "broken": True, "title": None,
+                "authors": []}
+
+
+def words(s):
+    return re.findall(r"[^\W_]+", (s or "").casefold())
+
+
+def authors(c):
+    return c["authors"].split(" & ")
+
+
+def main_title(s):
+    return words(re.split(r"[:(]", s or "", maxsplit=1)[0])
+
+
+SERIES_INDEX = re.compile(r"\d+|book|volume|vol|part")
+
+
+def names_book(title, main):
+    """Whether `main` runs through `title` word for word as a title, not as the series name before an index:
+    "The Eternal Champion 3: The Dragon in the Sword" names another Book than "The Eternal Champion"."""
+    seq = words(re.sub(r"\([^)]*\)|\[[^]]*\]", " ", title or ""))
+    return bool(main) and any(seq[i:i + len(main)] == main
+                              and not (i + len(main) < len(seq) and SERIES_INDEX.fullmatch(seq[i + len(main)]))
+                              for i in range(len(seq) - len(main) + 1))
+
+
+def same_book(c, info):
+    """Whether a download is the planned Book: one title's main title (before any ":" or "(") runs through the
+    other title, and, when the download names its authors, they share a surname.
+
+    A search by Hardcover ID can return other Books of the same series, or a Book an omnibus collects.
+    """
+    if not (names_book(info["title"], main_title(c["title"])) or names_book(c["title"], main_title(info["title"]))):
+        return False
+    surnames = {words(a)[-1] for a in authors(c) if words(a)}
+    return not info["authors"] or bool(surnames & {w for a in info["authors"] for w in words(a)})
+
+
+FONT_MANGLING = {"http://www.idpf.org/2008/embedding": 1040, "http://ns.adobe.com/pdf/enc#RC": 1024}
+FONT_SIGNATURES = (b"\x00\x01\x00\x00", b"OTTO", b"true", b"ttcf", b"wOFF", b"wOF2")
+
+
+def unmangle_fonts(z, opf_text):
+    """The obfuscated fonts restored, by path, or None when encryption.xml holds anything else or no identifier
+    unlocks a font. IDPF keys a font to the SHA-1 of the package identifier, Adobe to a urn:uuid identifier."""
+    entries = re.findall(r'Algorithm="([^"]+)".*?URI="([^"]+)"', z.read("META-INF/encryption.xml").decode(
+        "utf8", "replace"), re.S)
+    ids = [re.sub(r"\s", "", v) for v in re.findall(r"<dc:identifier[^>]*>([^<]*)<", opf_text)]
+    keys = {"http://www.idpf.org/2008/embedding": [hashlib.sha1(v.encode()).digest() for v in ids],
+            "http://ns.adobe.com/pdf/enc#RC": [bytes.fromhex(m.replace("-", "")) for v in ids
+                                               for m in re.findall(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-"
+                                                                   r"[0-9a-fA-F]{12}", v)]}
+    fonts = {}
+    for algorithm, uri in entries:
+        if algorithm not in FONT_MANGLING:
+            return None
+        name = urllib.parse.unquote(uri)
+        if name not in z.namelist():
+            continue
+        data, n = z.read(name), FONT_MANGLING[algorithm]
+        for key in keys[algorithm]:
+            plain = bytes(b ^ key[i % len(key)] for i, b in enumerate(data[:n])) + data[n:]
+            if plain.startswith(FONT_SIGNATURES):
+                fonts[name] = plain
+                break
+        else:
+            return None
+    return fonts
+
+
+def stamp(path, c):
+    """Name the Book in the copy's OPF: its title, authors and Hardcover ID, and no ISBN or other identifier.
+
+    The ingest gate then matches the copy to the Book by Hardcover ID (ADR 0016), not by the copy's own ISBN,
+    Goodreads ID or title. The package's unique identifier gets a fresh UUID. Obfuscated fonts are keyed to an
+    identifier, so they're restored first; when they can't be, the identifiers stay. The zip keeps mimetype
+    first and stored.
+    """
+    path = Path(path)
+    tmp = path.with_suffix(".stamping")
+    try:
+        with zipfile.ZipFile(path) as src, zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as dst:
+            names = src.namelist()
+            opf = next(n for n in names if n.endswith(".opf"))
+            opf_text = src.read(opf).decode("utf8")
+            fonts = unmangle_fonts(src, opf_text) if "META-INF/encryption.xml" in names else {}
+            for item in src.infolist():
+                if fonts is not None and item.filename == "META-INF/encryption.xml":
+                    continue
+                data = (stamp_opf(opf_text, c, keep_ids=fonts is None).encode("utf8") if item.filename == opf
+                        else (fonts or {}).get(item.filename) or src.read(item.filename))
+                dst.writestr(item, data, compress_type=zipfile.ZIP_STORED if item.filename == "mimetype"
+                             else zipfile.ZIP_DEFLATED)
+        tmp.replace(path)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def stamp_opf(text, c, keep_ids):
+    """The OPF naming only the Book; keep_ids keeps the package identifier and urn:uuid ones, as font keys."""
+    uid = re.search(r"""<(?:\w+:)?package[^>]*\bunique-identifier=["']([^"']+)["']""", text)
+    is_uid = uid and re.compile(rf"""\bid=["']{re.escape(uid.group(1))}["']""")
+    dropped = []
+
+    def keep_or_replace(m):
+        if m.group(1) == "identifier" and is_uid and is_uid.search(m.group(0)):
+            if keep_ids:
+                return m.group(0)
+            fresh = re.sub(r"""\s+opf:scheme=["'][^"']*["']""", "", m.group(0))
+            return re.sub(r">[^<]*<", f">urn:uuid:{uuid.uuid4()}<", fresh, count=1)
+        if m.group(1) == "identifier" and keep_ids and "urn:uuid:" in m.group(0):
+            return m.group(0)
+        dropped.extend(re.findall(r"""\bid=["']([^"']+)["']""", m.group(0)[:m.group(0).index(">")]))
+        return ""
+
+    text = re.sub(r"<dc:(title|creator|identifier)\b[^>]*?(?:/>|>[^<]*</dc:\1>)\s*", keep_or_replace, text)
+    for i in dropped:
+        text = re.sub(rf"""<meta\b[^>]*\brefines=["']#{re.escape(i)}["'][^>]*?(?:/>|>[^<]*</meta>)\s*""", "", text)
+    ns = 'xmlns:dc="http://purl.org/dc/elements/1.1/"'
+    named = (f"<dc:title {ns}>{html.escape(c['title'], quote=False)}</dc:title>"
+             + "".join(f"<dc:creator {ns}>{html.escape(a, quote=False)}</dc:creator>" for a in authors(c))
+             + f'<dc:identifier {ns} xmlns:opf="http://www.idpf.org/2007/opf" opf:scheme="hardcover-id">'
+               f'{c["hardcover_id"]}</dc:identifier>')
+    return re.sub(r"(?=</(?:\w+:)?metadata>)", lambda m: named, text, count=1)
 
 
 def english(lang):
@@ -169,20 +300,31 @@ def fetch(cands, *, search, download, ingest, staging, attempts_path, tries=3, r
                                          else type(e).__name__})
                     continue
                 info = inspect_epub(dest)
+                if not info["broken"] and not same_book(c, info):
+                    dest.unlink()
+                    row["tries"].append({"md5": md5, "wrong book": f"{info['title']} / {', '.join(info['authors'])}"})
+                    continue
                 row["tries"].append({"md5": md5, "retail": info["retail"], "markers": info["markers"],
                                      "lang": info["lang"]})
                 usable = not info["broken"] and english(info["lang"])
-                if usable and info["retail"]:
+                # Any EPUB beats no EPUB, except over a PDF, whose layout may be the content
+                fallback_ok = fallback is None and c["kind"] != "converted epub" and c.get("formats") != ["PDF"]
+                if not (usable and (info["retail"] or fallback_ok)):
+                    dest.unlink()
+                    continue
+                try:
+                    stamp(dest, c)
+                except Exception as e:  # a download is untrusted: one that won't rewrite is a failed try
+                    dest.unlink()
+                    row["tries"][-1]["error"] = f"stamp: {type(e).__name__}"
+                    continue
+                if info["retail"]:
                     put_in_ingest(dest, ingest, c["title"], md5, backlog, wait)
                     row["result"], row["ingested"] = "retail", md5
                     break
-                # Any EPUB beats no EPUB, except over a PDF, whose layout may be the content
-                if usable and fallback is None and c["kind"] != "converted epub" and c.get("formats") != ["PDF"]:
-                    fallback = staging / f"{md5}.keep"
-                    dest.rename(fallback)
-                    row["fallback"] = md5
-                else:
-                    dest.unlink()
+                fallback = staging / f"{md5}.keep"
+                dest.rename(fallback)
+                row["fallback"] = md5
         except QuotaError:
             if fallback:
                 fallback.unlink()
