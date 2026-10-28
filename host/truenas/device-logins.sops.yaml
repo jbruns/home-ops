@@ -2,6 +2,7 @@ passwords:
     eisy: ENC[AES256_GCM,data:zs6gwFeovqSG1uaUuj+K3XoIbNjkKvpajLXxHIdDlW8=,iv:F8LD2+qiK9alarG2l0AHoL6H9KBGAXPp+p8cPCKUBGA=,tag:931I0N13wkji7JJBfk15og==,type:str]
     harpi-nodered: ENC[AES256_GCM,data:ySOmEE5ig41wCFPzgDl2L2t5KusH/J1N1jQs2W/Dt1g=,iv:ETP+oVoVjmmU6h8Z7kkBCp1Nv26vLwbQOFtXxK/mFes=,tag:NFErGWgg40KBwk5UhngGjA==,type:str]
     hassio: ENC[AES256_GCM,data:qg+mg5N+tAVitTUFFtUp/Jq2nSKKVI8H3HCL3M1G//8=,iv:4JlbtKBdmwSr7Mucc5uS8DGhz+5Yu5M4jlHpcM5mMEY=,tag:eyvq/a0qYNYpFVsVSxZaqg==,type:str]
+    gaming: ENC[AES256_GCM,data:2bHi5JVIDVUVWu6zs9VQcunjGqi6SWUQRR6N9tfXZEU=,iv:fOmOCNjKL0azXy915m92Bt5e+/KkLbmDkfLNuvh0DQ8=,tag:612ETkG2ZQna0RpBC+KBng==,type:str]
 sops:
     age:
         - enc: |
@@ -13,7 +14,7 @@ sops:
             IoWo4fYidc+j08HhbXC9RRL+cvGW/BX5bHp0vRthydhta4mOc+FVAw==
             -----END AGE ENCRYPTED FILE-----
           recipient: age1w8hlt2y067tpv0z5zk8q8n44ppc934vdk0p2ldjql5wdaw0r7esskw4pn0
-    lastmodified: "2026-10-27T19:46:22Z"
-    mac: ENC[AES256_GCM,data:gMn76uJwudRCHjS9jVEq70RcJT2k7MauViJ6Gh+md/oxQc0LzD41eL3UxB4Ni2AoeNt6d9id2CdcRCluG/DR5ZWhrYkKnqx/NfA5fogilbyXv0zWzlvwLbZaG0w/RbBAjPAj3r841cxYkagpi156aLrOBTTIM9scGRm5SDAZsMg=,iv:HHXOgMzcvAfoHiNig65RxPCeAZMsOtaNg91yztTmltQ=,tag:qFPI4xhbTM/2tE3jpydaAA==,type:str]
+    lastmodified: "2026-10-28T01:43:04Z"
+    mac: ENC[AES256_GCM,data:oz2xqgJPVk5bKhDrvRvaspIEXZivzHiykY/EOYhAXeXbnt4kyzDLWBw0DtVzEakKtJSrPpH7bfbval1fIYrI1Mh++u0kvnlKvOEh+yea+swww6i5EY37alADt3XPP0ZcDC+rwU7Kg19H+4H3ek+qG7i6285a4syB7AxcwYVUWq4=,iv:v7n1dzxgXQOeVVkVkZ36KlwkSOkFqjJM7qeYt1hwkqo=,tag:t1RJ6hmRDSh4PhKVG4q9Dg==,type:str]
     unencrypted_suffix: _unencrypted
     version: 3.13.3

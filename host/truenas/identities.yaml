@@ -46,8 +46,16 @@ users:
     home: /var/empty
     shell: /usr/sbin/nologin
     smb: true
+  gaming:
+    purpose: Gaming appliances log in as this to read the Games Library's library/ and switch/ over SMB; it can't write.
+    uid: 1014
+    group: gaming
+    groups: [builtin_users]
+    home: /var/empty
+    shell: /usr/sbin/nologin
+    smb: true
   retrobox:
-    purpose: A gaming appliance reads ROMs over SMB; replaced by the read-only games user in #731.
+    purpose: A gaming appliance reads ROMs over SMB; replaced by gaming in #731.
     uid: 1002
     group: retrobox
     groups: [roms, builtin_users]
@@ -84,6 +92,9 @@ groups:
     purpose: Group of the software dataset.
     gid: 1005
     members: [operator]
+  gaming:
+    purpose: Reads the Games Library's library/ and switch/; the gaming login, and ownfoil through group_add.
+    gid: 1014
   retrobox:
     purpose: retrobox's primary group; removed with the user in #731.
     gid: 1006
