@@ -414,11 +414,10 @@ class Vocabulary:
         return sorted(out[:MAX_TAGS])
 
     def rewrite(self, name):
-        """The one listed tag a magic shelf rule's tag becomes, or None if the list has no single one."""
+        """The listed tags a magic shelf rule's tag becomes; empty if the list has none."""
         if name.casefold() == REVIEW_TAG:
-            return REVIEW_TAG
-        mapped = self.map([name])
-        return mapped[0] if len(mapped) == 1 else None
+            return [REVIEW_TAG]
+        return self.map([name])
 
 
 def load_vocabulary(tags_path, authors_path):
@@ -706,42 +705,55 @@ def plan(books, hc, vocab, threshold=THRESHOLD):
 
 # --- magic shelves ---------------------------------------------------------------------------
 
-def rule_tags(rules):
-    if "rules" in rules:
-        for r in rules["rules"]:
-            yield from rule_tags(r)
-    elif (rules.get("field") or rules.get("id")) == "tag" and isinstance(rules.get("value"), str):
-        yield rules["value"]
+def tag_rules(rules):
+    """Each leaf rule testing a tag, with the list holding it and its index there."""
+    for i, r in enumerate(rules.get("rules") or []):
+        if "rules" in r:
+            yield from tag_rules(r)
+        elif (r.get("field") or r.get("id")) == "tag" and isinstance(r.get("value"), str):
+            yield rules["rules"], i, r
 
 
 def rewrite_rules(rules, mapping):
-    if "rules" in rules:
-        for r in rules["rules"]:
-            rewrite_rules(r, mapping)
-    elif (rules.get("field") or rules.get("id")) == "tag" and rules.get("value") in mapping:
-        rules["value"] = mapping[rules["value"]]
+    """Each tag rule's value through mapping; a tag that becomes several becomes a group of rules, any
+    of them for a positive operator and all of them for a negated one."""
+    for siblings, i, r in list(tag_rules(rules)):
+        new = mapping.get(r["value"])
+        if not new:
+            continue
+        if len(new) == 1:
+            r["value"] = new[0]
+        else:
+            group = "AND" if r.get("operator", "").startswith("not_") else "OR"
+            siblings[i] = {"condition": group, "rules": [{**r, "value": t} for t in new]}
 
 
 def shelf_plan(app_db, vocab):
-    """Every magic shelf rule naming a tag the list lacks, with its rewrite (None if the list has none),
-    and a private Review shelf for each admin without one."""
+    """Every magic shelf rule naming a tag the list lacks, with what it becomes (empty if nothing, so the
+    rule stays and matches no Book), and a private Review shelf for each admin without one."""
     db = sqlite3.connect(f"file:{app_db}?mode=ro", uri=True)
     for sid, name, rules in db.execute("select id, name, rules from magic_shelf order by id"):
-        tags = dict.fromkeys(rule_tags(json.loads(rules or "{}")))
-        rewrites = [[t, vocab.rewrite(t)] for t in tags if vocab.rewrite(t) != t]
+        tags = dict.fromkeys(r["value"] for _, _, r in tag_rules(json.loads(rules or "{}")))
+        rewrites = [[t, vocab.rewrite(t)] for t in tags if vocab.rewrite(t) != [t]]
         if rewrites:
             yield {"kind": "shelf", "shelf": sid, "name": name, "rewrites": rewrites}
-    have = {u for (u,) in db.execute("select user_id from magic_shelf where name=? and not is_system", (REVIEW_SHELF,))}
     for (uid,) in db.execute("select id from user where role & 1 order by id"):
-        if uid not in have:
+        if not has_review_shelf(db, uid):
             yield {"kind": "shelf", "create": REVIEW_SHELF, "user": uid}
+
+
+def has_review_shelf(db, uid):
+    return db.execute("select 1 from magic_shelf where user_id=? and name=? and not is_system",
+                      (uid, REVIEW_SHELF)).fetchone() is not None
 
 
 def apply_shelves(records, app_db):
     db = sqlite3.connect(app_db)
     now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat(sep=" ")
     for r in records:
-        if "create" in r:
+        if "create" in r and has_review_shelf(db, r["user"]):
+            out = {"shelf": r["create"], "user": r["user"], "result": "skipped"}
+        elif "create" in r:
             db.execute("insert into magic_shelf (uuid, name, is_public, is_system, user_id, icon, rules, kobo_sync, "
                        "created, last_modified) values (?, ?, 0, 0, ?, ?, ?, 0, ?, ?)",
                        (str(uuid.uuid4()), r["create"], r["user"], "🔍", json.dumps(REVIEW_RULES), now, now))
@@ -757,7 +769,8 @@ def apply_shelves(records, app_db):
             db.execute("update magic_shelf set rules=?, last_modified=? where id=?", (json.dumps(rules), now, r["shelf"]))
             if db.execute("select 1 from sqlite_master where name='magic_shelf_cache'").fetchone():
                 db.execute("delete from magic_shelf_cache where shelf_id=?", (r["shelf"],))
-            out = {"shelf": r["shelf"], "result": "rewritten", "rewrites": sorted(mapping.items())}
+            out = {"shelf": r["shelf"], "result": "rewritten", "rewrites": sorted(mapping.items()),
+                   "unmapped": [old for old, new in r["rewrites"] if not new]}
         print(json.dumps(out, ensure_ascii=False), flush=True)
     db.commit()
 
@@ -879,6 +892,9 @@ def report(records, out):
     for r in records:
         if r.get("kind") == "shelf":
             log(f"shelf   {json.dumps({k: v for k, v in r.items() if k != 'kind'}, ensure_ascii=False)}")
+            gone = [old for old, new in r.get("rewrites") or [] if not new]
+            if gone:
+                log(f"WARNING shelf {r['shelf']} {r['name']!r}: rules on {', '.join(gone)} will match no Book")
             continue
         status[(r["status"], r.get("via"))] += 1
         flags.update(f.split(":")[0] for f in r.get("flags") or [])

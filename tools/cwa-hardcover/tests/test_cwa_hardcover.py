@@ -343,18 +343,27 @@ def test_shelves_rewrite_unlisted_tags_and_add_a_review_shelf_per_admin(tmp_path
         create table magic_shelf (id integer primary key, uuid text, name text, is_public int, is_system int,
           user_id int, icon text, rules text, kobo_sync int, created text, last_modified text);
         insert into user values (3, 511), (4, 338), (5, 1);""")
+    sff = "Science Fiction & Fantasy"
     rule = {"condition": "OR", "rules": [{"id": "tag", "field": "tag", "operator": "equal", "value": "Sci-Fi"},
+                                         {"id": "tag", "operator": "equal", "value": sff},
+                                         {"id": "tag", "operator": "not_equal", "value": sff},
                                          {"condition": "AND", "rules": [{"id": "tag", "operator": "equal", "value": "Junk"}]}]}
     app.execute("insert into magic_shelf (id,name,user_id,is_system,rules) values (1,'SF',4,0,?)", (json.dumps(rule),))
     app.execute("insert into magic_shelf (id,name,user_id,is_system,rules) values (2,'Review',5,0,?)",
                 (json.dumps(ch.REVIEW_RULES),))
     app.commit()
     recs = list(ch.shelf_plan(str(tmp_path / "app.db"), VOCAB))
-    assert recs == [{"kind": "shelf", "shelf": 1, "name": "SF", "rewrites": [["Sci-Fi", "Science Fiction"], ["Junk", None]]},
+    assert recs == [{"kind": "shelf", "shelf": 1, "name": "SF",
+                     "rewrites": [["Sci-Fi", ["Science Fiction"]], [sff, ["Fantasy", "Science Fiction"]], ["Junk", []]]},
                     {"kind": "shelf", "create": "Review", "user": 3}]
     ch.apply_shelves(recs, str(tmp_path / "app.db"))
+    ch.apply_shelves(recs, str(tmp_path / "app.db"))
     rules = json.loads(app.execute("select rules from magic_shelf where id=1").fetchone()[0])
-    assert rules["rules"][0]["value"] == "Science Fiction" and rules["rules"][1]["rules"][0]["value"] == "Junk"
+    assert rules["rules"][0]["value"] == "Science Fiction"
+    assert rules["rules"][1] == {"condition": "OR", "rules": [{"id": "tag", "operator": "equal", "value": "Fantasy"},
+                                                              {"id": "tag", "operator": "equal", "value": "Science Fiction"}]}
+    assert rules["rules"][2]["condition"] == "AND"
+    assert rules["rules"][3]["rules"][0]["value"] == "Junk"
     assert app.execute("select user_id,is_public,is_system,rules from magic_shelf where id>2").fetchall() == [
         (3, 0, 0, json.dumps(ch.REVIEW_RULES))]
 

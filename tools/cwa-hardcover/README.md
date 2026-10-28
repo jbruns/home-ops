@@ -67,8 +67,10 @@ download carries them.
 
 `tags.json` lists every tag a book may carry, and `synonyms` maps another name to one or more listed
 tags (case-insensitive). A name neither listed nor a synonym is dropped. A magic shelf rule naming an
-unlisted tag is rewritten to its single synonym; the plan shows a rule with no single synonym, and
-apply leaves it. `tags < plan.jsonl` counts the plan's Hardcover genres and what each maps to, to
+unlisted tag is rewritten through its synonyms: to the one listed tag, or to a group of rules on
+each (any of them; all of them for a negated rule). A rule on a tag with no synonym is left as it is,
+and `report` warns that it will match no Book. Re-running apply skips a Review shelf that already
+exists. `tags < plan.jsonl` counts the plan's Hardcover genres and what each maps to, to
 tune the list.
 
 ## Run
