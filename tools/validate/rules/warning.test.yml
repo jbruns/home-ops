@@ -506,3 +506,36 @@ tests:
       - expr: *coverageblind
         eval_time: 91m
         exp_samples: []
+
+  - name: BooksIngestGateStalled fires an hour after the last finished run, and clears on the next
+    interval: 1m
+    input_series:
+      - series: cwa_ingest_gate_last_success_timestamp_seconds{stack="calibre-web-automated"}
+        values: 0+60x10 600+0x60 4260+60x3
+    promql_expr_test:
+      - expr: &gate sum by (alertname, tier, stack) (ALERTS{alertname="BooksIngestGateStalled",alertstate="firing"})
+        eval_time: 70m
+        exp_samples: []
+      - expr: *gate
+        eval_time: 71m
+        exp_samples:
+          - labels: '{alertname="BooksIngestGateStalled",tier="warning",stack="calibre-web-automated"}'
+            value: 1
+      - expr: *gate
+        eval_time: 72m
+        exp_samples: []
+
+  - name: BooksIngestGateStalled gives a restarted gate an hour to finish its first run
+    interval: 1m
+    input_series:
+      - series: cwa_ingest_gate_last_success_timestamp_seconds{stack="calibre-web-automated"}
+        values: 0+0x70
+    promql_expr_test:
+      - expr: *gate
+        eval_time: 60m
+        exp_samples: []
+      - expr: *gate
+        eval_time: 61m
+        exp_samples:
+          - labels: '{alertname="BooksIngestGateStalled",tier="warning",stack="calibre-web-automated"}'
+            value: 1

@@ -73,6 +73,11 @@ scrape_configs:
       - targets: ['radarr-queue-exporter:9713']
         labels: {container: radarr-queue-exporter, stack: radarr, tier: info}
 
+  - job_name: cwa-ingest-gate
+    static_configs:
+      - targets: ['cwa-ingest-gate:9715']
+        labels: {container: cwa-ingest-gate, stack: calibre-web-automated, tier: warning}
+
   # NEXTCLOUD STACK (Valkey; redis_exporter speaks the same protocol)
   - job_name: redis
     scrape_interval: 90s

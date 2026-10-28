@@ -46,6 +46,7 @@ pin updates, selection overrides, and recovery.
 | `syncthing` | Syncthing |
 | `sonarr`, `radarr` | One Organizer each (+ exportarr, queue exporter) |
 | `sabnzbd` | SABnzbd (+ exportarr, Usenet server status exporter) |
+| `calibre-web-automated` | Calibre-Web Automated (+ cwa-ingest-gate, which checks each new Book) |
 | `qbittorrent`, `autobrr` | One Service each |
 | `plex`, `emby`, `nextpvr`, `navidrome`, `tracearr` | One media Service each |
 

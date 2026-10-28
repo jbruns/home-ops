@@ -3,6 +3,7 @@
 homeops_container_declared{stack="audiobookshelf",service="audiobookshelf",name="audiobookshelf",tier="warning"} 1
 homeops_container_declared{stack="autobrr",service="autobrr",name="autobrr",tier="warning"} 1
 homeops_container_declared{stack="calibre-web-automated",service="calibre-web-automated",name="calibre-web-automated",tier="warning"} 1
+homeops_container_declared{stack="calibre-web-automated",service="cwa-ingest-gate",name="cwa-ingest-gate",tier="warning"} 1
 homeops_container_declared{stack="doco-cd",service="apprise",name="doco-cd-apprise-1",tier="info"} 1
 homeops_container_declared{stack="doco-cd",service="doco-cd",name="doco-cd-doco-cd-1",tier="warning"} 1
 homeops_container_declared{stack="edge",service="crowdsec",name="crowdsec",tier="critical"} 1

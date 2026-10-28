@@ -81,8 +81,9 @@ From the repo root, with the Host's SSH keys from `.env`:
 set -a; . ./.env; set +a
 CWA="ssh -i $HOPS_TRUENAS_SSH_KEY $HOPS_TRUENAS_SSH_USER@$HOPS_TRUENAS_SSH_HOST sudo -n docker exec -i -u 4008:1002 calibre-web-automated"
 $CWA mkdir -p /tmp/hc
-for f in cwa_hardcover.py tags.json author-overrides.json; do
-  $CWA "sh -c 'cat > /tmp/hc/$f'" < tools/cwa-hardcover/$f
+$CWA "sh -c 'cat > /tmp/hc/cwa_hardcover.py'" < tools/cwa-hardcover/cwa_hardcover.py
+for f in tags.json author-overrides.json; do
+  $CWA "sh -c 'cat > /tmp/hc/$f'" < tn/calibre-web-automated/cwa-ingest-gate/$f
 done
 
 # 1. Plan (read-only): a sample, chosen ids, or the whole library (about 15 minutes)

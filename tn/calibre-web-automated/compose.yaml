@@ -27,18 +27,18 @@ services:
       - PGID=${MEDIA_SHARED_GID}
       - TZ=${TZ}
     # HARDCOVER_TOKEN: the same Hardcover API key as Shelfmark's HARDCOVER_API_KEY. CWA uses it for
-    # the Hardcover metadata provider and the scheduled Hardcover ID task.
-    # Settings live in cwa.db (Admin -> CWA Settings): Hardcover ID auto-fetch ON (every 12 hours, confidence
-    # 0.85 on title, author and ISBN; writes only Hardcover IDs; lower matches queue for review);
-    # metadata fetch on ingest OFF. Fetch on ingest searches title plus authors, for which Hardcover
-    # ranks summaries and omnibuses first, and applies the first result unchecked (0 of 5 test titles
-    # right; the editor's title-only search got 5 of 5), so it would overwrite series, date, rating, identifiers, tags and description from another book.
-    # Fetch rich metadata with tools/cwa-hardcover (checks each match first) or per book in the editor.
+    # the Hardcover metadata provider in the editor; cwa-ingest-gate below uses it too.
+    # Settings live in cwa.db (Admin -> CWA Settings): Hardcover ID auto-fetch OFF and metadata fetch on
+    # ingest OFF, so cwa-ingest-gate is the only automated metadata writer (ADR 0017). Fetch on ingest
+    # searches title plus authors, for which Hardcover ranks summaries and omnibuses first, and applies
+    # the first result unchecked (0 of 5 test titles right; the editor's title-only search got 5 of 5), so
+    # it would overwrite series, date, rating, identifiers, tags and description from another book.
+    # Auto-fetch would write a hardcover-id before the gate has checked the match.
     # Ingest (cwa.db, ADR 0016: one Format per Book, EPUB first): auto-convert ON with target EPUB, the
     # safety net for whatever an admin uploads; auto-convert ignores cbz,cbr,pdf, so a PDF stays a PDF;
     # auto-ingest ignores docx,html,htmlz,rtf,cbz,cbr (comics are not Books); retained formats epub
-    # only (no original kept beside its conversion); automerge new_record (duplicates are folded by
-    # Hardcover ID outside CWA, not by CWA's title match).
+    # only (no original kept beside its conversion); automerge new_record (cwa-ingest-gate folds
+    # duplicates by Hardcover ID, not CWA's title match).
     # Roles (app.db, Admin -> Users; ADR 0017: only admins edit): exactly two admins, both from the
     # cwa-admins IdP group. Every other user, and the default role for new users, is download, Send
     # to Kindle (needs download), edit shelves and change password (role 338): no upload, edit or delete.
@@ -113,14 +113,85 @@ services:
       - default
       - proxy
 
+  cwa-ingest-gate:
+    # Checks each Book CWA adds: rejects comics and non-English Books, matches the rest on Hardcover and
+    # writes their metadata, folds a second copy into the Book that holds its Hardcover ID, and tags
+    # what it can't decide `review` (ADR 0016, ADR 0017). A Custom Component (ADR 0008).
+    # Source: components/cwa-ingest-gate in the Repo Tooling repo; keep its CWA pin equal to the one above.
+    extends:
+      file: ../_baseline.yaml
+      service: baseline
+    image: ghcr.io/jbruns/cwa-ingest-gate:0.1.2@sha256:75408a34ae3f4f593b208d54abc9e2a7fafaeb61cde6d20ba5c2259affe9ec97
+    container_name: cwa-ingest-gate
+    # The Library's owner, as CWA drops to: calibredb writes metadata.db and the Book folders.
+    user: ${CWA_UID}:${MEDIA_SHARED_GID}
+    deploy:
+      resources:
+        limits:
+          # Unmeasured. CWA runs the same calibredb plus conversions and peaked at 293M in 30 days; the
+          # /tmp tmpfs counts against this too.
+          memory: 768M
+          # One core, so a batch of embeds never crowds CWA or the Host.
+          cpus: "1"
+    read_only: true
+    # /tmp: calibredb's settings, and each write's temporary copy of the Book's metadata and cover.
+    # /cwa-book-ingest: a VOLUME of the CWA base image the gate never uses; tmpfs rather than an
+    # anonymous volume (Baseline item: anonymous-volumes).
+    tmpfs:
+      - /tmp:size=256m
+      - /cwa-book-ingest:size=1m,mode=0555
+    depends_on:
+      calibre-web-automated:
+        condition: service_healthy
+    # Probes the gate's own /healthz, never Hardcover or the Library: a failing run shows as
+    # BooksIngestGateStalled, not as this container going unhealthy.
+    healthcheck:
+      test: ["CMD", "/lsiopy/bin/python3", "-m", "cwa_ingest_gate", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+      start_interval: 2s
+    # HARDCOVER_TOKEN. Every other setting is the image default: a run every 300s, Books settled for
+    # 120s, title and author score at least 0.85, metrics on 9715.
+    env_file: ./calibre-web-automated.sops.env
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: warning
+      startup-order: "3"
+    volumes:
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/media/books/library
+        target: /calibre-library
+        bind:
+          create_host_path: false
+      # The mark: the highest Book id checked so far.
+      - cwa-ingest-gate_state:/state
+      # tags.json (the controlled tag list and its synonyms) and author-overrides.json, over the base
+      # image's /config VOLUME.
+      - ./cwa-ingest-gate:/config:ro
+    networks:
+      - default
+      - metrics
+
 volumes:
   # Created by the asot-media Stack; the explicit name keeps them across the move.
   calibre-web-automated_config:
     name: calibre-web-automated_config
     external: true
+  # Lost, the gate's next run sets the mark to the newest Book again: only Books added since its last
+  # run go unchecked.
+  cwa-ingest-gate_state:
+    name: calibre-web-automated_cwa-ingest-gate_state
+    labels:
+      homeops.regenerable: "the gate's first run sets the mark again"
 
 networks:
   # Traefik and the Exposed Services it routes to; owned by the edge Stack.
   proxy:
     name: proxy
+    external: true
+  # Prometheus and exporters; owned by the monitoring Stack (ADR-0002).
+  metrics:
+    name: metrics
     external: true

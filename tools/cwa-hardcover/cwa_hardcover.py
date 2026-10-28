@@ -41,6 +41,15 @@ API = "https://api.hardcover.app/v1/graphql"
 LIBRARY = "/calibre-library"
 APP_DB = "/config/app.db"
 HERE = os.path.dirname(os.path.abspath(__file__))
+# The controlled vocabulary, shared with cwa-ingest-gate, which mounts it from its Stack folder. In the CWA
+# container the README copies it beside this script.
+REPO_VOCAB = os.path.join(HERE, "..", "..", "tn", "calibre-web-automated", "cwa-ingest-gate")
+
+
+def vocab_file(name):
+    beside = os.path.join(HERE, name)
+    return beside if os.path.exists(beside) else os.path.join(REPO_VOCAB, name)
+
 THRESHOLD = 0.85
 REQUEST_INTERVAL = 1.1  # Hardcover allows 60 requests a minute per token
 LOOKUP_BATCH = 100
@@ -941,8 +950,8 @@ def main(argv=None):
     sub.add_parser("report", help="plan (stdin) to CSV (stdout)")
     t = sub.add_parser("tags", help="plan (stdin) to a CSV of Hardcover genres (stdout)")
     for x in (p, t):
-        x.add_argument("--tags", default=os.path.join(HERE, "tags.json"), help="the controlled tag list")
-        x.add_argument("--author-overrides", default=os.path.join(HERE, "author-overrides.json"))
+        x.add_argument("--tags", default=vocab_file("tags.json"), help="the controlled tag list")
+        x.add_argument("--author-overrides", default=vocab_file("author-overrides.json"))
     args = ap.parse_args(argv)
     lines = lambda: (json.loads(line) for line in sys.stdin if line.strip())  # noqa: E731
 
