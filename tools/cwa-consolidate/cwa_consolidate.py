@@ -45,6 +45,12 @@ HISTORY = {"downloads": ("user_id",), "archived_book": ("user_id",), "book_read_
            "bookmark": ("user_id", "format"), "book_shelf_link": ("shelf",), "kobo_reading_state": ("user_id",),
            "kobo_synced_books": ("user_id",), "kobo_annotation_sync": ("annotation_id",),
            "hardcover_book_blacklist": (), "hardcover_match_queue": ()}
+# Where both Books hold a row for a user, the row further along wins instead of the survivor's (ties: survivor)
+FURTHEST = {"book_read_link": "case read_status when 1 then 2 when 2 then 1 else 0 end desc, last_modified desc",
+            "kobo_reading_state": "last_modified desc"}
+KOBO_STATE_CHILDREN = ("kobo_bookmark", "kobo_statistics")
+# cwa.db activity naming a Book: Send to Kindle (EMAIL), downloads and reads
+BOOK_ACTIVITY = ("EMAIL", "DOWNLOAD", "READ")
 
 
 def log(msg):
@@ -147,6 +153,10 @@ def load(library, app_db, cwa_db):
 
 # --- ranking (ADR 0016) ----------------------------------------------------------------------
 
+def usable(f):
+    return f["format"] in FORMATS and not f.get("broken")
+
+
 def _step_keys(f, checks):
     """One comparable value per step (higher is better), or None where the step can't judge this file."""
     epub = f["format"] == "EPUB"
@@ -157,7 +167,7 @@ def _step_keys(f, checks):
     else:
         check = None
     return (
-        -FORMATS.index(f["format"]) if f["format"] in FORMATS else -len(FORMATS),
+        -FORMATS.index(f["format"]) if usable(f) else -len(FORMATS),
         f["retail"] if epub else None,
         (-check[0], -check[1]) if check else None,
         f["toc"] > 1 if epub else None,
@@ -244,15 +254,16 @@ def group_books(books, cwa_groups):
 
 
 def format_choice(book, checks):
-    usable = rank([f for f in book["files"] if f["format"] in FORMATS], checks)
-    if not usable:
-        return {"action": "review", "reason": "no usable Format: " + ", ".join(sorted(f["format"] for f in book["files"])),
+    ranked = rank([f for f in book["files"] if usable(f)], checks)
+    if not ranked:
+        return {"action": "review", "reason": "no usable Format: " + ", ".join(
+                    sorted(f["format"] + (" (unreadable)" if f.get("broken") else "") for f in book["files"])),
                 "keep": None, "convert_from": None, "remove": [], "decided_by": None}
-    best = usable[0]
+    best = ranked[0]
     others = [f for f in book["files"] if f is not best]
     decided = None
-    if len(usable) > 1:
-        decided = compare(best, usable[1], checks)[1]
+    if len(ranked) > 1:
+        decided = compare(best, ranked[1], checks)[1]
     elif others:
         decided = STEPS[0]
     keep = best["format"] if best["format"] in KEPT_AS_IS else "EPUB"
@@ -359,6 +370,9 @@ class Calibre:
             return True
         return self._db("set_metadata", book, "--field", "tags:" + ",".join([*tags, tag]))
 
+    def embed_metadata(self, book):
+        return self._db("embed_metadata", book)
+
     def convert(self, book, source):
         with tempfile.TemporaryDirectory() as tmp:
             out = os.path.join(tmp, f"{book}.epub")
@@ -367,6 +381,18 @@ class Calibre:
 
 def move_history(app, loser, survivor):
     tables = {r[0] for r in app.execute("select name from sqlite_master where type='table'")}
+    for table, order in FURTHEST.items():
+        if table not in tables:
+            continue
+        for (user,) in app.execute(f"select user_id from {table} where book_id=? intersect "
+                                   f"select user_id from {table} where book_id=?", (loser, survivor)).fetchall():
+            rows = app.execute(f"select id from {table} where user_id=? and book_id in (?,?) order by {order}, book_id=? desc",
+                               (user, loser, survivor, survivor)).fetchall()
+            for (row,) in rows[1:]:
+                if table == "kobo_reading_state":
+                    for child in (c for c in KOBO_STATE_CHILDREN if c in tables):
+                        app.execute(f"delete from {child} where kobo_reading_state_id=?", (row,))
+                app.execute(f"delete from {table} where id=?", (row,))
     for table, key in HISTORY.items():
         if table not in tables:
             continue
@@ -376,11 +402,19 @@ def move_history(app, loser, survivor):
         app.execute(f"update {table} set book_id=? where book_id=?", (survivor, loser))
 
 
-def apply(records, library, app_db, calibre=None, only=None, skip=frozenset()):
+def move_activity(cwa, loser, survivor):
+    if cwa.execute("select 1 from sqlite_master where name='cwa_user_activity'").fetchone():
+        cwa.execute(f"update cwa_user_activity set item_id=? where item_id=? and event_type in ({','.join('?' * len(BOOK_ACTIVITY))})",
+                    (survivor, loser, *BOOK_ACTIVITY))
+
+
+def apply(records, library, app_db, calibre=None, only=None, skip=frozenset(), cwa_db=None):
     records = list(records)
     calibre = calibre or Calibre(library)
     meta = sqlite3.connect(f"file:{os.path.join(library, 'metadata.db')}?mode=ro", uri=True)
     app = sqlite3.connect(app_db)
+    cwa = sqlite3.connect(cwa_db) if cwa_db else None
+    reembed = set()
     counts = Counter()
 
     def formats(i):
@@ -408,6 +442,11 @@ def apply(records, library, app_db, calibre=None, only=None, skip=frozenset()):
             merged = {**identifiers(i), **merged}
             with app:
                 move_history(app, i, g["survivor"])
+            if cwa:
+                with cwa:
+                    move_activity(cwa, i, g["survivor"])
+        if merged != ids:
+            reembed.add(g["survivor"])
         ok = merged == ids or calibre.set_identifiers(g["survivor"], merged)
         for i in g["losers"]:
             ok = calibre.remove_book(i) and ok
@@ -434,6 +473,10 @@ def apply(records, library, app_db, calibre=None, only=None, skip=frozenset()):
                 for fmt in r["remove"]:
                     ok = calibre.remove_format(r["book"], fmt) and ok
                 done += [f"removed {f}" for f in r["remove"]]
+            # Send to Kindle reads the file, so the EPUB carries the Library's metadata (ADR 0017)
+            if ok and (r["convert_from"] or r["book"] in reembed):
+                ok = calibre.embed_metadata(r["book"])
+                done.append("embedded metadata")
             if r["flags"] or r["action"] == "review":
                 ok = calibre.add_tag(r["book"], REVIEW_TAG) and ok
                 done.append("flagged")
@@ -540,6 +583,7 @@ def main(argv=None):
     p.add_argument("--epubcheck", help="JSON lines {path, fatal, errors} from epubcheck.sh")
     a = sub.add_parser("apply", help="carry out a reviewed plan (stdin)")
     a.add_argument("--only", help="comma-separated Book ids (a group's survivor or loser selects the group)")
+    a.add_argument("--cwa-db", default=CWA_DB)
     a.add_argument("--skip", help="comma-separated Book ids the Operator kept out (a member skips its whole group)")
     s = sub.add_parser("stats", help="counts to compare before and after, as JSON")
     for x in (p, a, s):
@@ -560,7 +604,7 @@ def main(argv=None):
     elif args.cmd == "apply":
         only = {int(x) for x in args.only.split(",")} if args.only else None
         skip = {int(x) for x in args.skip.split(",")} if args.skip else frozenset()
-        return apply(read(), args.library, args.app_db, only=only, skip=skip)
+        return apply(read(), args.library, args.app_db, only=only, skip=skip, cwa_db=args.cwa_db)
     else:
         lib = load(args.library, args.app_db, args.cwa_db)
         log(f"planning {len(lib['books'])} Books")

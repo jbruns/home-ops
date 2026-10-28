@@ -26,19 +26,23 @@ title and its part before or after a colon agree). Each member of a review group
 **Survivor:** the member holding the best file, by ADR 0016's ranking (first difference wins):
 
 1. **Format:** EPUB, AZW3, MOBI, AZW, FB2, LIT, TXT, RTF, DOCX, then PDF. Anything else (KFX and its
-   MD containers, ZIP, ORIGINAL_*) is unusable.
+   MD containers, ZIP, ORIGINAL_*) is unusable, and so is an EPUB that won't open.
 2. **Retail EPUB:** no marks of a calibre conversion.
 3. **epubcheck:** fewer fatal errors, then fewer errors.
 4. **Table of contents:** more than one entry.
 5. **Larger file.**
 6. **Existing:** the older Book, then the lower id.
 
-The survivor takes the losers' identifiers it lacks and their `app.db` history (downloads, archive,
-bookmarks, read status, shelves, Kobo sync); the losers are removed.
+The survivor takes the losers' identifiers it lacks, their `app.db` history (downloads, archive,
+bookmarks, read status, shelves, Kobo sync) and their Send to Kindle, download and read activity in
+`cwa.db`; the losers are removed. Where both hold a read status or Kobo reading state for a user, the
+one further along stays.
 
 **Formats:** a Book keeps an EPUB as is. Without one, its best usable Format converts to EPUB; a PDF stays
 only when it is the Book's sole usable Format, and is flagged `PDF only: confirm layout`. A Book with no
-usable Format goes to review. Every other Format is removed.
+usable Format goes to review. Every other Format is removed. A converted EPUB, and a survivor that
+gained identifiers, gets the Library's metadata embedded, because Send to Kindle reads the file
+(ADR 0017).
 
 ## Run
 

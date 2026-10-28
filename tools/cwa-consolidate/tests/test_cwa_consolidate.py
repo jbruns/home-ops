@@ -34,8 +34,13 @@ create table book_shelf_link (id integer primary key, book_id int, "order" int, 
 create table bookmark (id integer primary key, user_id int, book_id int, format text, bookmark_key text);
 create table magic_shelf (id integer primary key, name text, user_id int, is_system int, rules text);
 create table magic_shelf_cache (id integer primary key, shelf_id int, user_id int, book_ids text);
+create table kobo_reading_state (id integer primary key, user_id int, book_id int, last_modified text);
+create table kobo_bookmark (id integer primary key, kobo_reading_state_id int, progress_percent float);
 """
-CWA_SCHEMA = "create table cwa_duplicate_cache (id integer primary key, duplicate_groups_json text);"
+CWA_SCHEMA = """
+create table cwa_duplicate_cache (id integer primary key, duplicate_groups_json text);
+create table cwa_user_activity (id integer primary key, user_id int, event_type text, item_id int);
+"""
 
 CONVERTED_OPF = ('<package><metadata><dc:language>{lang}</dc:language>'
                  '<dc:contributor opf:role="bkp">calibre (5.0) [https://calibre-ebook.com]</dc:contributor>'
@@ -282,29 +287,68 @@ def test_apply_merges_history_identifiers_then_formats_and_flags(lib):
         insert into book_shelf_link (book_id,shelf) values ({loser},1);
         insert into magic_shelf_cache (shelf_id,user_id,book_ids) values (1,4,'[1]');""")
     lib.app.commit()
+    lib.cwa.executescript(f"insert into cwa_user_activity (user_id,event_type,item_id) values (4,'EMAIL',{loser}),(4,'SEARCH',{loser});")
+    lib.cwa.commit()
     recs = lib.plan()
     cal = FakeCalibre()
-    assert cc.apply(recs, str(lib.root), str(lib.root / "app.db"), cal) == 0
+    assert cc.apply(recs, str(lib.root), str(lib.root / "app.db"), cal, cwa_db=str(lib.root / "cwa.db")) == 0
     app = sqlite3.connect(lib.root / "app.db")
     assert sorted(app.execute("select book_id,user_id from downloads")) == [(survivor, 4), (survivor, 6)]
     assert app.execute("select book_id from archived_book").fetchall() == [(survivor,)]
     assert app.execute("select book_id from book_shelf_link").fetchall() == [(survivor,)]
     assert app.execute("select count(*) from magic_shelf_cache").fetchone() == (0,)
+    cwa = sqlite3.connect(lib.root / "cwa.db")
+    assert sorted(cwa.execute("select event_type,item_id from cwa_user_activity")) == [("EMAIL", survivor), ("SEARCH", loser)]
     assert cal.calls == [
         ("set_identifiers", survivor, {"hardcover-id": "42"}),
         ("remove_book", loser),
         ("remove_format", survivor, "MOBI"),
+        ("embed_metadata", survivor),
         ("add_tag", pdf, "review"),
     ]
+
+
+def test_merge_keeps_the_furthest_read_status_and_kobo_state(lib):
+    loser = lib.add("Read Twice", retail=False)
+    survivor = lib.add("Read Twice")
+    lib.app.executescript(f"""
+        insert into book_read_link (book_id,user_id,read_status,last_modified,times_started_reading)
+          values ({loser},4,1,'2024-01-01',1),({survivor},4,0,'2025-01-01',0),({survivor},6,2,'2025-01-01',1);
+        insert into kobo_reading_state (id,user_id,book_id,last_modified) values (1,4,{loser},'2025-06-01'),(2,4,{survivor},'2024-01-01');
+        insert into kobo_bookmark (kobo_reading_state_id,progress_percent) values (1,80),(2,5);""")
+    lib.app.commit()
+    cc.apply(lib.plan(), str(lib.root), str(lib.root / "app.db"), FakeCalibre())
+    app = sqlite3.connect(lib.root / "app.db")
+    assert sorted(app.execute("select user_id,book_id,read_status from book_read_link")) == [(4, survivor, 1), (6, survivor, 2)]
+    assert app.execute("select id,book_id from kobo_reading_state").fetchall() == [(1, survivor)]
+    assert app.execute("select kobo_reading_state_id,progress_percent from kobo_bookmark").fetchall() == [(1, 80)]
 
 
 def test_apply_converts_then_removes_sources(lib):
     i = lib.add("Kindle", formats=("MOBI", "AZW3"))
     cal = FakeCalibre()
     cc.apply(lib.plan(), str(lib.root), str(lib.root / "app.db"), cal)
-    assert [c[0] for c in cal.calls] == ["convert", "remove_format", "remove_format"]
+    assert [c[0] for c in cal.calls] == ["convert", "remove_format", "remove_format", "embed_metadata"]
     assert cal.calls[0][1] == i and cal.calls[0][2].endswith(".azw3")
-    assert {c[2] for c in cal.calls[1:]} == {"MOBI", "AZW3"}
+    assert {c[2] for c in cal.calls[1:3]} == {"MOBI", "AZW3"}
+
+
+def test_a_broken_epub_is_replaced_from_the_next_format(lib):
+    i = lib.add("Corrupt", formats=("EPUB", "MOBI"))
+    j = lib.add("Corrupt Alone", formats=("EPUB",))
+    for book in (i, j):
+        next((lib.root).glob(f"*/* ({book})/*.epub")).write_bytes(b"not a zip")
+    b = books(lib.plan())
+    assert (b[i]["keep"], b[i]["convert_from"], b[i]["remove"]) == ("EPUB", "MOBI", ["MOBI"])
+    assert (b[j]["action"], b[j]["reason"]) == ("review", "no usable Format: EPUB (unreadable)")
+
+
+def test_a_broken_epub_does_not_win_a_group(lib):
+    broken = lib.add("Shared")
+    mobi = lib.add("Shared", formats=("MOBI",))
+    next((lib.root).glob(f"*/* ({broken})/*.epub")).write_bytes(b"not a zip")
+    g = groups(lib.plan())[0]
+    assert (g["survivor"], g["losers"]) == (mobi, [broken])
 
 
 def test_apply_skips_a_book_whose_formats_changed(lib):
