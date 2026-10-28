@@ -1,7 +1,13 @@
 # Games Organizer: go/no-go spike
 
 Findings for #781, part of #734. Researched 2026-10-28 against primary sources and the Operator's own data. The
-Verified Set was read in place on the Host and read-only. Only DAT metadata and counts left the Host.
+Verified Set was read in place on the Host and read-only, and no payload left the Host. One file did: the Atari DAT
+was copied off the Host so that pinned Retool could run against it locally (§3). The issue's constraint said not to
+copy it. The copy was made after confirming that No-Intro's Data Usage License permits copying and reuse (§5), and
+it has since been deleted.
+
+This doc uses the widened **Organizer** and the new **Owned Application** terms, and ADR 0018. All three are added
+by #780, which must merge first.
 
 ## Verdict
 
@@ -19,7 +25,8 @@ Why:
   300–600 lines. A Rust port is a Large effort: about 7,900 lines of order-sensitive selection code and 90 regexes
   with no written specification (§4).
 - The data is not the risk. No-Intro's licence permits reuse (§5). The Atari DAT carries CRC32, MD5 and SHA-1 on
-  every ROM (§2), and a full payload pass over the whole set takes under a second (§6).
+  every ROM and needs no header rule (§2). A prototype full payload Audit of the whole Atari set ran cleanly, and
+  the gaps it found are all ones the Organizer is meant to handle (§6).
 
 ## 1. Does igir plus Retool already cover the workflow?
 
@@ -27,13 +34,13 @@ No. Pinned igir v5.8.0 (`df2ff6f`) and Retool 2.4.9 (`59f169f`) were compared ag
 
 | Requirement | igir | Retool | Gap |
 | --- | --- | --- | --- |
-| Revision-pinned DAT store with provenance | Reads DATs per run ([scanning](https://github.com/emmercm/igir/blob/v5.8.0/docs/dats/scanning.md)) | Writes new filtered DATs | No store, no revision pin, no provenance |
+| Revision-pinned DAT store with provenance | Reads DATs per run ([scanning](https://github.com/emmercm/igir/blob/v5.8.0/docs/dats/scanning.md)) | Writes new filtered DATs ([docs](https://unexpectedpanda.github.io/retool/)) | No store, no revision pin, no provenance |
 | Quick / incremental / full evidence | `--input-checksum-quick` / `-min` / `-max`; archive CRCs and CHD header hashes documented as claims ([matching](https://github.com/emmercm/igir/blob/v5.8.0/docs/roms/matching.md)); persistent cache invalidated on size+mtime ([fileCache.ts](https://github.com/emmercm/igir/blob/v5.8.0/src/cache/fileCache.ts)) | None | Report does not record which algorithms were checked or when the payload was read |
 | Missing / bad / extra / misnamed / unreadable, errors never hidden | Statuses FOUND, INCOMPLETE, MISSING, DUPLICATE, UNUSED, DELETED ([datStatus.ts](https://github.com/emmercm/igir/blob/v5.8.0/src/models/datStatus.ts)) | None | No bad, conflicting or unreadable status. Parse errors are only logged ([scanner.ts](https://github.com/emmercm/igir/blob/v5.8.0/src/modules/scanner.ts)) |
-| In-place audit, including the Operator's ZIP-of-ZIPs layout | `igir report` is read-only on single-level archives | None | "Igir will not read the contents of archives within archives" ([reading-archives](https://github.com/emmercm/igir/blob/v5.8.0/docs/input/reading-archives.md)) |
-| Explained 1G1R selection | Ordered `--prefer-*` options ([1g1r](https://github.com/emmercm/igir/blob/v5.8.0/docs/roms/1g1r.md)) | Ordered filter pipeline with console `--trace` | No machine-readable trace in either tool |
+| In-place audit, including the Operator's ZIP-of-ZIPs layout | `igir report` reads without writing ([reporting](https://github.com/emmercm/igir/blob/v5.8.0/docs/output/reporting.md)) | None | "Igir will not read the contents of archives within archives" ([reading-archives](https://github.com/emmercm/igir/blob/v5.8.0/docs/input/reading-archives.md)) |
+| Explained 1G1R selection | Ordered `--prefer-*` options ([1g1r](https://github.com/emmercm/igir/blob/v5.8.0/docs/roms/1g1r.md)) | Ordered filter pipeline with console `--trace` (§3) | No machine-readable trace in either tool |
 | Previewable, approved repair and publish Change Plans | `--clean-dry-run` and `--clean-backup`, for `clean` only ([cleaning](https://github.com/emmercm/igir/blob/v5.8.0/docs/output/cleaning.md)) | None | No plan object, stale-plan rejection, external-change detection, output provenance or partial publication |
-| Durable jobs, web UI, resource limits | Reader, writer and DAT thread counts only | None | No job state, server, CPU quota or byte-rate caps |
+| Durable jobs, web UI, resource limits | Reader, writer and DAT thread counts only ([argumentsParser.ts](https://github.com/emmercm/igir/blob/v5.8.0/src/modules/argumentsParser.ts#L1120-L1144)); a scriptable CLI by design ([guiding principles](https://github.com/emmercm/igir/blob/v5.8.0/docs/guiding-principles.md)) | One-shot CLI or GUI ([docs](https://unexpectedpanda.github.io/retool/)) | No job state, server, CPU quota or byte-rate caps |
 
 **What to reuse from igir:**
 
@@ -50,6 +57,9 @@ No. Pinned igir v5.8.0 (`df2ff6f`) and Retool 2.4.9 (`59f169f`) were compared ag
 
 - No-Intro XML schema v4. The header holds `id` 88, `version` 20261027-195049, a `tos` link to the terms in §5,
   and `clrmamepro forcenodump="required"`.
+- **No header rule.** The `clrmamepro` element has no `header` attribute, and the DAT names no skipper. The Audit
+  hashes raw file bytes, and the pilot needs no header-skipping support. DATs for other systems may carry one, so
+  the DAT store should record it when present.
 - **872 games and 878 ROMs.** 871 games have one ROM. One has seven `.wav` files, so the pilot must handle
   multi-file games. Extensions are 859 `.a26`, 12 `.bin` and 7 `.wav`.
 - **Hashes:** every ROM has `size`, `crc`, `md5` and `sha1`. Only 312 have `sha256`. The strongest available hash
@@ -88,7 +98,7 @@ Yes, and most of the work is already done.
   candidates before and after, kept and removed. Thread the sink through the chain, and merge per-worker sinks in
   the orchestrator. The rule catalogue stays unchanged. Estimate: 300–600 lines.
 - **Ownership:** because Retool is unmaintained, this patch makes us its maintainer. Carry it as a patch set
-  against a pinned upstream commit, inside the Organizer's repo.
+  against a pinned upstream commit. Whether it lives in the Organizer's repo or a fork is an open question.
 
 ## 4. Is a Rust port of Retool feasible?
 
@@ -122,13 +132,15 @@ It is feasible but **Large**. It is not justified for the pilot.
 - **Test fixtures:** synthetic fixtures remain the default for edge cases. Real No-Intro DATs may be used for
   conformance tests under the licence.
 - **Unattended refresh:** reuse of the data is licensed, but automated access is governed only by
-  [robots.txt](https://datomatic.no-intro.org/robots.txt): `Crawl-delay: 5`, `Request-rate: 1/5`. Dat-o-Matic bans
-  clients that send anomalous requests, and lifting a ban needs manual contact. A future adapter should:
+  [robots.txt](https://datomatic.no-intro.org/robots.txt): `Crawl-delay: 5`, `Request-rate: 1/5`. No written
+  policy covers bans. However, a malformed request to a Dat-o-Matic page during this research returned an error
+  saying that a ban had been applied to the client's network and would not be lifted without contacting the site.
+  This is observed behaviour, not stated policy. A future adapter should:
   - fetch at most once a day, paced well inside those directives;
   - never retry in a loop;
   - fall back to manual import and keep the last good revision.
-- **Redump:** its policy pages and wiki were unreachable at the time of checking, so its conditions are not
-  stated. `robots.txt` is permissive. Do not build a Redump adapter until its terms can be read.
+- **Redump** (outside #781's question, noted because #734 names it): its policy pages and wiki were unreachable
+  at the time of checking, so its conditions are not stated.
 
 ## 6. Prototype Audit of the Atari Verified Set
 
@@ -137,16 +149,22 @@ A throwaway script was run on the Host: no network, read-only mount, one CPU. It
 inner archive directory claims (name, size, CRC32). The second decompressed every payload and checked every hash
 the DAT supplies, in one pass.
 
-| Pass | Matched | Bad | Misnamed | Not in DAT | Time | Bytes |
-| --- | --- | --- | --- | --- | --- | --- |
-| Directory claims | 786 | 3 | 19 | 41 | 0.21 s | 23.7 MB compressed |
-| Full payload (CRC32, MD5, SHA-1, plus SHA-256 where supplied) | 786 | 3 | 19 | 41 | 0.49 s | 39.2 MB uncompressed |
+| Pass | Matched | Bad | Misnamed | Not in DAT | Missing games | Time | Bytes read |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Directory claims | 786 | 0 | 22 | 41 | 70 | 0.17 s | 23.7 MB compressed |
+| Full payload (CRC32, MD5, SHA-1, plus SHA-256 where supplied) | 786 | 0 | 22 | 41 | 70 | 0.61 s | 39.2 MB uncompressed |
 
-- 89 DAT games are missing. The 19 misnamed entries are titles the DAT has renamed (e.g. `Asteroids (USA)`, held as
-  `Asteroids (USA) (Atari Anthology)`). The 41 entries not in the DAT are mostly aftermarket titles it has dropped.
-  The 3 bad entries (`Alpha Beam with Ernie (Europe)`, `Breakout (Europe)`, `Space Invaders (Europe)`) fail every
-  hash under their current names.
-- Full verification checked CRC32, MD5 and SHA-1 for 562 ROMs, plus SHA-256 for 227.
+- The set holds 849 files in 843 inner ZIPs; every file was read and hashed in the full pass. SHA-256 was also
+  checked for the 227 matched-name files whose DAT entry supplies one. Missing games count a misnamed file as
+  covering the DAT game its payload matches.
+- **Misnamed (22):**
+  - 19 are titles the DAT has renamed, e.g. `Asteroids (USA)`, held as `Asteroids (USA) (Atari Anthology)`.
+  - 3 carry a current DAT name but hold another DAT revision's payload: `Alpha Beam with Ernie (Europe)` holds
+    `(Alt)`, `Breakout (Europe)` holds `(Rev 1)`, and `Space Invaders (Europe)` holds `(Alt)`.
+  - An earlier draft of this prototype classified those 3 as bad, because it checked the name before the payload.
+    The Audit must look up the payload first, or it reports a good dump as bad. A name that points at one DAT ROM
+    while its payload matches another is the "conflicting" case #734 lists, and deserves its own status.
+- The 41 entries not in the DAT are mostly aftermarket titles the DAT has dropped.
 - The two passes agree here, but only the second is payload evidence. The pilot must label them differently, as
   #734 requires.
 - **Performance:** the Atari set is too small to say anything about performance. It confirms #734's split: the pilot
@@ -155,14 +173,14 @@ the DAT supplies, in one pass.
 ## 7. Further findings
 
 **The Verified Set does not record its DAT Revision.** The pattern above (renames, dropped titles, changed dumps)
-is what a set built against an older DAT Revision looks like, but nothing records which one. The set is not kept
+is what a Verified Set built against an older DAT Revision looks like, but nothing records which one. It is not kept
 with its DAT either: DATs arrive as a dated Love Pack in a separate folder, and the set's filename
 (`Atari - 2600.zip`) does not match the DAT's system name. Recording "last verified against" for each Verified Set is
 one of the Organizer's core motivations. It falls out of pinning every Audit to a DAT Revision. For existing sets,
 an optional bootstrap step can audit against each DAT Revision available and report the best fit, as a hint, never
 as evidence.
 
-**Storage layout.** 188 of the 195 No-Intro systems are stored as one ZIP per system; the other seven, all digital
+**Storage layout** (outside #781's questions, recorded because it changes slice 1). 188 of the 195 No-Intro systems are stored as one ZIP per system; the other seven, all digital
 sets, are folders. The Atari ZIP holds one ZIP per game (843 of them). That layout:
 
 - cannot be read by igir;
@@ -179,8 +197,8 @@ Revision of its latest Audit".
 
 ## Consequences for the pilot
 
-- Slice 1 (headless in-place Audit) assumes the per-game layout. Restructuring the Atari set first is a prerequisite
-  owned by the Operator.
+- Slice 1 (headless in-place Audit) assumes the per-game layout above.
+- The Audit matches by payload before name, and has a status for a name that conflicts with its payload.
 - Evidence is recorded per ROM, with the algorithms actually checked, because SHA-256 coverage is partial.
 - Multi-file games (the `.wav` title) and `baddump` entries are in the pilot's fixture set.
 - The Selection slice carries a patched, pinned Retool, and it shows clone and metadata coverage drift against the
