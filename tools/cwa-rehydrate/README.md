@@ -26,7 +26,8 @@ whose only file is a PDF takes only a Retail EPUB, because its layout may be the
   left. Rerun it the next day.
 - A failed release search stops the run (`search failed`) without recording the Book, so a rerun tries it again.
   A failed download is recorded by its error type and the next release is tried.
-- It waits while the Ingest Folder holds `--backlog` EPUBs, and spaces downloads `--pace` seconds apart.
+- It waits while the Ingest Folder holds `--backlog` EPUBs, and can space downloads
+  `--pace` seconds apart (none by default: the members' fast-download API needs no pause).
 - Each Book's outcome is appended to the attempts file as it finishes, so a rerun resumes after the last one.
   Results: `retail`, `converted ingested`, `no retail`, `no epub` (no English EPUB release),
   `no hardcover id`, `failed` (every download failed). `available` counts the releases by Format and language.
