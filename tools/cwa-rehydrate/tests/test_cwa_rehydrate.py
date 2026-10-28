@@ -94,14 +94,22 @@ class Shop:
 
     def download(self, rel, dest):
         self.downloaded.append(rel["source_id"])
-        kind, *named = self.files[rel["source_id"]] if isinstance(self.files[rel["source_id"]], tuple) \
-            else (self.files[rel["source_id"]],)
+        spec = self.files[rel["source_id"]]
+        kind, *named = spec if isinstance(spec, tuple) else (spec,)
         if kind == "error":
             raise cr.DownloadError("HTTP 502")
         if kind == "quota":
             raise cr.QuotaError("No downloads left")
         if kind == "truncated":
             raise ValueError("https://aa.example/dyn/api/fast_download.json?key=SECRET")
+        if kind == "latin-1":
+            with zipfile.ZipFile(dest, "w") as z:
+                z.writestr("mimetype", "application/epub+zip")
+                z.writestr("content.opf", "<metadata><dc:title>Project Hail Mary</dc:title>"
+                           "<dc:creator>Andy Weir</dc:creator><dc:description>caf\xe9</dc:description>"
+                           "</metadata>".encode("latin-1"))
+            self.left -= 1
+            return self.left
         epub(dest, converted=kind == "converted", lang="fr" if kind == "french" else "en",
              **dict(zip(("title", "creators"), named)))
         self.left -= 1
@@ -308,6 +316,9 @@ def test_a_download_whose_title_holds_the_books_main_title_is_the_same_book(ours
     ("The Eternal Champion: The Eternal Champion Sequence 1", "The Dragon in the Sword"),
     ("Warlord Chronicles", "Warlord 3 Excalibur"),
     ("Warlord Chronicles", None),
+    ("The Eternal Champion: The Eternal Champion Sequence 1", "The Dragon in the Sword (The Eternal Champion #3)"),
+    ("The Eternal Champion: The Eternal Champion Sequence 1", "The Eternal Champion 3: The Dragon in the Sword"),
+    ("The Eternal Champion: The Eternal Champion Sequence 1", "The Eternal Champion, Book 3: The Dragon in the Sword"),
 ])
 def test_a_download_with_another_or_no_title_is_another_book(ours, theirs):
     assert not cr.same_book({"title": ours, "authors": "A Writer"}, {"title": theirs, "authors": ["A Writer"]})
@@ -327,19 +338,78 @@ def test_the_ingested_copy_carries_the_books_title_authors_and_hardcover_id_and_
     assert "9780593135204" not in opf and "54493401" not in opf
 
 
-@pytest.mark.parametrize("fonts", [False, True])
-def test_an_isbn_package_id_is_replaced_unless_obfuscated_fonts_are_keyed_to_it(tmp_path, fonts):
+def test_an_isbn_package_id_gets_a_fresh_uuid_without_its_scheme(tmp_path):
     f = tmp_path / "a.epub"
     with zipfile.ZipFile(f, "w") as z:
         z.writestr("mimetype", "application/epub+zip")
         z.writestr("content.opf", '<package unique-identifier="pub-id"><metadata><dc:title>X</dc:title>'
                    '<dc:identifier id="pub-id" opf:scheme="ISBN">urn:isbn:9781466862661</dc:identifier>'
-                   '<dc:identifier>urn:uuid:fa75891d-41d9-4bb7-be6f-d1bbafb9dbf9</dc:identifier>'
                    '<dc:identifier>isbn:9781466862661</dc:identifier></metadata></package>')
-        if fonts:
-            z.writestr("META-INF/encryption.xml", "<encryption/>")
     cr.stamp(f, {"title": "X", "authors": "A Writer", "hardcover_id": 7})
     opf = zipfile.ZipFile(f).read("content.opf").decode()
-    assert opf.count("9781466862661") == fonts and ("urn:uuid:fa75891d" in opf) == fonts
-    assert ('opf:scheme="ISBN"' in opf) == fonts
-    assert re.search(r'id="pub-id">urn:uuid:[0-9a-f-]{36}<', opf) or fonts
+    assert "9781466862661" not in opf and 'opf:scheme="ISBN"' not in opf
+    assert re.search(r'id="pub-id">urn:uuid:[0-9a-f-]{36}<', opf)
+
+
+def test_a_copy_that_cannot_be_stamped_is_a_failed_try_and_the_next_release_is_tried(run):
+    shop = Shop({10: [release("a"), release("b")]}, {"a": "latin-1", "b": "retail"})
+    status, [row] = run([cand(1)], shop)
+    assert status == "done" and row["result"] == "retail" and row["ingested"] == "b"
+    assert row["tries"][0]["error"] == "stamp: UnicodeDecodeError"
+    assert list(run.staging.iterdir()) == []
+
+
+def obfuscated_epub(path, algorithm, key_id, uid="urn:isbn:9781466862661", prefix=""):
+    """An EPUB whose font is obfuscated with the given algorithm and identifier, as publishers ship them."""
+    import hashlib
+    font = b"\x00\x01\x00\x00" + bytes(range(256)) * 8
+    if algorithm == "idpf":
+        key, n, uri = hashlib.sha1(key_id.encode()).digest(), 1040, "http://www.idpf.org/2008/embedding"
+    else:
+        key, n, uri = bytes.fromhex(key_id.split(":")[-1].replace("-", "")), 1024, "http://ns.adobe.com/pdf/enc#RC"
+    mangled = bytes(b ^ key[i % len(key)] for i, b in enumerate(font[:n])) + font[n:]
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr("mimetype", "application/epub+zip")
+        z.writestr("META-INF/encryption.xml", f'<encryption><EncryptedData><EncryptionMethod Algorithm="{uri}"/>'
+                   '<CipherData><CipherReference URI="OEBPS/f.otf"/></CipherData></EncryptedData></encryption>')
+        z.writestr("OEBPS/content.opf", f"<{prefix}package unique-identifier='pub-id'><{prefix}metadata>"
+                   f'<dc:title id="t">X</dc:title><meta refines="#t" property="title-type">main</meta>'
+                   f'<dc:identifier id="pub-id" opf:scheme="ISBN">{uid}</dc:identifier>'
+                   '<dc:identifier>urn:uuid:fa75891d-41d9-4bb7-be6f-d1bbafb9dbf9</dc:identifier>'
+                   f"</{prefix}metadata></{prefix}package>")
+        z.writestr("OEBPS/f.otf", mangled)
+    return font
+
+
+@pytest.mark.parametrize("algorithm, key_id", [("idpf", "urn:isbn:9781466862661"),
+                                                ("adobe", "urn:uuid:fa75891d-41d9-4bb7-be6f-d1bbafb9dbf9")])
+def test_obfuscated_fonts_are_restored_so_the_isbn_package_id_can_go(tmp_path, algorithm, key_id):
+    f = tmp_path / "a.epub"
+    font = obfuscated_epub(f, algorithm, key_id, prefix="opf:")
+    cr.stamp(f, {"title": "X", "authors": "A Writer", "hardcover_id": 7})
+    z = zipfile.ZipFile(f)
+    opf = z.read("OEBPS/content.opf").decode()
+    assert z.read("OEBPS/f.otf") == font and "META-INF/encryption.xml" not in z.namelist()
+    assert "9781466862661" not in opf and "fa75891d" not in opf and 'refines="#t"' not in opf
+    assert re.search(r"id=\"pub-id\">urn:uuid:[0-9a-f-]{36}<", opf)
+
+
+def test_fonts_that_no_identifier_unlocks_keep_the_package_id(tmp_path):
+    f = tmp_path / "a.epub"
+    obfuscated_epub(f, "idpf", "some other id")
+    cr.stamp(f, {"title": "X", "authors": "A Writer", "hardcover_id": 7})
+    z = zipfile.ZipFile(f)
+    assert "META-INF/encryption.xml" in z.namelist() and "9781466862661" in z.read("OEBPS/content.opf").decode()
+
+
+def test_fonts_listed_but_missing_from_the_zip_need_no_restoring(tmp_path):
+    f = tmp_path / "a.epub"
+    obfuscated_epub(f, "idpf", "urn:isbn:9781466862661")
+    with zipfile.ZipFile(f) as z:
+        kept = {n: z.read(n) for n in z.namelist() if n != "OEBPS/f.otf"}
+    with zipfile.ZipFile(f, "w") as z:
+        for n, data in kept.items():
+            z.writestr(n, data)
+    cr.stamp(f, {"title": "X", "authors": "A Writer", "hardcover_id": 7})
+    z = zipfile.ZipFile(f)
+    assert "META-INF/encryption.xml" not in z.namelist() and "9781466862661" not in z.read("OEBPS/content.opf").decode()
