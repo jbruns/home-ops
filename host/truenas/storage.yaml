@@ -69,8 +69,9 @@ datasets:
     purpose: The Operator's own files (keys, console firmware and NAND images, papers); only the Operator can read it. The nightly Backup carries it offsite (tn/ops/private-files).
     permissions: 0700 operator:operator
   andromeda/retronas:
-    purpose: Software for retro PCs, relayed to SMB1 clients by another host; reworked by #730.
-    permissions: 0775 retronas:retronas
+    purpose: Software for retro PCs, relayed to SMB1 clients by another host.
+    quota: 2000 GiB  # caps what a compromised relay can write
+    permissions: 2770 retronas:retronas, default ACL group rwx; the Operator writes as a group member, the relay as retronas
   andromeda/software:
     purpose: Installers, OS images and deployment media.
     permissions: 0775 operator:software
