@@ -14,9 +14,9 @@ smb:
 nfs:
   purpose: The retronas relay's mount, and (until #731) client access to the ROM trees.
   bindip: [{address: host-v4}]
-  protocols: [NFSV3, NFSV4]
+  protocols: [NFSV3, NFSV4]  # NFSV4 only once #731 removes the ROM tree exports; the relay mounts with NFSv4
   servers: 32
-  allow_nonroot: true  # the `insecure` export option; narrowed by #730
+  allow_nonroot: false  # no `insecure`: clients must use a reserved source port, as the relay's kernel client does
   userd_manage_gids: false
 
 smb_shares:
@@ -44,9 +44,9 @@ smb_shares:
     share_acl: [eisy]  # no other login can open it
     audit: {watch_list: [eisy]}  # TrueNAS needs a list; the device is the only login that can open it
   retronas:
-    purpose: The Operator adds retro PC software; the retronas user's access is removed by #730.
+    purpose: The Operator adds retro PC software through their own login, a member of group retronas.
     path: /mnt/andromeda/retronas
-    share_acl: [deny devices, everyone]  # no device login can open it
+    share_acl: [operator]  # the relay uses NFS, so no other login needs it
   roms:
     purpose: Raw ROM copies; reorganized into the Games Library by #731.
     path: /mnt/andromeda/roms
@@ -75,10 +75,10 @@ smb_shares:
 
 nfs_exports:
   retronas:
-    purpose: The retronas relay re-exports this to SMB1 clients.
+    purpose: The retronas relay mounts this (NFSv4, read-write) and re-serves it to the retro network; no other host can mount it.
     path: /mnt/andromeda/retronas
     hosts: [{address: retronas-relay}]
-    maproot: retrobox:retrobox  # moves to retronas by #730
+    mapall: retronas:retronas  # every user on the relay, root included, writes as retronas
   emulation:
     purpose: Gaming appliances that can't use SMB; open to any host, removed by #731.
     path: /mnt/andromeda/emulation

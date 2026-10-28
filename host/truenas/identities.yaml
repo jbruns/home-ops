@@ -55,7 +55,7 @@ users:
     shell: /usr/sbin/nologin
     smb: true
   retronas:
-    purpose: Owns the retronas dataset; the relay's NFS writes map to it from #730.
+    purpose: Owns the retronas dataset; every NFS write from the relay maps to it. The relay's own retronas user has the same uid and gid, so its chowns work.
     uid: 3256
     group: retronas
     groups: []
