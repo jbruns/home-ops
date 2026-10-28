@@ -134,9 +134,12 @@ services:
           # One core, so a batch of embeds never crowds CWA or the Host.
           cpus: "1"
     read_only: true
-    # calibredb's settings, and each write's temporary copy of the Book's metadata and cover.
+    # /tmp: calibredb's settings, and each write's temporary copy of the Book's metadata and cover.
+    # /cwa-book-ingest: a VOLUME of the CWA base image the gate never uses; tmpfs rather than an
+    # anonymous volume (Baseline item: anonymous-volumes).
     tmpfs:
       - /tmp:size=256m
+      - /cwa-book-ingest:size=1m,mode=0555
     depends_on:
       calibre-web-automated:
         condition: service_healthy
@@ -164,9 +167,9 @@ services:
           create_host_path: false
       # The mark: the highest Book id checked so far.
       - cwa-ingest-gate_state:/state
-      # The controlled tag list and its synonyms, and author-name overrides.
-      - ./cwa-ingest-gate/tags.json:/config/tags.json:ro
-      - ./cwa-ingest-gate/author-overrides.json:/config/author-overrides.json:ro
+      # tags.json (the controlled tag list and its synonyms) and author-overrides.json, over the base
+      # image's /config VOLUME.
+      - ./cwa-ingest-gate:/config:ro
     networks:
       - default
       - metrics

@@ -330,9 +330,11 @@ groups:
   - name: books
     rules:
       # The gate runs every 5 minutes; a run fails as a whole only when Hardcover (e.g. a revoked token),
-      # the Library or the tag list can't be read. One Book failing does not fail the run.
+      # the Library or the tag list can't be read. One Book failing does not fail the run. The gauge is 0
+      # until the first run since a start finishes, so `for` lets a restart's first run take its time.
       - alert: BooksIngestGateStalled
-        expr: time() - cwa_ingest_gate_last_success_timestamp_seconds > 3600
+        expr: time() - cwa_ingest_gate_last_success_timestamp_seconds > 900
+        for: 45m
         labels:
           tier: warning
         annotations:
