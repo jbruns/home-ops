@@ -11,3 +11,5 @@ Every Component is tested, test-first for new behaviour. A Contract Test runs it
 - **Copy the code into each repo**: rejected; fixes diverge.
 
 Extended to shared Repo Tooling by [ADR 0012](0012-shared-repo-tooling.md).
+
+Amended for Owned Applications by [ADR 0018](0018-owned-applications-live-in-their-own-repos.md).

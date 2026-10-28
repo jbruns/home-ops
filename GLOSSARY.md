@@ -58,11 +58,11 @@ A Service that fetches media and is responsible for each file until an Organizer
 _Avoid_: Download client (when meaning the role), grabber
 
 **Organizer**:
-A Service that takes over a Downloader's finished file, directly or through an Ingest Folder, moving it (or copying it while seeding must continue) into its own Library, and is responsible for it from then on (Sonarr for TV, Radarr for Movies, Shelfmark for Audiobooks, Calibre-Web-Automated for Books). It cannot change any other Library. The Operator is the Organizer of a Library that no Service organizes, curating it by hand (e.g. Games, Rarities).
+A Service that takes over a Downloader's finished file, directly or through an Ingest Folder, moving it (or copying it while seeding must continue) into its own Library, or that publishes a Selection from a Verified Set into it, and is responsible for it from then on (Sonarr for TV, Radarr for Movies, Shelfmark for Audiobooks, Calibre-Web-Automated for Books). It cannot change any other Library. The Operator is the Organizer of a Library, or of the part of one, that no Service organizes, curating it by hand (e.g. Rarities, or the Games folders no Service manages).
 _Avoid_: arr, *arr, manager
 
 **Verified Set**:
-A raw collection that can be audited against its published DAT (e.g. Redump, No-Intro, MAME), kept with that DAT; the source from which the Operator curates the Games Library.
+A raw collection that can be audited against its published DAT (e.g. Redump, No-Intro, MAME), kept with that DAT; the source from which the Games Library is curated. It changes only through an approved repair Change Plan.
 _Avoid_: Archive, romset, dump folder
 
 **DAT Revision**:
@@ -126,6 +126,10 @@ _Avoid_: Scripts, helpers
 **Retirement Condition**:
 The stated upstream or community capability whose arrival makes a Custom Component unnecessary.
 _Avoid_: Sunset, deprecation note
+
+**Owned Application**:
+An application we build and intend to maintain as a product, in its own repo, shipped and pinned like a Custom Component but without a Retirement Condition (e.g. Fuzzbin, the Games Organizer).
+_Avoid_: Custom Component (when meaning this), app
 
 **Contract Test**:
 A check that a Custom Component still works against the version of each upstream it depends on that the repo currently pins.
