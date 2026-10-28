@@ -317,7 +317,7 @@ def main(argv=None):
     f.add_argument("--reserve", type=int, default=100, help="fast downloads to leave for readers' requests")
     f.add_argument("--limit", type=int, help="Books to try in this run")
     f.add_argument("--backlog", type=int, default=5, help="wait while the Ingest Folder holds this many EPUBs")
-    f.add_argument("--pace", type=float, default=10, help="seconds between downloads")
+    f.add_argument("--pace", type=float, default=0, help="seconds between downloads")
     r = sub.add_parser("report")
     r.add_argument("before")
     r.add_argument("after")

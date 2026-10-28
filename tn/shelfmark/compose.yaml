@@ -63,6 +63,11 @@ services:
       - HARDLINK_TORRENTS=false
       # Requester sources: Anna's Archive direct download (donator key) and Prowlarr
       - DIRECT_DOWNLOAD_ENABLED=true
+      # One mirror, not auto: auto moves to the next mirror on any slow search page, and each move costs a ~25s
+      # protection-challenge bypass, because every mirror sits behind the same challenge and the clearance is per
+      # domain. Pinned, a slow page is retried (MAX_RETRY) on the mirror that holds the clearance. If this mirror
+      # goes down, searches fail until it's changed here.
+      - AA_BASE_URL=https://annas-archive.gl
       - PROWLARR_ENABLED=true
       - PROWLARR_URL=https://plr.${DOMAIN}
       # Downloaders: their own Stacks' hostnames; categories keep Shelfmark's downloads apart from the *arrs'.
