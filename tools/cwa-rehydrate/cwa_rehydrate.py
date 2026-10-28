@@ -30,8 +30,6 @@ from pathlib import Path
 
 KINDS = ("no epub", "broken epub", "converted epub")
 COUNTS = ("books", "retail epub", "converted epub", "broken epub", "no epub", "no hardcover id")
-# Results whose Book still lacks a Retail EPUB: the Operator fetches these by hand
-FALLBACK = ("no retail", "converted ingested", "no epub", "no hardcover id", "failed")
 USER_AGENT = {"User-Agent": "cwa-rehydrate"}
 
 
@@ -61,7 +59,7 @@ def inspect_epub(path):
             lang = re.search(r"<dc:language[^>]*>\s*([^<\s]+)", opf_text)
             return {"retail": not markers, "markers": markers, "lang": lang.group(1).casefold() if lang else None,
                     "broken": False}
-    except (zipfile.BadZipFile, OSError, KeyError):
+    except Exception:  # a download is untrusted: any failure to read it means it's broken
         return {"retail": False, "markers": ["unreadable"], "lang": None, "broken": True}
 
 
@@ -121,10 +119,11 @@ def safe_name(s):
 
 def fetch(cands, *, search, download, ingest, staging, attempts_path, tries=3, reserve=100, limit=None,
           backlog=5, pace=0, wait=time.sleep):
-    """Try each planned Book not yet in attempts_path; return "done", "limit" or "quota".
+    """Try each planned Book not yet in attempts_path; return "done", "limit", "quota" or "search failed".
 
     search(hardcover_id) -> Shelfmark releases; download(release, dest) -> fast downloads left (or None).
-    A Book starts only when all its tries fit above the reserve of fast downloads.
+    Once a download has reported the fast downloads left, a Book starts only when all its tries fit above the
+    reserve. A failed search stops the run and leaves the Book for the next one.
     """
     ingest, staging = Path(ingest), Path(staging)
     done, left, started = done_ids(attempts_path), None, 0
@@ -141,7 +140,11 @@ def fetch(cands, *, search, download, ingest, staging, attempts_path, tries=3, r
             row["result"] = "no hardcover id"
             record(attempts_path, row)
             continue
-        releases = [r for r in search(c["hardcover_id"]) if r.get("source") == "direct_download"]
+        try:
+            found = search(c["hardcover_id"])
+        except Exception:
+            return "search failed"
+        releases = [r for r in found if r.get("source") == "direct_download"]
         row["available"] = dict(collections.Counter(f"{r.get('format')} {r.get('language')}" for r in releases))
         epubs = [r for r in releases if r.get("format") == "epub" and r.get("language") == "en"]
         if not epubs:
@@ -160,9 +163,10 @@ def fetch(cands, *, search, download, ingest, staging, attempts_path, tries=3, r
                 except QuotaError:
                     dest.unlink(missing_ok=True)
                     raise
-                except DownloadError as e:
+                except Exception as e:  # the type only: a message may hold the URL, and the URL holds the key
                     dest.unlink(missing_ok=True)
-                    row["tries"].append({"md5": md5, "error": str(e)})
+                    row["tries"].append({"md5": md5, "error": str(e) if isinstance(e, DownloadError)
+                                         else type(e).__name__})
                     continue
                 info = inspect_epub(dest)
                 row["tries"].append({"md5": md5, "retail": info["retail"], "markers": info["markers"],
@@ -172,7 +176,8 @@ def fetch(cands, *, search, download, ingest, staging, attempts_path, tries=3, r
                     put_in_ingest(dest, ingest, c["title"], md5, backlog, wait)
                     row["result"], row["ingested"] = "retail", md5
                     break
-                if usable and fallback is None and c["kind"] != "converted epub":
+                # Any EPUB beats no EPUB, except over a PDF, whose layout may be the content
+                if usable and fallback is None and c["kind"] != "converted epub" and c.get("formats") != ["PDF"]:
                     fallback = staging / f"{md5}.keep"
                     dest.rename(fallback)
                     row["fallback"] = md5
@@ -270,19 +275,26 @@ def aa_download(key):
 
 # --- report ------------------------------------------------------------------------------------
 
-def report(before, after, rows):
-    """The availability report as Markdown, and the Books to fetch by hand."""
+def report(before, after, rows, still):
+    """The availability report as Markdown, and the Books the after plan still lacks a Retail EPUB for."""
+    tried = {r["id"]: r for r in rows}
+    fallback = []
+    for c in still:
+        r = tried.get(c["id"], {})
+        result = r.get("result", "not tried")
+        fallback.append({"id": c["id"], "title": c["title"], "authors": c["authors"], "kind": c["kind"],
+                         "result": "retail copy not merged" if result == "retail" else result,
+                         "available": ", ".join(f"{k} {n}" for k, n in r.get("available", {}).items())})
     out = ["| Count | Before | After | Change |", "|---|---|---|---|"]
     out += [f"| {k} | {before[k]} | {after[k]} | {after[k] - before[k]:+d} |" for k in COUNTS]
+    results = collections.Counter(r["result"] for r in rows)
+    results.update(f["result"] for f in fallback if f["result"] in ("not tried", "retail copy not merged"))
     out += ["", "| Result | Books |", "|---|---|"]
-    out += [f"| {k} | {n} |" for k, n in collections.Counter(r["result"] for r in rows).most_common()]
-    no_epub = collections.Counter(k for r in rows if r["result"] == "no epub" for k in r.get("available", {}))
-    out += ["", "Books with no English EPUB on Anna's Archive, by the Formats it had:", "",
+    out += [f"| {k} | {n} |" for k, n in results.most_common()]
+    formats = collections.Counter(k for c in still for k in tried.get(c["id"], {}).get("available", {}))
+    out += ["", "Books still without a Retail EPUB, by the Formats Anna's Archive had (English releases only):", "",
             "| Format | Books |", "|---|---|"]
-    out += [f"| {k} | {n} |" for k, n in no_epub.most_common()] or ["| none | 0 |"]
-    fallback = [{"id": r["id"], "title": r["title"], "authors": r["authors"], "kind": r["kind"],
-                 "result": r["result"], "available": ", ".join(f"{k} {n}" for k, n in r.get("available", {}).items())}
-                for r in rows if r["result"] in FALLBACK]
+    out += [f"| {k} | {n} |" for k, n in formats.most_common()] or ["| none | 0 |"]
     return "\n".join(out) + "\n", fallback
 
 
@@ -331,9 +343,9 @@ def main(argv=None):
         print(json.dumps({"status": status, "done": len(done_ids(a.attempts)), "planned": len(cands)}))
     else:
         before, _ = read_plan(a.before)
-        after, _ = read_plan(a.after)
+        after, still = read_plan(a.after)
         rows = [json.loads(x) for x in Path(a.attempts).read_text().splitlines() if x.strip()]
-        md, fallback = report(before, after, rows)
+        md, fallback = report(before, after, rows, still)
         sys.stdout.write(md)
         with open(a.fallback, "w", newline="") as fh:
             w = csv.DictWriter(fh, fieldnames=["id", "title", "authors", "kind", "result", "available"])

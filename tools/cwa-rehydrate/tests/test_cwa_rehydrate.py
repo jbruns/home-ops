@@ -79,6 +79,8 @@ class Shop:
 
     def search(self, hardcover_id):
         self.searched.append(hardcover_id)
+        if self.releases.get(hardcover_id) == "down":
+            raise TimeoutError("timed out")
         return self.releases.get(hardcover_id, [])
 
     def download(self, rel, dest):
@@ -88,6 +90,8 @@ class Shop:
             raise cr.DownloadError("HTTP 502")
         if kind == "quota":
             raise cr.QuotaError("No downloads left")
+        if kind == "truncated":
+            raise ValueError("https://aa.example/dyn/api/fast_download.json?key=SECRET")
         epub(dest, converted=kind == "converted", lang="fr" if kind == "french" else "en")
         self.left -= 1
         return self.left
@@ -110,8 +114,9 @@ def run(tmp_path):
     return go
 
 
-def cand(i, kind="converted epub", hc=10, title="Project Hail Mary"):
-    return {"id": i, "title": title, "authors": "Andy Weir", "kind": kind, "hardcover_id": hc}
+def cand(i, kind="converted epub", hc=10, title="Project Hail Mary", formats=("EPUB",)):
+    return {"id": i, "title": title, "authors": "Andy Weir", "kind": kind, "hardcover_id": hc,
+            "formats": list(formats)}
 
 
 def test_plan_lists_books_without_a_retail_epub_no_epub_first(lib):
@@ -159,6 +164,25 @@ def test_a_book_with_no_epub_takes_a_converted_copy_when_no_retail_one_is_found(
     assert row["result"] == "converted ingested" and row["ingested"] == "b"
     assert row["tries"][0] == {"md5": "a", "error": "HTTP 502"}
     assert [f.name for f in run.ingest.iterdir()] == ["Project Hail Mary - b.epub"]
+
+
+def test_a_pdf_only_book_takes_only_a_retail_epub_because_its_layout_may_matter(run):
+    shop = Shop({10: [release("a")]}, {"a": "converted"})
+    _, [row] = run([cand(1, kind="no epub", formats=("PDF",))], shop)
+    assert row["result"] == "no retail" and list(run.ingest.iterdir()) == []
+
+
+def test_an_unexpected_download_error_is_recorded_by_type_only_and_the_next_release_tried(run):
+    shop = Shop({10: [release("a"), release("b")]}, {"a": "truncated", "b": "retail"})
+    _, [row] = run([cand(1)], shop)
+    assert row["tries"][0] == {"md5": "a", "error": "ValueError"} and row["result"] == "retail"
+    assert "SECRET" not in json.dumps(row)
+
+
+def test_a_failed_search_stops_the_run_without_recording_the_book(run):
+    shop = Shop({10: [release("a")], 11: "down"}, {"a": "retail"})
+    status, rows = run([cand(1), cand(2, hc=11), cand(3)], shop)
+    assert status == "search failed" and [r["id"] for r in rows] == [1]
 
 
 def test_a_non_english_download_is_not_ingested(run):
@@ -217,7 +241,7 @@ def test_waits_while_the_ingest_folder_holds_a_backlog(tmp_path):
     assert len(waits) == 1 and (ingest / "Project Hail Mary - a.epub").exists()
 
 
-def test_report_compares_retail_counts_and_lists_books_to_fetch_by_hand():
+def test_report_lists_every_book_the_after_plan_still_lacks_a_retail_epub_for():
     before = {"books": 10, "retail epub": 2, "converted epub": 6, "broken epub": 1, "no epub": 1,
               "no hardcover id": 0}
     after = dict(before, **{"retail epub": 3, "converted epub": 5})
@@ -226,11 +250,16 @@ def test_report_compares_retail_counts_and_lists_books_to_fetch_by_hand():
         dict(cand(2, title="Dune"), result="no retail", available={"epub en": 3, "pdf en": 1}),
         dict(cand(3, kind="no epub", title="Atlas"), result="no epub", available={"pdf en": 2}),
         dict(cand(4, title="Ghost"), result="no hardcover id"),
+        dict(cand(5, title="Unmerged"), result="retail", ingested="e", available={"epub en": 1}),
     ]
-    md, fallback = cr.report(before, after, rows)
+    still = [cand(2, title="Dune"), cand(3, kind="no epub", title="Atlas"), cand(4, title="Ghost"),
+             cand(5, title="Unmerged"), cand(6, title="Untried")]
+    md, fallback = cr.report(before, after, rows, still)
     assert "| retail epub | 2 | 3 | +1 |" in md
-    assert "| retail | 1 |" in md and "| no epub | 1 |" in md
-    assert "| pdf en | 1 |" in md  # Books where Anna's Archive had no EPUB, by the Formats it had
-    assert [r["id"] for r in fallback] == [2, 3, 4]
+    assert "| retail | 2 |" in md and "| no epub | 1 |" in md and "| not tried | 1 |" in md
+    assert "| retail copy not merged | 1 |" in md
+    assert "| pdf en | 2 |" in md and "| epub en | 2 |" in md  # Formats found for Books still without one
+    assert [(r["id"], r["result"]) for r in fallback] == [
+        (2, "no retail"), (3, "no epub"), (4, "no hardcover id"), (5, "retail copy not merged"), (6, "not tried")]
     assert fallback[1] == {"id": 3, "title": "Atlas", "authors": "Andy Weir", "kind": "no epub",
                            "result": "no epub", "available": "pdf en 2"}
