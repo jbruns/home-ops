@@ -12,9 +12,9 @@ smb:
   admin_group: smbadmins
 
 nfs:
-  purpose: The retronas relay's mount, and (until #731) client access to the ROM trees.
+  purpose: The retronas relay's mount.
   bindip: [{address: host-v4}]
-  protocols: [NFSV3, NFSV4]  # NFSV4 only once #731 removes the ROM tree exports; the relay mounts with NFSv4
+  protocols: [NFSV4]
   servers: 32
   allow_nonroot: false  # no `insecure`: clients must use a reserved source port, as the relay's kernel client does
   userd_manage_gids: false
@@ -47,15 +47,6 @@ smb_shares:
     purpose: The Operator adds retro PC software through their own login, a member of group retronas.
     path: /mnt/andromeda/retronas
     share_acl: [operator]  # the relay uses NFS, so no other login needs it
-  roms:
-    purpose: Raw ROM copies; reorganized into the Games Library by #731.
-    path: /mnt/andromeda/roms
-    share_acl: [deny devices, everyone]  # no device login can open it
-  emulation:
-    purpose: The curated ES-DE tree for gaming appliances; moved into the Games Library by #731.
-    path: /mnt/andromeda/emulation
-    share_acl: [deny devices, everyone]  # no device login can open it
-    share_purpose: MULTIPROTOCOL_SHARE
   games:
     purpose: The Operator curates the Games Library; gaming appliances read library/ and switch/ as gaming.
     path: /mnt/andromeda/games
@@ -83,11 +74,3 @@ nfs_exports:
     path: /mnt/andromeda/retronas
     hosts: [{address: retronas-relay}]
     mapall: retronas:retronas  # every user on the relay, root included, writes as retronas
-  emulation:
-    purpose: Gaming appliances that can't use SMB; open to any host, removed by #731.
-    path: /mnt/andromeda/emulation
-    hosts: []
-  roms:
-    purpose: Gaming appliances that can't use SMB; open to any host, removed by #731.
-    path: /mnt/andromeda/roms
-    hosts: []

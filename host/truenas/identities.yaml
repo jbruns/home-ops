@@ -6,7 +6,7 @@ users:
     purpose: The Operator's own login, for SMB, SSH and the UI.
     uid: 1000
     group: operator
-    groups: [smbadmins, media, backups, roms, software, retrobox, retronas, builtin_administrators, builtin_users]
+    groups: [smbadmins, media, backups, software, retronas, builtin_administrators, builtin_users]
     home: /mnt/andromeda/home/<operator>
     shell: /usr/bin/zsh
     smb: true
@@ -54,14 +54,6 @@ users:
     home: /var/empty
     shell: /usr/sbin/nologin
     smb: true
-  retrobox:
-    purpose: A gaming appliance reads ROMs over SMB; replaced by gaming in #731.
-    uid: 1002
-    group: retrobox
-    groups: [roms, builtin_users]
-    home: /var/empty
-    shell: /usr/sbin/nologin
-    smb: true
   retronas:
     purpose: Owns the retronas dataset; every NFS write from the relay maps to it. The relay's own retronas user has the same uid and gid, so its chowns work.
     uid: 3256
@@ -84,10 +76,6 @@ groups:
     purpose: Group of the Device Backup datasets, so the Operator can read every device's backups; never a device's login.
     gid: 1003
     members: [operator]
-  roms:
-    purpose: Group of the ROM trees; replaced by the Games Library's groups in #731.
-    gid: 1004
-    members: [operator, retrobox]
   software:
     purpose: Group of the software dataset.
     gid: 1005
@@ -95,10 +83,6 @@ groups:
   gaming:
     purpose: Reads the Games Library's library/ and switch/; the gaming login, and ownfoil through group_add.
     gid: 1014
-  retrobox:
-    purpose: retrobox's primary group; removed with the user in #731.
-    gid: 1006
-    members: [operator, retrobox]
   retronas:
     purpose: Group of the retronas dataset.
     gid: 3000
