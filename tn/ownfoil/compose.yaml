@@ -11,6 +11,9 @@ services:
     # run.sh only adds a user, chowns /app and sudo's to PUID; start the app as that user instead,
     # so no caps. /app/data (TitleDB, rebuilt at start) was chowned by run.sh; it is a tmpfs now.
     user: ${OWNFOIL_UID}:${MEDIA_SHARED_GID}
+    # Reads the Games Library's switch/ through group gaming (host/truenas/identities.yaml).
+    group_add:
+      - ${GAMING_GID}
     entrypoint: ["python", "/app/run.py"]
     tmpfs:
       - /app/data:uid=${OWNFOIL_UID},gid=${MEDIA_SHARED_GID},mode=0755,size=384m
@@ -59,8 +62,20 @@ services:
 
       traefik.http.services.ownfoil.loadbalancer.server.port: 8465
     volumes:
-      - ${ZFS_POOL_ROOT_HDD}/roms/hinox:/games
-      - ${ZFS_POOL_ROOT_HDD}/roms/hinox/static/NX-OFW1901-Atmos191-060925.zip:/app/static/NX-OFW1901-Atmos191-060925.zip:ro
+      # Media Server (ADR 0009): reads the Switch titles read-only at the same path as before (no
+      # rescan); its organizer, dedup, compression and update deletion are off, so it never writes there.
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/games/switch
+        target: /games
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/games/switch/static/NX-OFW1901-Atmos191-060925.zip
+        target: /app/static/NX-OFW1901-Atmos191-060925.zip
+        read_only: true
+        bind:
+          create_host_path: false
       - ownfoil_config:/app/config
     networks:
       - default

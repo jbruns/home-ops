@@ -47,7 +47,7 @@ datasets:
     permissions: 2750 harpi-nodered:backups, default ACL group backups r-x
   andromeda/backups/eisy:
     purpose: eisy backups, saved by hand from its Admin Console (it has no scheduler).
-    quota: 1 GiB
+    quota: 5 GiB
     permissions: 2750 eisy:backups, default ACL group backups r-x
   andromeda/docker-backups:
     purpose: none; the retired local restic repository, destroyed by #705.
@@ -57,7 +57,10 @@ datasets:
     acltype: NFSV4
     aclmode: PASSTHROUGH
     permissions: 0775 operator:roms, NFSv4 ACL (owner@ full, group@ modify, everyone@ read)
-  andromeda/home:
+  andromeda/games:
+    purpose: The Games Library. verified/ holds Verified Sets (Operator only); library/ is the curated ES-DE tree and switch/ the Switch titles, both read by group gaming.
+    recordsize: 1M  # files block-cloned in from roms and emulation keep their 128K records
+    permissions: 2750 operator:gaming; verified/ 0700 operator:operator; library/ and switch/ 2750 operator:gaming, default ACL group r-x
     purpose: Home directories of the two accounts that log in (the Operator and the agent); not shared. Data lives in andromeda/private.
     aclmode: DISCARD
     permissions: 0755 root:root; each home 0700 owner:primary group
@@ -115,6 +118,14 @@ periodic_snapshot_tasks:
     schedule: 00:30 daily
     lifetime: 14 DAY
     naming_schema: emulation-%Y-%m-%d_%H-%M
+    allow_empty: true
+  games:
+    purpose: Restores files deleted or encrypted over SMB; listed as Previous Versions.
+    dataset: andromeda/games
+    recursive: false
+    schedule: 00:30 daily
+    lifetime: 14 DAY
+    naming_schema: games-%Y-%m-%d_%H-%M
     allow_empty: true
   private:
     purpose: Restores files deleted or encrypted over SMB; listed as Previous Versions.

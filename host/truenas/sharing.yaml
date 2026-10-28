@@ -27,7 +27,7 @@ smb_shares:
   software:
     purpose: Installers and OS images for the Operator's computers.
     path: /mnt/andromeda/software
-    share_acl: [deny devices, everyone]  # no device login can open it
+    share_acl: [operator]  # no other login can open it
   hassio-backups:
     purpose: Home Assistant writes its Device Backups here.
     path: /mnt/andromeda/backups/hassio
@@ -56,6 +56,10 @@ smb_shares:
     path: /mnt/andromeda/emulation
     share_acl: [deny devices, everyone]  # no device login can open it
     share_purpose: MULTIPROTOCOL_SHARE
+  games:
+    purpose: The Operator curates the Games Library; gaming appliances read library/ and switch/ as gaming.
+    path: /mnt/andromeda/games
+    share_acl: [operator, gaming read]  # gaming gets READ; file permissions keep it out of verified/
   tv-ingest:
     purpose: Ingest Folder for TV episodes added by hand.
     path: /mnt/andromeda/media/tv/ingest
