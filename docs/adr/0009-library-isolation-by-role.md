@@ -6,8 +6,10 @@ Each Library gets its own tree, `/media/<library>/{library,usenet,torrents,inges
 
 Shelfmark is the Requester and Organizer for Audiobooks: it takes over its own finished downloads and places them in the Audiobooks Library, one folder per book. It cannot adopt downloads it did not start, so it is the only Requester for Audiobooks. Books is a two-Service chain: Shelfmark, as Requester, passes the Downloader's finished file into Calibre-Web-Automated's Ingest Folder, and Calibre-Web-Automated, as the Books Organizer, moves it into the Books Library. CWA consumes the Ingest Folder, so Shelfmark never hardlinks into it, and Shelfmark never mounts the Books Library.
 
+Games is the exception to the `/media/<library>` layout: it has its own dataset, `andromeda/games`, so daily Periodic Snapshots can protect the Operator's curation without snapshotting the much higher-churn media dataset (#731). `verified/` holds Verified Sets and is readable only by the Operator; `library/` holds the curated ES-DE tree and `switch/` holds Switch titles. Clients read the playable trees over SMB3, never NFS, through a read-only client login. ownfoil mounts only `switch/`, read-only, as a Media Server. Libraries and Verified Sets belong to the Offline Copy scope (#732), not the nightly Backup.
+
 ## Considered Options
 
 - **One `/media` mount for every Organizer** (the TRaSH Guides layout): rejected; it gives every Organizer write access to every Library.
 - **Separate bind mounts per folder**: rejected; every import becomes a full copy, and seeding hardlinks break.
-- **Separate datasets per Library**: not needed; one tree per Library on the existing dataset gives the same isolation with renames only.
+- **Separate datasets for every Library**: not needed for isolation; one tree per Library on the existing media dataset gives the same isolation with renames only. Games uses a separate dataset for its different Periodic Snapshot policy.

@@ -35,7 +35,7 @@ disks:
 
 datasets:
   andromeda:
-    purpose: Pool root; sets the defaults its children inherit. Also holds the roms directory, moved by #731.
+    purpose: Pool root; sets the defaults its children inherit.
     compression: LZ4
     atime: false
     acltype: POSIX
@@ -59,19 +59,6 @@ datasets:
   andromeda/docker-backups:
     purpose: none; the retired local restic repository, destroyed by #705.
     permissions: {mode: '0770', owner: root, group: root}
-  andromeda/emulation:
-    purpose: The curated, ready-to-play ES-DE tree; moved into the Games Library by #731.
-    acltype: NFSV4
-    aclmode: PASSTHROUGH
-    permissions:
-      mode: '0775'
-      owner: operator
-      group: roms
-      nfs4_acl:  # as the Host has it; unchanged since early SCALE, and gone with the dataset in #731
-        - owner@:ALLOW:FULL_CONTROL:DIRECTORY_INHERIT,FILE_INHERIT,INHERIT_ONLY
-        - owner@:ALLOW:APPEND_DATA,DELETE_CHILD,EXECUTE,READ_ACL,READ_ATTRIBUTES,READ_DATA,READ_NAMED_ATTRS,SYNCHRONIZE,WRITE_ACL,WRITE_ATTRIBUTES,WRITE_DATA,WRITE_NAMED_ATTRS,WRITE_OWNER:NOINHERIT
-        - group@:ALLOW:APPEND_DATA,DELETE_CHILD,EXECUTE,READ_ACL,READ_ATTRIBUTES,READ_DATA,READ_NAMED_ATTRS,SYNCHRONIZE,WRITE_DATA:NOINHERIT
-        - everyone@:ALLOW:EXECUTE,READ_ACL,READ_ATTRIBUTES,READ_DATA,READ_NAMED_ATTRS,SYNCHRONIZE:NOINHERIT
   andromeda/games:
     purpose: The Games Library. verified/ holds Verified Sets (Operator only); library/ is the curated ES-DE tree and switch/ the Switch titles, both read by group gaming.
     recordsize: 1M  # files block-cloned in from roms and emulation keep their 128K records
@@ -140,14 +127,6 @@ periodic_snapshot_tasks:
     schedule: {minute: '30', hour: '0'}
     lifetime: 14 DAY
     naming_schema: retronas-%Y-%m-%d_%H-%M
-    allow_empty: true
-  emulation:
-    purpose: Restores files deleted or encrypted over SMB or NFS; listed as Previous Versions. Replaced by #731.
-    dataset: andromeda/emulation
-    recursive: false
-    schedule: {minute: '30', hour: '0'}
-    lifetime: 14 DAY
-    naming_schema: emulation-%Y-%m-%d_%H-%M
     allow_empty: true
   games:
     purpose: Restores files deleted or encrypted over SMB; listed as Previous Versions.
