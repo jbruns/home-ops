@@ -1,24 +1,31 @@
 # Storage: pools, datasets, Periodic Snapshot tasks, scrubs and disk power settings. See README.md.
 # Datasets inherit compression, atime, acltype and aclmode from their pool's root dataset unless they list them.
-# `permissions` is the dataset's top directory, as `mode owner:group`, plus any ACL beyond the mode.
+# `permissions` is the dataset's top directory: mode, owner, group, and any ACL beyond the mode, written as getfacl
+# prints it (`acl` for named access entries, `default_acl` for the default ACL; none listed means none exists).
+# `paths` gives the same for directories inside the dataset. Schedules are cron fields; omitted fields are `*`.
 # Datasets carry no user properties. The system dataset is on andromeda, and only its active children exist.
 
 pools:
   andromeda:
     purpose: Bulk storage for media, Games, software and Backups.
-    layout: 3× RAIDZ2 of 8× 20 TB HDD; SLOG mirror of 2× Optane; 2× 20 TB HDD hot spares
+    topology:  # 20 TB HDDs; the log is 2 Optane
+      data: {vdevs: 3, type: RAIDZ2, width: 8}
+      log: {vdevs: 1, type: MIRROR, width: 2}
+      spare: 2
     autotrim: false
-    feature_flags: all enabled
+    # feature flags: all enabled
   luna:
     purpose: Fast storage for the Docker data-root (the Stacks' volumes) and the Host Key.
-    layout: mirror of 2× 3.84 TB NVMe
+    topology:  # 3.84 TB NVMe
+      data: {vdevs: 1, type: MIRROR, width: 2}
     autotrim: true
-    feature_flags: all enabled
+    # feature flags: all enabled
   boot-pool:
     purpose: TrueNAS boot environments.
-    layout: mirror of 2× 128 GB SATA SSD
-    feature_flags: limited by compatibility=grub2, so GRUB can still boot it; never upgrade beyond that set
-    boot_environments: the current release and the previous one only
+    topology:  # 128 GB SATA SSD
+      data: {vdevs: 1, type: MIRROR, width: 2}
+    # feature flags: limited by compatibility=grub2, so GRUB can still boot it; never upgrade beyond that set.
+    # Boot environments: the current release and the previous one only.
 
 disks:
   all:
@@ -33,65 +40,88 @@ datasets:
     atime: false
     acltype: POSIX
     aclmode: DISCARD
-    permissions: 0755 root:root
+    permissions: {mode: '0755', owner: root, group: root}
   andromeda/backups:
     purpose: Parent of one dataset per device that writes Device Backups; not shared itself. The nightly Backup carries each child offsite (tn/ops/device-backups).
-    permissions: 0751 root:backups  # others traverse into their own dataset but can't list this one
+    permissions: {mode: '0751', owner: root, group: backups}  # others traverse into their own dataset but can't list this one
   andromeda/backups/hassio:
     purpose: Home Assistant's scheduled backups; Home Assistant prunes its own.
     quota: 100 GiB
-    permissions: 2750 hassio:backups, default ACL group backups r-x
+    permissions: {mode: '2750', owner: hassio, group: backups, default_acl: [user::rwx, group::r-x, other::---]}
   andromeda/backups/harpi-nodered:
     purpose: The Node-RED Pi's scheduled backups, from a job on the device.
     quota: 5 GiB
-    permissions: 2750 harpi-nodered:backups, default ACL group backups r-x
+    permissions: {mode: '2750', owner: harpi-nodered, group: backups, default_acl: [user::rwx, group::r-x, other::---]}
   andromeda/backups/eisy:
     purpose: eisy backups, saved by hand from its Admin Console (it has no scheduler).
     quota: 5 GiB
-    permissions: 2750 eisy:backups, default ACL group backups r-x
+    permissions: {mode: '2750', owner: eisy, group: backups, default_acl: [user::rwx, group::r-x, other::---]}
   andromeda/docker-backups:
     purpose: none; the retired local restic repository, destroyed by #705.
-    permissions: 0770 root:root
+    permissions: {mode: '0770', owner: root, group: root}
   andromeda/emulation:
     purpose: The curated, ready-to-play ES-DE tree; moved into the Games Library by #731.
     acltype: NFSV4
     aclmode: PASSTHROUGH
-    permissions: 0775 operator:roms, NFSv4 ACL (owner@ full, group@ modify, everyone@ read)
+    permissions:
+      mode: '0775'
+      owner: operator
+      group: roms
+      nfs4_acl:  # as the Host has it; unchanged since early SCALE, and gone with the dataset in #731
+        - owner@:ALLOW:FULL_CONTROL:DIRECTORY_INHERIT,FILE_INHERIT,INHERIT_ONLY
+        - owner@:ALLOW:APPEND_DATA,DELETE_CHILD,EXECUTE,READ_ACL,READ_ATTRIBUTES,READ_DATA,READ_NAMED_ATTRS,SYNCHRONIZE,WRITE_ACL,WRITE_ATTRIBUTES,WRITE_DATA,WRITE_NAMED_ATTRS,WRITE_OWNER:NOINHERIT
+        - group@:ALLOW:APPEND_DATA,DELETE_CHILD,EXECUTE,READ_ACL,READ_ATTRIBUTES,READ_DATA,READ_NAMED_ATTRS,SYNCHRONIZE,WRITE_DATA:NOINHERIT
+        - everyone@:ALLOW:EXECUTE,READ_ACL,READ_ATTRIBUTES,READ_DATA,READ_NAMED_ATTRS,SYNCHRONIZE:NOINHERIT
   andromeda/games:
     purpose: The Games Library. verified/ holds Verified Sets (Operator only); library/ is the curated ES-DE tree and switch/ the Switch titles, both read by group gaming.
     recordsize: 1M  # files block-cloned in from roms and emulation keep their 128K records
-    permissions: 2750 operator:gaming; verified/ 0700 operator:operator; library/ and switch/ 2750 operator:gaming, default ACL group r-x
+    permissions:
+      mode: '2750'
+      owner: operator
+      group: gaming
+      paths:
+        verified: {mode: '0700', owner: operator, group: operator}
+        library: {mode: '2750', owner: operator, group: gaming, default_acl: [user::rwx, group::r-x, other::---]}
+        switch: {mode: '2750', owner: operator, group: gaming, default_acl: [user::rwx, group::r-x, other::---]}
+  andromeda/home:
     purpose: Home directories of the two accounts that log in (the Operator and the agent); not shared. Data lives in andromeda/private.
     aclmode: DISCARD
-    permissions: 0755 root:root; each home 0700 owner:primary group
+    permissions:
+      mode: '0755'
+      owner: root
+      group: root
+      paths:
+        <operator>: {mode: '0700', owner: operator, group: operator}
+        homeops-agent: {mode: '0700', owner: homeops-agent, group: homeops-agent}
   andromeda/media:
     purpose: Libraries and the media pipeline's working folders (ADR 0009), including Rarities (media/rarities/library), which the Operator curates by hand.
     recordsize: 1M
-    permissions: 2550 media:media
+    permissions: {mode: '2550', owner: media, group: media}
   andromeda/private:
     purpose: The Operator's own files (keys, console firmware and NAND images, papers); only the Operator can read it. The nightly Backup carries it offsite (tn/ops/private-files).
-    permissions: 0700 operator:operator
+    permissions: {mode: '0700', owner: operator, group: operator}
   andromeda/retronas:
     purpose: Software for retro PCs, relayed to SMB1 clients by another host.
     quota: 2000 GiB  # caps what a compromised relay can write
-    permissions: 2770 retronas:retronas, default ACL group rwx; the Operator writes as a group member, the relay as retronas
+    # the Operator writes as a group member, the relay as retronas
+    permissions: {mode: '2770', owner: retronas, group: retronas, default_acl: [user::rwx, group::rwx, other::---]}
   andromeda/software:
     purpose: Installers, OS images and deployment media.
-    permissions: 0775 operator:software
+    permissions: {mode: '0775', owner: operator, group: software}
   luna:
     purpose: Pool root; holds the Host Key and startup-order script (/mnt/luna/homeops) and the Docker data-root.
     compression: LZ4
     atime: false
     acltype: POSIX
     aclmode: DISCARD
-    permissions: 0755 root:root
+    permissions: {mode: '0755', owner: root, group: root}
 
 periodic_snapshot_tasks:
   luna:
     purpose: Stack volumes restored faster than from B2.
     dataset: luna
     recursive: true
-    schedule: 23:00 Mon–Sat
+    schedule: {minute: '0', hour: '23', dow: 'mon,tue,wed,thu,fri,sat'}
     lifetime: 1 WEEK
     naming_schema: luna-%Y-%m-%d_%H-%M
     allow_empty: true
@@ -99,7 +129,7 @@ periodic_snapshot_tasks:
     purpose: Restores files deleted or encrypted over SMB; listed as Previous Versions.
     dataset: andromeda/software
     recursive: false
-    schedule: 00:30 daily
+    schedule: {minute: '30', hour: '0'}
     lifetime: 14 DAY
     naming_schema: software-%Y-%m-%d_%H-%M
     allow_empty: true
@@ -107,7 +137,7 @@ periodic_snapshot_tasks:
     purpose: Restores files deleted or encrypted over SMB or by the retronas relay; listed as Previous Versions.
     dataset: andromeda/retronas
     recursive: false
-    schedule: 00:30 daily
+    schedule: {minute: '30', hour: '0'}
     lifetime: 14 DAY
     naming_schema: retronas-%Y-%m-%d_%H-%M
     allow_empty: true
@@ -115,7 +145,7 @@ periodic_snapshot_tasks:
     purpose: Restores files deleted or encrypted over SMB or NFS; listed as Previous Versions. Replaced by #731.
     dataset: andromeda/emulation
     recursive: false
-    schedule: 00:30 daily
+    schedule: {minute: '30', hour: '0'}
     lifetime: 14 DAY
     naming_schema: emulation-%Y-%m-%d_%H-%M
     allow_empty: true
@@ -123,7 +153,7 @@ periodic_snapshot_tasks:
     purpose: Restores files deleted or encrypted over SMB; listed as Previous Versions.
     dataset: andromeda/games
     recursive: false
-    schedule: 00:30 daily
+    schedule: {minute: '30', hour: '0'}
     lifetime: 14 DAY
     naming_schema: games-%Y-%m-%d_%H-%M
     allow_empty: true
@@ -131,7 +161,7 @@ periodic_snapshot_tasks:
     purpose: Restores files deleted or encrypted over SMB; listed as Previous Versions.
     dataset: andromeda/private
     recursive: false
-    schedule: 00:30 daily
+    schedule: {minute: '30', hour: '0'}
     lifetime: 14 DAY
     naming_schema: private-%Y-%m-%d_%H-%M
     allow_empty: true
@@ -139,7 +169,7 @@ periodic_snapshot_tasks:
     purpose: Restores Device Backups wiped by a compromised device, if noticed within 30 days; listed as Previous Versions. A device can delete its files, not its snapshots.
     dataset: andromeda/backups
     recursive: true
-    schedule: 00:30 daily
+    schedule: {minute: '30', hour: '0'}
     lifetime: 30 DAY
     naming_schema: backups-%Y-%m-%d_%H-%M
     allow_empty: true
@@ -147,9 +177,9 @@ periodic_snapshot_tasks:
 scrubs:
   andromeda:
     purpose: Finds and repairs silent corruption before a second failure can make it permanent.
-    schedule: 00:00 Sunday
+    schedule: {minute: '0', hour: '0', dow: sun}
     threshold_days: 35
   luna:
     purpose: Finds and repairs silent corruption before a second failure can make it permanent.
-    schedule: 00:00 Sunday
+    schedule: {minute: '0', hour: '0', dow: sun}
     threshold_days: 35
