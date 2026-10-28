@@ -2,7 +2,14 @@
 
 The Host Configuration: the Host's own TrueNAS settings that no Stack declares, each with the purpose it serves
 (ADR 0015). doco-cd does not deploy any of it. A change is a PR here. Once it merges, the agent applies it with
-`midclt` and checks the result with `hops truenas call`.
+`midclt`, then runs the drift check until it prints nothing:
+
+```sh
+uv run tools/truenas-drift/truenas_drift.py --unchecked
+```
+
+It prints one line per difference between this record and the Host, and lists what it could not compare
+(see [`tools/truenas-drift`](../../tools/truenas-drift/README.md)).
 
 ## Files
 
@@ -40,3 +47,8 @@ itself are not listed.
   exist; decrypt it only to use a value, never to print one.
 - **No secrets.** Passwords, keys and certificates never go here. Neither does anything else the API reports
   as a credential.
+- **Settings are written in a form the drift check can compare.** Sizes are `100 GiB`. A schedule is a cron
+  dict, e.g. `{minute: '0', hour: '2', dow: mon}`; omitted fields are `*`. `permissions` gives `mode`, `owner`
+  and `group` of the dataset's top directory, every ACL entry beyond the mode (`acl`, `default_acl`, or
+  `nfs4_acl` on an NFSv4 dataset) in `getfacl` form, and the same for subdirectories under `paths`. A
+  directory with no ACL entries listed must have none. Notes the check doesn't read go in comments.

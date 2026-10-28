@@ -55,8 +55,9 @@ tunables:
 cron_jobs:
   smart-test:
     purpose: Weekly S.M.A.R.T. test of every disk; 25.10 has no SMART test schedule of its own.
+    description: S.M.A.R.T. Test  # how the Host names it
     user: root
-    schedule: 02:00 Monday
+    schedule: {minute: '0', hour: '2', dow: mon}
 
 certificates:
   ui-certificate:
@@ -67,4 +68,4 @@ docker:
   pool: luna
   enable_image_updates: false
   nvidia: true  # Plex and Emby transcodes, Open WebUI, dcgm-exporter
-  address_pools: [172.17.0.0/16 by /24, fdd0::/48 by /64]
+  address_pools: [{base: 172.17.0.0/16, size: 24}, {base: 'fdd0::/48', size: 64}]
