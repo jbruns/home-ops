@@ -20,6 +20,7 @@ import difflib
 import hashlib
 import json
 import os
+import posixpath
 import re
 import shutil
 import sqlite3
@@ -147,8 +148,8 @@ def stamp(path, c):
 
     The ingest gate then matches the copy to the Book by Hardcover ID (ADR 0016), not by the copy's own ISBN,
     Goodreads ID or title. The package's unique identifier gets a fresh UUID. Obfuscated fonts are keyed to an
-    identifier, so they're restored first; when they can't be, the identifiers stay. The zip keeps mimetype
-    first and stored.
+    identifier, so they're restored first; when they can't be, the identifiers stay. A calibre metadata jacket
+    (a page of another library's metadata) goes. The zip keeps mimetype first and stored.
     """
     path = Path(path)
     tmp = path.with_suffix(".stamping")
@@ -158,8 +159,11 @@ def stamp(path, c):
             opf = next(n for n in names if n.endswith(".opf"))
             opf_text = src.read(opf).decode("utf8")
             fonts = unmangle_fonts(src, opf_text) if "META-INF/encryption.xml" in names else {}
+            jackets = {n for n in names if n.endswith((".xhtml", ".html", ".htm"))
+                       and JACKET.search(src.read(n).decode("utf8", "replace"))}
+            opf_text = drop_items(opf_text, opf, jackets)
             for item in src.infolist():
-                if fonts is not None and item.filename == "META-INF/encryption.xml":
+                if item.filename in jackets or (fonts is not None and item.filename == "META-INF/encryption.xml"):
                     continue
                 data = (stamp_opf(opf_text, c, keep_ids=fonts is None).encode("utf8") if item.filename == opf
                         else (fonts or {}).get(item.filename) or src.read(item.filename))
@@ -168,6 +172,22 @@ def stamp(path, c):
         tmp.replace(path)
     finally:
         tmp.unlink(missing_ok=True)
+
+
+JACKET = re.compile(r"""<meta\b[^>]*name=["']calibre-content["'][^>]*content=["']jacket["']""")
+
+
+def drop_items(text, opf, files):
+    """The OPF without the manifest items, spine entries and guide references for these files."""
+    for name in files:
+        href = posixpath.relpath(name, posixpath.dirname(opf) or ".")
+        for tag in re.findall(rf"""<item\b[^>]*\bhref=["']{re.escape(href)}["'][^>]*>""", text):
+            item_id = re.search(r"""\bid=["']([^"']+)["']""", tag)
+            text = text.replace(tag, "")
+            if item_id:
+                text = re.sub(rf"""<itemref\b[^>]*\bidref=["']{re.escape(item_id.group(1))}["'][^>]*>""", "", text)
+        text = re.sub(rf"""<reference\b[^>]*\bhref=["']{re.escape(href)}(?:#[^"']*)?["'][^>]*>""", "", text)
+    return text
 
 
 def stamp_opf(text, c, keep_ids):

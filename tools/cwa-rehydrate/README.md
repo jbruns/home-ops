@@ -32,7 +32,8 @@ loses every other identifier, so CWA and the gate match it to the Book, not by t
 or title. Its package identifier gets a fresh UUID. Obfuscated fonts (`META-INF/encryption.xml`) are keyed to
 an identifier, so they're restored first. A copy whose fonts no identifier unlocks keeps its identifiers, which
 may include an ISBN; the gate's verdicts show if one matched elsewhere. A copy that can't be stamped counts as a
-failed try. Then:
+failed try. A calibre metadata jacket (a page of the uploader's library metadata, marked `calibre-content`
+`jacket`) is removed with its manifest, spine and guide entries. Then:
 
 - A Book with no EPUB gets the copy through CWA's title-and-author automerge, which adds a Format the Book lacks
   without the gate. The Book keeps its old Format beside the EPUB until consolidate removes it.
