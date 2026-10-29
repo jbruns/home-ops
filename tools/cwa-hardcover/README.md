@@ -19,7 +19,8 @@ Strongest first. Every match must share an author with the book (surname plus fi
 4. **Title search**, as CWA's book editor does it: the title, then its main title (before a colon or
    bracket), then main title plus first author. Each result scores 0.6 × title similarity + 0.4 for a
    shared author; a shared ISBN scores 1, and summaries, study guides and compilations lose points.
-   The best result must reach `--threshold` (default 0.85); ties go to the book more Hardcover
+   The best result must reach `--threshold` (default 0.85); ties go to the result whose own title
+   is closer (Hardcover's alternative titles can name other books), then to the book more Hardcover
    users have. If nothing passes, the search is scored again with title and author swapped; a match
    that way writes Hardcover's title and author and is flagged.
 

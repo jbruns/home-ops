@@ -73,6 +73,13 @@ def test_choose_prefers_more_users_and_trusts_shared_isbn():
     assert ch.choose(book(isbns=["9780593135204"]), [odd])[1:] == (1.0, True)
 
 
+def test_choose_prefers_own_title_over_alternative_title_on_a_tie():
+    # Hardcover lists the sequel's title among the first book's alternative titles
+    first = dict(cand(1, "Hyperion", ["Dan Simmons"], 6442), alternative_titles=["The Fall of Hyperion"])
+    sequel = cand(2, "The Fall of Hyperion", ["Dan Simmons"], 2255)
+    assert ch.choose(book("The Fall of Hyperion", ["Dan Simmons"]), [first, sequel])[0]["id"] == 2
+
+
 def test_choose_rejects_weak_title():
     assert ch.choose(book(), [cand(1, "The Martian", ["Andy Weir"])])[2] is False
 
