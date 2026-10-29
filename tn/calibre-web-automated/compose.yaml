@@ -123,7 +123,7 @@ services:
     extends:
       file: ../_baseline.yaml
       service: baseline
-    image: ghcr.io/jbruns/cwa-ingest-gate:0.1.3@sha256:08e6a438578d168b87cef9f9a56c914e1faeefc112a69568ae4c1c5f198ad01a
+    image: ghcr.io/jbruns/cwa-ingest-gate:0.2.0@sha256:7a9e21ec57901937cac58a53682b6f46121774f3f98220e65e46484010e37dc8
     container_name: cwa-ingest-gate
     # The Library's owner, as CWA drops to: calibredb writes metadata.db and the Book folders.
     user: ${CWA_UID}:${MEDIA_SHARED_GID}
