@@ -29,7 +29,9 @@ services:
       # - --log.level=DEBUG
 
       # Enable access logs, read by CrowdSec (traefik-logs parser JSON branch) and shipped to
-      # Loki by Alloy
+      # Loki by Alloy. Kept as a file, not stdout (ADR 0007, #664): from stdout CrowdSec would need
+      # the Docker API, the Baseline's 10m x 3 would hold only a few hours of the access log, and
+      # Traefik's own log would share the stream. traefik-logrotate bounds the file (~475 MB).
       - --accesslog=true
       - --accesslog.filepath=/var/log/traefik/access.log
       - --accesslog.format=json

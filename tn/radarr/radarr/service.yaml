@@ -51,6 +51,8 @@ services:
 
       traefik.http.services.radarr.loadbalancer.server.port: 7878
     volumes:
+      # Logs (ADR 0007): Radarr mirrors its log to stdout, which Loki collects; it also keeps its own
+      # rotated files in /config/logs (about 7 MB) and has no setting to turn them off.
       - radarr_config:/config
       # Media mounts never create their source (ADR 0009): a missing folder fails the Deploy
       # instead of becoming a root-owned empty folder.

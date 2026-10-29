@@ -45,6 +45,10 @@ services:
     # restart after changing it). cwa-ingest-gate removes records with calibredb, which leaves their rows
     # in CWA's duplicate index, so each merge inflates the Duplicates count. The scheduled full scan
     # rebuilds the index from the Books that exist; it skips a run while ingest is active (#794).
+    # Archive (cwa.db): auto-backup of imports, conversions and EPUB fixes all OFF, so nothing is added to
+    # /config/processed_books/{imported,converted,fixed_originals}; it grew to 4.9 GiB unpruned, and the
+    # Books Library plus restic already hold the books (#664). CWA still writes failed/ (failed imports)
+    # and duplicate_resolutions/ unconditionally; check them when an import fails.
     # Roles (app.db, Admin -> Users; ADR 0017: only admins edit): exactly two admins, both from the
     # cwa-admins IdP group. Every other user, and the default role for new users, is download, Send
     # to Kindle (needs download), edit shelves and change password (role 338): no upload, edit or delete.
@@ -100,6 +104,8 @@ services:
 
       traefik.http.services.calibre-web-automated.loadbalancer.server.port: 8083
     volumes:
+      # Logs (ADR 0007): the app log goes to stdout (app.db logfile /dev/stdout). The access log can only be
+      # a file (/config/access.log, 50 KB x 3); Traefik's access log covers the same requests.
       - calibre-web-automated_config:/config
       # Media mounts never create their source (ADR 0009): a missing folder fails the Deploy
       # instead of becoming a root-owned empty folder.

@@ -60,6 +60,9 @@ services:
       - 31728:31728
       - 31728:31728/udp
     volumes:
+      # Logs (ADR 0007): qBittorrent can't send its log to stdout (only Qt warnings reach it). Its file
+      # logger (/config/qBittorrent/logs) caps each file at 65 KB and deletes backups after a month
+      # (qBittorrent.conf).
       - qbittorrent_config:/config
       # Media mounts never create their source (ADR 0009): a missing folder fails the Deploy
       # instead of becoming a root-owned empty folder.

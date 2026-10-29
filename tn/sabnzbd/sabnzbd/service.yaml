@@ -51,6 +51,8 @@ services:
 
       traefik.http.services.sabnzbd.loadbalancer.server.port: 8080
     volumes:
+      # Logs (ADR 0007): SABnzbd mirrors its log to stdout (--console), which Loki collects; it also
+      # keeps its own rotated files in /config/logs (5 MB x 5, sabnzbd.ini) and can't turn them off.
       - sabnzbd_config:/config
       # Media mounts never create their source (ADR 0009): a missing folder fails the Deploy
       # instead of becoming a root-owned empty folder.

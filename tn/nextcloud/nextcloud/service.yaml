@@ -29,6 +29,13 @@ services:
       valkey:
         condition: service_healthy
         restart: true
+    # Logs go to stderr, so Loki is the only place to read them and the Baseline bounds them (ADR 0007,
+    # #664). log_type errorlog hands each entry to PHP's error_log, which php-log.ini points at stderr;
+    # Alloy strips the prefix so the line is Nextcloud's JSON. logfile /dev/stderr would not work: PHP
+    # can't reopen the pipe and Nextcloud falls back to data/nextcloud.log. The admin Logging page
+    # (logreader) only reads log_type file, so it stays empty; query Loki instead.
+    environment:
+      - NC_log_type=errorlog
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: critical
@@ -76,6 +83,7 @@ services:
     volumes:
       - nextcloud_data:/var/www/html
       - ./php-limits.ini:/usr/local/etc/php/conf.d/php-limits.ini:ro
+      - ./php-log.ini:/usr/local/etc/php/conf.d/php-log.ini:ro
     networks:
       - default
       - proxy
@@ -114,6 +122,8 @@ services:
       retries: 3
       start_period: 300s
       start_interval: 10s
+    environment:
+      - NC_log_type=errorlog
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: warning
@@ -121,6 +131,7 @@ services:
     volumes:
       - nextcloud_data:/var/www/html
       - ./php-limits.ini:/usr/local/etc/php/conf.d/php-limits.ini:ro
+      - ./php-log.ini:/usr/local/etc/php/conf.d/php-log.ini:ro
     networks:
       - default
 
