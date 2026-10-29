@@ -36,6 +36,7 @@ from pathlib import Path
 KINDS = ("no epub", "broken epub", "converted epub")
 COUNTS = ("books", "retail epub", "converted epub", "broken epub", "no epub", "no hardcover id")
 USER_AGENT = {"User-Agent": "cwa-rehydrate"}
+BACKOFF = (30, 120, 300)  # seconds between retries while Anna's Archive is down
 
 
 class DownloadError(Exception):
@@ -44,6 +45,21 @@ class DownloadError(Exception):
 
 class QuotaError(DownloadError):
     """Anna's Archive has no fast downloads left today."""
+
+
+class UnavailableError(DownloadError):
+    """Anna's Archive is down or unreachable; the release may work once it's back."""
+
+
+def patiently(call, transient, wait):
+    """Call, retrying after each BACKOFF pause while it raises `transient`; the last failure propagates."""
+    for pause in (*BACKOFF, None):
+        try:
+            return call()
+        except transient:
+            if pause is None:
+                raise
+            wait(pause)
 
 
 def inspect_epub(path):
@@ -274,11 +290,13 @@ def safe_name(s):
 
 def fetch(cands, *, search, download, ingest, staging, attempts_path, tries=3, reserve=100, limit=None,
           backlog=5, pace=0, wait=time.sleep):
-    """Try each planned Book not yet in attempts_path; return "done", "limit", "quota" or "search failed".
+    """Try each planned Book not yet in attempts_path; return "done", "limit", "quota", "search failed" or
+    "aa unavailable".
 
     search(hardcover_id) -> Shelfmark releases; download(release, dest) -> fast downloads left (or None).
     Once a download has reported the fast downloads left, a Book starts only when all its tries fit above the
-    reserve. A failed search stops the run and leaves the Book for the next one.
+    reserve. A search that fails, or a download that finds Anna's Archive unavailable, is retried after each
+    BACKOFF pause; if it still fails, the run stops and leaves the Book for the next one.
     """
     ingest, staging = Path(ingest), Path(staging)
     done, left, started = done_ids(attempts_path), None, 0
@@ -296,7 +314,7 @@ def fetch(cands, *, search, download, ingest, staging, attempts_path, tries=3, r
             record(attempts_path, row)
             continue
         try:
-            found = search(c["hardcover_id"])
+            found = patiently(lambda hc=c["hardcover_id"]: search(hc), Exception, wait)
         except Exception:
             return "search failed"
         releases = [r for r in found if r.get("source") == "direct_download"]
@@ -311,15 +329,21 @@ def fetch(cands, *, search, download, ingest, staging, attempts_path, tries=3, r
             for rel in epubs[:tries]:
                 md5 = rel["source_id"]
                 dest = staging / f"{md5}.epub"
+
+                def get(rel=rel, dest=dest):
+                    try:
+                        return download(rel, dest)
+                    except Exception:
+                        dest.unlink(missing_ok=True)
+                        raise
+
                 try:
                     if pace:
                         wait(pace)
-                    left = download(rel, dest)
-                except QuotaError:
-                    dest.unlink(missing_ok=True)
+                    left = patiently(get, UnavailableError, wait)
+                except (QuotaError, UnavailableError):
                     raise
                 except Exception as e:  # the type only: a message may hold the URL, and the URL holds the key
-                    dest.unlink(missing_ok=True)
                     row["tries"].append({"md5": md5, "error": str(e) if isinstance(e, DownloadError)
                                          else type(e).__name__})
                     continue
@@ -349,10 +373,10 @@ def fetch(cands, *, search, download, ingest, staging, attempts_path, tries=3, r
                 fallback = staging / f"{md5}.keep"
                 dest.rename(fallback)
                 row["fallback"] = md5
-        except QuotaError:
+        except (QuotaError, UnavailableError) as e:
             if fallback:
                 fallback.unlink()
-            return "quota"
+            return "quota" if isinstance(e, QuotaError) else "aa unavailable"
         if "result" not in row:
             if fallback:
                 put_in_ingest(fallback, ingest, c["title"], row["fallback"], backlog, wait)
@@ -405,7 +429,13 @@ def shelfmark_search(base="http://127.0.0.1:8084", config="/config"):
 
 
 def aa_download(key):
-    """Download a release through Anna's Archive's fast-download API. Errors never carry a URL (it holds the key)."""
+    """Download a release through Anna's Archive's fast-download API. Errors never carry a URL (it holds the key).
+
+    A server error or a network failure raises UnavailableError: the archive is down, not the release bad.
+    """
+
+    def failure(message, code):
+        return (UnavailableError if code >= 500 else DownloadError)(message)
 
     def download(rel, dest):
         u = urllib.parse.urlsplit(rel["info_url"])
@@ -418,8 +448,10 @@ def aa_download(key):
             try:
                 info = json.load(e)
             except ValueError:
-                raise DownloadError(f"fast_download HTTP {e.code}") from None
-        except (urllib.error.URLError, OSError, ValueError) as e:
+                raise failure(f"fast_download HTTP {e.code}", e.code) from None
+        except (urllib.error.URLError, OSError) as e:
+            raise UnavailableError(f"fast_download {type(e).__name__}") from None
+        except ValueError as e:
             raise DownloadError(f"fast_download {type(e).__name__}") from None
         err = str(info.get("error") or "")
         if "no downloads left" in err.casefold():
@@ -431,9 +463,9 @@ def aa_download(key):
             with urllib.request.urlopen(req, timeout=300) as r, open(dest, "wb") as f:
                 shutil.copyfileobj(r, f)
         except urllib.error.HTTPError as e:
-            raise DownloadError(f"download HTTP {e.code}") from None
+            raise failure(f"download HTTP {e.code}", e.code) from None
         except (urllib.error.URLError, OSError) as e:
-            raise DownloadError(f"download {type(e).__name__}") from None
+            raise UnavailableError(f"download {type(e).__name__}") from None
         return (info.get("account_fast_download_info") or {}).get("downloads_left")
 
     return download
