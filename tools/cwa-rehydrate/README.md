@@ -21,7 +21,8 @@ whose only file is a PDF takes only a Retail EPUB, because its layout may be the
 
 **Same Book:** a search by Hardcover ID can return other Books of the series, or one Book an omnibus collects. A
 download counts only when one title's main title (before any `:` or `(`) runs through the other's, word for word,
-and, when its OPF names authors, one shares a surname with the Book's. Otherwise it's recorded as `wrong book`
+and, when its OPF names authors, one of the Book's surnames appears in them or in its title, spelt alike (a typo
+like "Chrichton" passes). Otherwise it's recorded as `wrong book`
 with its title and authors, deleted, and the next release tried. Text in `(…)` or `[…]` doesn't count, and
 neither does the Book's title followed by a number, `Book`, `Volume` or `Part`: "The Eternal Champion 3: The Dragon
 in the Sword" is another Book than "The Eternal Champion".
@@ -31,7 +32,8 @@ loses every other identifier, so CWA and the gate match it to the Book, not by t
 or title. Its package identifier gets a fresh UUID. Obfuscated fonts (`META-INF/encryption.xml`) are keyed to
 an identifier, so they're restored first. A copy whose fonts no identifier unlocks keeps its identifiers, which
 may include an ISBN; the gate's verdicts show if one matched elsewhere. A copy that can't be stamped counts as a
-failed try. Then:
+failed try. A calibre metadata jacket (a page of the uploader's library metadata, marked `calibre-content`
+`jacket`) is removed with its manifest, spine and guide entries. Then:
 
 - A Book with no EPUB gets the copy through CWA's title-and-author automerge, which adds a Format the Book lacks
   without a new record. The gate then trims the Book to its best file, the EPUB, and logs `trimmed`.

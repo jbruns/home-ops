@@ -413,3 +413,33 @@ def test_fonts_listed_but_missing_from_the_zip_need_no_restoring(tmp_path):
     cr.stamp(f, {"title": "X", "authors": "A Writer", "hardcover_id": 7})
     z = zipfile.ZipFile(f)
     assert "META-INF/encryption.xml" not in z.namelist() and "9781466862661" not in z.read("OEBPS/content.opf").decode()
+
+
+@pytest.mark.parametrize("theirs, authors, same", [
+    ("Michael Crichton - The Terminal Man", ["The Terminal Man"], True),
+    ("The Lost World", ["Chrichton, Michael"], True),
+    ("The Lost World", ["Margaret Weis"], False),
+])
+def test_the_authors_surname_may_sit_in_the_title_or_be_misspelt_but_not_be_another_name(theirs, authors, same):
+    c = {"title": theirs.split(" - ")[-1], "authors": "Michael Crichton & Andy Weir"}
+    assert cr.same_book(c, {"title": theirs, "authors": authors}) == same
+
+
+def test_stamping_removes_a_calibre_metadata_jacket_from_another_library(tmp_path):
+    f = tmp_path / "a.epub"
+    jacket = '<html><head><meta name="calibre-content" content="jacket"/></head><body>Arrow (1994)</body></html>'
+    with zipfile.ZipFile(f, "w") as z:
+        z.writestr("mimetype", "application/epub+zip")
+        z.writestr("OPS/book.opf", '<package unique-identifier="uid"><metadata><dc:title>X</dc:title>'
+                   '<dc:identifier id="uid">urn:uuid:1</dc:identifier></metadata><manifest>'
+                   '<item id="jacket" href="../jacket.xhtml" media-type="application/xhtml+xml"/>'
+                   '<item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/></manifest>'
+                   '<spine><itemref idref="jacket"/><itemref idref="c1"/></spine>'
+                   '<guide><reference type="text" href="../jacket.xhtml"/></guide></package>')
+        z.writestr("jacket.xhtml", jacket)
+        z.writestr("OPS/c1.xhtml", "<html><body>jacket of the dust kind</body></html>")
+    cr.stamp(f, {"title": "X", "authors": "A Writer", "hardcover_id": 7})
+    z = zipfile.ZipFile(f)
+    opf = z.read("OPS/book.opf").decode()
+    assert "jacket.xhtml" not in z.namelist() and "OPS/c1.xhtml" in z.namelist()
+    assert "jacket" not in opf and 'idref="c1"' in opf and 'id="c1"' in opf
