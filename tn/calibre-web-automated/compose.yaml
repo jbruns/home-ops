@@ -37,8 +37,10 @@ services:
     # Ingest (cwa.db, ADR 0016: one Format per Book, EPUB first): auto-convert ON with target EPUB, the
     # safety net for whatever an admin uploads; auto-convert ignores cbz,cbr,pdf, so a PDF stays a PDF;
     # auto-ingest ignores docx,html,htmlz,rtf,cbz,cbr (comics are not Books); retained formats epub
-    # only (no original kept beside its conversion); automerge new_record (cwa-ingest-gate folds
-    # duplicates by Hardcover ID, not CWA's title match).
+    # only (no original kept beside its conversion); automerge new_record. Every automerge mode still adds a
+    # file to a Book whose title and authors match when that Book lacks the file's Format; only a duplicate
+    # Format becomes a new record. cwa-ingest-gate folds new records by Hardcover ID and trims a Book that
+    # gained a Format back to its best file (#779).
     # Roles (app.db, Admin -> Users; ADR 0017: only admins edit): exactly two admins, both from the
     # cwa-admins IdP group. Every other user, and the default role for new users, is download, Send
     # to Kindle (needs download), edit shelves and change password (role 338): no upload, edit or delete.

@@ -34,7 +34,7 @@ may include an ISBN; the gate's verdicts show if one matched elsewhere. A copy t
 failed try. Then:
 
 - A Book with no EPUB gets the copy through CWA's title-and-author automerge, which adds a Format the Book lacks
-  without the gate. The Book keeps its old Format beside the EPUB until consolidate removes it.
+  without a new record. The gate then trims the Book to its best file, the EPUB, and logs `trimmed`.
 - A Book with an EPUB gets a new record, which the gate merges into the Book by Hardcover ID.
 
 - A Book without a Hardcover ID isn't searched; the gate couldn't merge what it found.
@@ -79,13 +79,7 @@ $HOST -d shelfmark "sh -c 'cd /config/rehydrate && python3 cwa_rehydrate.py fetc
   --attempts attempts.jsonl --staging /tmp/shelfmark/rehydrate --limit 50 >> fetch.log 2>&1'"
 $SM tail -1 /config/rehydrate/fetch.log   # {"status": "done" | "limit" | "quota" | "search failed", ...}
 
-# 3. After each batch: check the gate's verdicts (below), then let consolidate keep one Format in each Book the
-#    batch ingested into (tools/cwa-consolidate)
-$SM cat /config/rehydrate/attempts.jsonl > attempts.jsonl
-ONLY=$(python3 -c 'import json,sys; print(",".join(str(r["id"]) for r in map(json.loads, sys.stdin) if "ingested" in r))' < attempts.jsonl)
-$CWA "sh -c 'cat > /tmp/cwa_consolidate.py'" < tools/cwa-consolidate/cwa_consolidate.py
-$CWA python3 /tmp/cwa_consolidate.py plan > cons-plan.jsonl
-$CWA python3 /tmp/cwa_consolidate.py apply --only "$ONLY" < cons-plan.jsonl > cons-applied.jsonl
+# 3. After each batch: check the gate's verdicts (below)
 
 # 4. Once the gate has merged everything: plan again, then report
 $CWA python3 /tmp/cwa_rehydrate.py plan > after.jsonl
@@ -95,4 +89,5 @@ $SM rm -r /config/rehydrate
 ```
 
 Check the gate's verdicts with `hops logs cwa-ingest-gate`: each copy for a Book with an EPUB should log `merged`
-with `step: 2 retail EPUB`, and none should be `flagged`. A copy for a Book with no EPUB never reaches the gate.
+with `step: 2 retail EPUB`, each Book that had no EPUB should log `trimmed` with `kept: EPUB`, and none should be
+`flagged`.
