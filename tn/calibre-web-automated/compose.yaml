@@ -41,6 +41,10 @@ services:
     # file to a Book whose title and authors match when that Book lacks the file's Format; only a duplicate
     # Format becomes a new record. cwa-ingest-gate folds new records by Hardcover ID and trims a Book that
     # gained a Format back to its best file (#779).
+    # Duplicates (cwa.db): scan enabled, frequency after_import, cron 15 */6 * * * (read at startup:
+    # restart after changing it). cwa-ingest-gate removes records with calibredb, which leaves their rows
+    # in CWA's duplicate index, so each merge inflates the Duplicates count. The scheduled full scan
+    # rebuilds the index from the Books that exist; it skips a run while ingest is active (#794).
     # Roles (app.db, Admin -> Users; ADR 0017: only admins edit): exactly two admins, both from the
     # cwa-admins IdP group. Every other user, and the default role for new users, is download, Send
     # to Kindle (needs download), edit shelves and change password (role 338): no upload, edit or delete.
