@@ -60,6 +60,8 @@ services:
       - 32413:32413/udp # gdm-udp2
       - 32414:32414/udp # gdm-udp3
     volumes:
+      # Logs (ADR 0007): Plex can't log to stdout (it prints only transcoder noise there); it keeps its own
+      # rotated files under Plex Media Server/Logs (about 8 MB). Crash Reports beside them are left as is.
       - plex_config:/config
       - plex_transcode:/transcode
       # Media mounts never create their source (ADR 0009): a missing folder fails the Deploy

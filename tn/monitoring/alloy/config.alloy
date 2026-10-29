@@ -2,7 +2,7 @@
 // Labels: container, stack (Compose project), service (Compose service), tier, logstream.
 // The `stack` label comes from Compose itself, so a new Service needs no opt-in label.
 // Also tails Traefik's access log (logstream=access, plus client=home from the home public
-// addresses). Both redact keys and tokens in URLs.
+// addresses). Both redact keys and tokens in URLs. Nextcloud's lines lose PHP's error_log prefix.
 
 discovery.docker "containers" {
 	host             = "unix:///var/run/docker.sock"
@@ -53,6 +53,17 @@ loki.process "containers" {
 	stage.replace {
 		expression = "(?i)(?:api_?key|apikey|nzbkey|token|x-plex-token|access_token)=([^&\"\\s]+)"
 		replace    = "REDACTED"
+	}
+
+	// Nextcloud logs through PHP's error_log (nextcloud/service.yaml), which prefixes each entry with
+	// "[date] [nextcloud][app][level] ". Drop that so the line is Nextcloud's JSON: | json | level >= 3.
+	stage.match {
+		selector = "{stack=\"nextcloud\", service=~\"nextcloud|nextcloud-cron\"}"
+
+		stage.replace {
+			expression = "^(\\[[^\\]]*\\] \\[nextcloud\\]\\[[^\\]]*\\]\\[[0-9]\\] )\\{"
+			replace    = ""
+		}
 	}
 
 	forward_to = [loki.write.local.receiver]

@@ -53,6 +53,8 @@ services:
       - 32800:32800 # http
       - 32900:32900 # https
     volumes:
+      # Logs (ADR 0007): Emby mirrors its log to stdout, which Loki collects; it also keeps its own
+      # rotated files in /config/logs (about 4 MB) and has no setting to turn them off.
       - emby_config:/config
       # Media mounts never create their source (ADR 0009): a missing folder fails the Deploy
       # instead of becoming a root-owned empty folder.

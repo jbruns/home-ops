@@ -48,6 +48,8 @@ services:
 
       traefik.http.services.nextpvr.loadbalancer.server.port: 8866
     volumes:
+      # Logs (ADR 0007): NextPVR mirrors its log to stdout, which Loki collects; it also keeps its own
+      # rotated files in /config/logs (about 3 MB) and has no setting to turn them off.
       - nextpvr_config:/config
       - nextpvr_buffer:/buffer
       # Media mounts never create their source (ADR 0009): a missing folder fails the Deploy
