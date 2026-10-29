@@ -1,9 +1,12 @@
 """Tests for cwa_rehydrate.py against a stub library (metadata.db and real EPUB files), a stub release search
 and a stub downloader; they need no CWA, Shelfmark or network."""
+import io
 import json
 import re
 import sqlite3
 import sys
+import urllib.error
+import urllib.request
 import zipfile
 from pathlib import Path
 
@@ -82,22 +85,32 @@ class Shop:
     """Stub search and downloader: releases per Hardcover ID, and what each md5 downloads as: a kind, or a kind
     with the title and creators its OPF names."""
 
-    def __init__(self, releases=None, files=None, left=900):
+    def __init__(self, releases=None, files=None, left=900, outages=None):
         self.releases, self.files, self.left = releases or {}, files or {}, left
+        self.outages = outages or {}  # calls that find Anna's Archive down first, per Hardcover ID or md5
         self.searched, self.downloaded = [], []
+
+    def down(self, key):
+        if self.outages.get(key, 0):
+            self.outages[key] -= 1
+            return True
+        return False
 
     def search(self, hardcover_id):
         self.searched.append(hardcover_id)
-        if self.releases.get(hardcover_id) == "down":
+        if self.releases.get(hardcover_id) == "down" or self.down(hardcover_id):
             raise TimeoutError("timed out")
         return self.releases.get(hardcover_id, [])
 
     def download(self, rel, dest):
         self.downloaded.append(rel["source_id"])
+        if self.down(rel["source_id"]):
+            dest.write_bytes(b"partial")
+            raise cr.UnavailableError("fast_download HTTP 502")
         spec = self.files[rel["source_id"]]
         kind, *named = spec if isinstance(spec, tuple) else (spec,)
         if kind == "error":
-            raise cr.DownloadError("HTTP 502")
+            raise cr.DownloadError("HTTP 404")
         if kind == "quota":
             raise cr.QuotaError("No downloads left")
         if kind == "truncated":
@@ -124,8 +137,9 @@ def run(tmp_path):
     attempts = tmp_path / "attempts.jsonl"
 
     def go(cands, shop, **kw):
+        kw.setdefault("wait", lambda s: None)
         status = cr.fetch(cands, search=shop.search, download=shop.download, ingest=ingest, staging=staging,
-                          attempts_path=attempts, wait=lambda s: None, **kw)
+                          attempts_path=attempts, **kw)
         rows = [json.loads(x) for x in attempts.read_text().splitlines()] if attempts.exists() else []
         return status, rows
 
@@ -181,7 +195,7 @@ def test_a_book_with_no_epub_takes_a_converted_copy_when_no_retail_one_is_found(
     shop = Shop({10: [release("a"), release("b")]}, {"a": "error", "b": "converted"})
     _, [row] = run([cand(1, kind="no epub")], shop)
     assert row["result"] == "converted ingested" and row["ingested"] == "b"
-    assert row["tries"][0] == {"md5": "a", "error": "HTTP 502"}
+    assert row["tries"][0] == {"md5": "a", "error": "HTTP 404"}
     assert [f.name for f in run.ingest.iterdir()] == ["Project Hail Mary - b.epub"]
 
 
@@ -198,10 +212,49 @@ def test_an_unexpected_download_error_is_recorded_by_type_only_and_the_next_rele
     assert "SECRET" not in json.dumps(row)
 
 
-def test_a_failed_search_stops_the_run_without_recording_the_book(run):
+def test_a_search_that_keeps_failing_stops_the_run_without_recording_the_book(run):
     shop = Shop({10: [release("a")], 11: "down"}, {"a": "retail"})
-    status, rows = run([cand(1), cand(2, hc=11), cand(3)], shop)
+    waits = []
+    status, rows = run([cand(1), cand(2, hc=11), cand(3)], shop, wait=waits.append)
     assert status == "search failed" and [r["id"] for r in rows] == [1]
+    assert waits == list(cr.BACKOFF) and shop.searched == [10] + [11] * (len(cr.BACKOFF) + 1)
+
+
+def test_a_search_or_download_is_retried_while_annas_archive_is_briefly_down(run):
+    shop = Shop({10: [release("a")]}, {"a": "retail"}, outages={10: 1, "a": 2})
+    waits = []
+    status, [row] = run([cand(1)], shop, wait=waits.append)
+    assert status == "done" and row["result"] == "retail" and row["tries"] == [
+        {"md5": "a", "retail": True, "markers": [], "lang": "en"}]
+    assert waits == list(cr.BACKOFF[:1] + cr.BACKOFF[:2]) and shop.downloaded == ["a"] * 3
+
+
+def test_a_download_that_stays_unavailable_stops_the_run_without_recording_the_book(run):
+    # Book 1 holds a converted fallback when Anna's Archive goes down; the next run tries it afresh
+    shop = Shop({10: [release("a"), release("b")], 11: [release("c")]}, {"a": "converted", "c": "retail"},
+                outages={"b": 99})
+    waits = []
+    status, rows = run([cand(1, kind="no epub"), cand(2, hc=11)], shop, wait=waits.append)
+    assert status == "aa unavailable" and rows == [] and "c" not in shop.downloaded
+    assert waits == list(cr.BACKOFF)
+    assert list(run.staging.iterdir()) == [] and list(run.ingest.iterdir()) == []
+
+
+@pytest.mark.parametrize("failure, unavailable", [
+    (lambda url: urllib.error.HTTPError(url, 502, "Bad Gateway", {}, io.BytesIO(b"<html>")), True),
+    (lambda url: urllib.error.URLError("connection refused"), True),
+    (lambda url: TimeoutError("timed out"), True),
+    (lambda url: urllib.error.HTTPError(url, 404, "Not Found", {}, io.BytesIO(b"<html>")), False),
+])
+def test_a_server_or_network_failure_means_annas_archive_is_unavailable_not_that_the_release_failed(
+        monkeypatch, tmp_path, failure, unavailable):
+    def urlopen(req, timeout):
+        raise failure(req.full_url)
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    with pytest.raises(cr.DownloadError) as e:
+        cr.aa_download("SECRET")(release("a"), tmp_path / "a.epub")
+    assert isinstance(e.value, cr.UnavailableError) == unavailable and "SECRET" not in str(e.value)
 
 
 def test_a_non_english_download_is_not_ingested(run):

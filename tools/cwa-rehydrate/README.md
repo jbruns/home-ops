@@ -43,8 +43,10 @@ failed try. A calibre metadata jacket (a page of the uploader's library metadata
 - Once a download has reported the fast downloads left, a Book starts only when all its tries fit above
   `--reserve`, so readers' requests still work. The tool also stops when Anna's Archive says no downloads are
   left. Rerun it the next day.
-- A failed release search stops the run (`search failed`) without recording the Book, so a rerun tries it again.
-  A failed download is recorded by its error type and the next release is tried.
+- A failed release search, or a download that finds Anna's Archive unavailable (a server error or a network
+  failure), is retried after 30 s, 2 min and 5 min. If it still fails, the run stops (`search failed` or
+  `aa unavailable`) without recording the Book, so a rerun tries it again. Any other failed download is recorded
+  by its error and the next release is tried.
 - It waits while the Ingest Folder holds `--backlog` EPUBs, and can space downloads
   `--pace` seconds apart (none by default: the members' fast-download API needs no pause).
 - Each Book's outcome is appended to the attempts file as it finishes, so a rerun resumes after the last one.
@@ -79,7 +81,7 @@ $SM "sh -c 'cat > /config/rehydrate/plan.jsonl'" < before.jsonl
 hops snapshot take --dataset <pool>/media --issue 755
 $HOST -d shelfmark "sh -c 'cd /config/rehydrate && python3 cwa_rehydrate.py fetch plan.jsonl \
   --attempts attempts.jsonl --staging /tmp/shelfmark/rehydrate --limit 50 >> fetch.log 2>&1'"
-$SM tail -1 /config/rehydrate/fetch.log   # {"status": "done" | "limit" | "quota" | "search failed", ...}
+$SM tail -1 /config/rehydrate/fetch.log   # {"status": "done" | "limit" | "quota" | "search failed" | "aa unavailable", ...}
 
 # 3. After each batch: check the gate's verdicts (below)
 
