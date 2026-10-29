@@ -257,6 +257,42 @@ def test_a_server_or_network_failure_means_annas_archive_is_unavailable_not_that
     assert isinstance(e.value, cr.UnavailableError) == unavailable and "SECRET" not in str(e.value)
 
 
+class Trickle:
+    """A response whose file arrives in small reads, each taking `step` seconds on the clock it advances."""
+
+    def __init__(self, chunks, clock, step):
+        self.chunks, self.clock, self.step = list(chunks), clock, step
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def read(self):
+        return json.dumps({"download_url": "https://files.example/a.epub?key=SECRET"}).encode()
+
+    def read1(self, n):
+        self.clock[0] += self.step
+        return self.chunks.pop(0) if self.chunks else b""
+
+
+@pytest.mark.parametrize("step, unavailable", [(1, False), (400, True)])
+def test_a_download_that_trickles_past_the_deadline_means_annas_archive_is_unavailable(
+        monkeypatch, tmp_path, step, unavailable):
+    clock = [0.0]
+    responses = iter([Trickle([], clock, 0), Trickle([b"x" * 10] * 4, clock, step)])
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout: next(responses))
+    download = cr.aa_download("SECRET", deadline=900, clock=lambda: clock[0])
+    if unavailable:
+        with pytest.raises(cr.UnavailableError) as e:
+            download(release("a"), tmp_path / "a.epub")
+        assert "SECRET" not in str(e.value)
+    else:
+        download(release("a"), tmp_path / "a.epub")
+        assert (tmp_path / "a.epub").read_bytes() == b"x" * 40
+
+
 def test_a_non_english_download_is_not_ingested(run):
     shop = Shop({10: [release("a")]}, {"a": "french"})
     _, [row] = run([cand(1, kind="no epub")], shop)

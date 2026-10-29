@@ -428,10 +428,11 @@ def shelfmark_search(base="http://127.0.0.1:8084", config="/config"):
     return search
 
 
-def aa_download(key):
+def aa_download(key, deadline=900, clock=time.monotonic):
     """Download a release through Anna's Archive's fast-download API. Errors never carry a URL (it holds the key).
 
-    A server error or a network failure raises UnavailableError: the archive is down, not the release bad.
+    A server error, a network failure or a file still arriving after `deadline` seconds raises UnavailableError:
+    the archive is down or crawling, not the release bad. A trickle never trips the socket timeout on its own.
     """
 
     def failure(message, code):
@@ -461,7 +462,11 @@ def aa_download(key):
         try:
             req = urllib.request.Request(info["download_url"], headers=USER_AGENT)
             with urllib.request.urlopen(req, timeout=300) as r, open(dest, "wb") as f:
-                shutil.copyfileobj(r, f)
+                end = clock() + deadline
+                while chunk := r.read1(1 << 16):
+                    f.write(chunk)
+                    if clock() > end:
+                        raise UnavailableError(f"download still arriving after {deadline}s")
         except urllib.error.HTTPError as e:
             raise failure(f"download HTTP {e.code}", e.code) from None
         except (urllib.error.URLError, OSError) as e:
@@ -516,6 +521,8 @@ def main(argv=None):
     f.add_argument("--limit", type=int, help="Books to try in this run")
     f.add_argument("--backlog", type=int, default=5, help="wait while the Ingest Folder holds this many EPUBs")
     f.add_argument("--pace", type=float, default=0, help="seconds between downloads")
+    f.add_argument("--deadline", type=int, default=900,
+                   help="seconds a file download may take before Anna's Archive counts as unavailable")
     r = sub.add_parser("report")
     r.add_argument("before")
     r.add_argument("after")
@@ -535,7 +542,7 @@ def main(argv=None):
         if not key:
             sys.exit("AA_DONATOR_KEY is not set")
         Path(a.staging).mkdir(parents=True, exist_ok=True)
-        status = fetch(cands, search=shelfmark_search(), download=aa_download(key), ingest=a.ingest,
+        status = fetch(cands, search=shelfmark_search(), download=aa_download(key, a.deadline), ingest=a.ingest,
                        staging=a.staging, attempts_path=a.attempts, tries=a.tries, reserve=a.reserve,
                        limit=a.limit, backlog=a.backlog, pace=a.pace)
         print(json.dumps({"status": status, "done": len(done_ids(a.attempts)), "planned": len(cands)}))
