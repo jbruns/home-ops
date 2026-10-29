@@ -172,12 +172,13 @@ def score(book, cand):
 
 
 def choose(book, cands, threshold=THRESHOLD):
-    """The best-scoring candidate (ties go to the one more Hardcover users have), and whether it passes."""
-    ranked = sorted(((score(book, c), c.get("users_count") or 0, c) for c in cands),
-                    key=lambda r: (r[0], r[1]), reverse=True)
+    """The best-scoring candidate, and whether it passes. Ties go to the candidate whose own title is
+    closer, since Hardcover's alternative titles can name other books, then to the one more users have."""
+    ranked = sorted(((score(book, c), title_similarity(book["title"], [c["title"]]), c.get("users_count") or 0, c)
+                     for c in cands), key=lambda r: r[:3], reverse=True)
     if not ranked:
         return None, 0.0, False
-    best, _, cand = ranked[0]
+    best, _, _, cand = ranked[0]
     return cand, best, best >= threshold
 
 
