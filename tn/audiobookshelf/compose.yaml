@@ -23,6 +23,16 @@ services:
           memory: 256M
     environment:
       - TZ=${TZ}
+    # Security. Protected by native OIDC (ADR 0006): ABS supports it, and the mobile apps sign in through
+    # the same flow, so no Client Path is needed. Auth settings are UI-only (Settings -> Authentication, kept in
+    # absdatabase.sqlite): methods local + OpenID, issuer .../application/o/audiobookshelf/, auto-launch and
+    # auto-register on, match existing users by username, mobile redirect URIs audiobookshelf://oauth and
+    # plappa://oauth. Group claim abs_roles: ABS requests it as a scope and maps only the values admin, user
+    # and guest; the IdP's abs_roles scope mapping sends admin for the audiobookshelf-admins group and user
+    # for everyone else, on every sign-in. The same IdP gate policy as the other Services decides who gets in.
+    # Local login stays only for the root break-glass account: /login/?autoLaunch=0 shows its form. If local
+    # login is ever turned off and the IdP is down, re-add "local" to authActiveAuthMethods in
+    # absdatabase.sqlite, settings row server-settings, then restart.
     labels:
       # Alert Tier (GLOSSARY.md): critical | warning | info
       tier: warning
@@ -32,6 +42,11 @@ services:
 
       # Probe (GLOSSARY.md): the public path a user takes; see prometheus.yml
       probe.url: https://abs.${DOMAIN}/healthcheck
+      # Native OIDC: ABS's own login path answers with the redirect to the IdP. It needs a same-origin
+      # callback under the router base path, as the web UI sends. Each Probe uses 1 of the 40 auth requests
+      # ABS allows a client IP per 10 minutes, and one entry in its 1000-session store.
+      probe.idp_url: https://abs.${DOMAIN}/auth/openid?callback=/audiobookshelf/login
+      probe.idp_auth: oidc
 
       traefik.enable: true
       traefik.docker.network: proxy

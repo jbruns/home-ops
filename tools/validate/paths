@@ -2,7 +2,7 @@
 # tools/validate/homelab-validate and CI (.github/workflows/validate.yaml), both through validate_paths.py, which
 # refuses any line that is not NAME=PATH with a known NAME. An explicit --path that is missing
 # fails its check, where a missing default would skip it, so moving or removing a component cannot turn a
-# check off. Names: "Inputs" in the homelab-validate README (validate-v1.2.0).
+# check off. Names: "Inputs" in the homelab-validate README (validate-v1.4.0).
 prometheus=tn/monitoring/prometheus
 rule-tests=tools/validate/rules
 alertmanager=tn/monitoring/alertmanager
