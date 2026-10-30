@@ -21,10 +21,13 @@ services:
       start_period: 60s
       start_interval: 5s
     deploy:
+      # Parked between pilot milestones; to resume, drop this and set tier back to warning (README.md).
+      replicas: 0
       resources:
         limits:
-          # Starting point; set to ~1.5x the peak measured during the acceptance Audit.
-          memory: 512M
+          # 6.4M peak auditing a 843-ZIP Source Set at pace gentle (#796); ~1.5x, rounded up to 16M.
+          # Re-measure on a larger Source Set when resumed.
+          memory: 16M
           cpus: "1"
     environment:
       - TZ=${TZ}
@@ -32,8 +35,8 @@ services:
     secrets:
       - title_select_operator_token
     labels:
-      # Alert Tier (GLOSSARY.md): critical | warning | info
-      tier: warning
+      # Alert Tier (GLOSSARY.md): critical | warning | info. info while parked, so ContainerDown stays quiet.
+      tier: info
       startup-order: "3"
       # The store is backed up as it is; a restore may replay the WAL.
       stack-back.volumes: true
@@ -74,6 +77,7 @@ services:
       traefik.http.services.title-select.loadbalancer.server.port: 8080
 
       # Probes: probe.url is the health router; probe.idp_url is the workbench, which must redirect to the IdP.
+      # Probe targets come from running containers, so a parked Service has none.
       probe.url: https://titleselect.${DOMAIN}/api/v1/health
       probe.idp_url: https://titleselect.${DOMAIN}/
     volumes:

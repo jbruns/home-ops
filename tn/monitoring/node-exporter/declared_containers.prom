@@ -54,7 +54,7 @@ homeops_container_declared{stack="sonarr",service="sonarr",name="sonarr",tier="w
 homeops_container_declared{stack="sonarr",service="sonarr-exporter",name="sonarr-exporter",tier="info"} 1
 homeops_container_declared{stack="sonarr",service="sonarr-queue-exporter",name="sonarr-queue-exporter",tier="info"} 1
 homeops_container_declared{stack="syncthing",service="syncthing",name="syncthing",tier="warning"} 1
-homeops_container_declared{stack="title-select",service="title-select",name="title-select",tier="warning"} 1
+homeops_container_declared{stack="title-select",service="title-select",name="title-select",tier="info"} 1
 homeops_container_declared{stack="tracearr",service="tracearr",name="tracearr",tier="info"} 1
 homeops_container_declared{stack="vaultwarden",service="mariadb",name="vaultwarden-mariadb",tier="critical"} 1
 homeops_container_declared{stack="vaultwarden",service="mariadb-exporter",name="vaultwarden-mariadb-exporter",tier="info"} 1
