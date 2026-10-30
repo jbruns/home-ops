@@ -32,14 +32,23 @@ route:
     - matchers: [tier=~"critical|warning"]
       receiver: discord
 
-# With the Internet or Traefik down every Probe fails; report the cause, not each Service. A stopped
-# container is ContainerDown, not its TargetDown or internal DependencyDown; those wait 9m in
-# alerting-rules.yml so ContainerDown is already firing when they would.
+# With the Internet or Traefik down every Probe fails; report the cause, not each Service. Traefik
+# is down when TraefikDown fires (stopped or hung: a stopped Traefik has no Probe target) or its own
+# Probe fails (running but not routing). TraefikDown is the one Page for Traefik, so it also inhibits
+# Traefik's own ProbeFailed (a hung Traefik keeps its Probe target), ContainerDown and TargetDown.
+# A stopped container is ContainerDown, not its TargetDown or internal DependencyDown; those wait 9m
+# in alerting-rules.yml so ContainerDown is already firing when they would.
 inhibit_rules:
   - source_matchers: [alertname="InternetDown"]
     target_matchers: [alertname="ProbeFailed"]
   - source_matchers: [alertname="ProbeFailed", container="traefik"]
     target_matchers: [alertname="ProbeFailed", job=~"probe|probe-idp", container!="traefik"]
+  - source_matchers: [alertname="TraefikDown"]
+    target_matchers: [alertname="ProbeFailed", job=~"probe|probe-idp"]
+  - source_matchers: [alertname="TraefikDown"]
+    target_matchers: [alertname="TargetDown", job="traefik"]
+  - source_matchers: [alertname="TraefikDown"]
+    target_matchers: [alertname="ContainerDown", name="traefik"]
   - source_matchers: [alertname="ProbeFailed"]
     target_matchers: [alertname="DependencyDown", kind="internal"]
     equal: [container]
@@ -71,6 +80,8 @@ inhibit_rules:
   - source_matchers: [alertname="InternetDown"]
     target_matchers: [alertname="IdpForwardAuthFailing"]
   - source_matchers: [alertname="ProbeFailed", container="traefik"]
+    target_matchers: [alertname="IdpForwardAuthFailing"]
+  - source_matchers: [alertname="TraefikDown"]
     target_matchers: [alertname="IdpForwardAuthFailing"]
   - source_matchers: [alertname="DependencyDown", to="idp"]
     target_matchers: [alertname="IdpOutpostDisconnected"]
