@@ -23,11 +23,11 @@ leaves the Host in plain text:
 sudo docker run --rm --label startup-order=skip --read-only --user 1000:1001 \
   --volumes-from title-select:ro \
   -e TITLE_SELECT_OPERATOR_TOKEN_FILE=/run/secrets/title_select_operator_token \
-  ghcr.io/jbruns/title-select:0.1.0@sha256:ce62fe1c8d214570e32aade06eddd8669d714f8a60fbc8242cf5683a676a9c88 \
+  "$(sudo docker inspect -f '{{.Config.Image}}' title-select)" \
   audit --server https://titleselect.<domain> --set "Atari - 2600"
 ```
 
-`--set` takes the Source Set's name, not its path. Use the image `compose.yaml` pins. Progress and a summary of the
+`--set` takes the Source Set's name, not its path. The image is the one the running container uses. Progress and a summary of the
 Findings and Game Statuses go to stderr; the JSON report goes to stdout, so add `> report.json` to keep it. It exits
 non-zero if the token is refused, the Service can't be reached, or the Job fails.
 

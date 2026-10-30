@@ -5,7 +5,7 @@ services:
     extends:
       file: ../_baseline.yaml
       service: baseline
-    # https://github.com/jbruns/title-select ; Renovate keeps tag and digest current.
+    # An Owned Application, released from its own repo; Renovate keeps tag and digest current.
     image: ghcr.io/jbruns/title-select:0.1.0@sha256:ce62fe1c8d214570e32aade06eddd8669d714f8a60fbc8242cf5683a676a9c88
     container_name: title-select
     # The Operator's uid and gid (host/truenas/identities.yaml), so it can read sources/ (mode 0700). A pilot
