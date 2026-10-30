@@ -11,7 +11,7 @@ from pathlib import Path
 
 PATHS = Path(__file__).resolve().parent / "paths"
 ALLOW = "privacy-allow"
-# homelab-validate's inputs (validate-v1.2.0 README, "Inputs").
+# homelab-validate's inputs (validate-v1.4.0 README, "Inputs").
 NAMES = {
     "prometheus", "rule-tests", "alertmanager", "loki", "alloy", "grafana", "dashboards-json", "dashboards",
     "declared-containers", "blackbox", "traefik",
