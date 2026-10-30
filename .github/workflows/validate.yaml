@@ -48,7 +48,7 @@ jobs:
   repo:
     name: secrets, env, compose, cloudflare, isolation, privacy
     needs: validate-paths
-    uses: jbruns/homelab-components/.github/workflows/repo-validate.yaml@b59b24fbb343d5838f90eb8abd7f943488e0846c # repo-ci-v1.1.0
+    uses: jbruns/homelab-components/.github/workflows/repo-validate.yaml@10df8f81684de522356a4a7627bd817676ced32f # repo-ci-v1.2.0
     with:
       checks: secrets env compose cloudflare isolation privacy
       extra-args: ${{ needs.validate-paths.outputs.args }}
@@ -60,7 +60,7 @@ jobs:
   monitoring:
     name: monitoring configs, rules, dashboards, Grafana
     needs: validate-paths
-    uses: jbruns/homelab-components/.github/workflows/repo-validate.yaml@b59b24fbb343d5838f90eb8abd7f943488e0846c # repo-ci-v1.1.0
+    uses: jbruns/homelab-components/.github/workflows/repo-validate.yaml@10df8f81684de522356a4a7627bd817676ced32f # repo-ci-v1.2.0
     with:
       checks: monitoring
       timeout-minutes: 10
@@ -68,15 +68,15 @@ jobs:
 
   declared-containers:
     name: declared containers
-    uses: jbruns/homelab-components/.github/workflows/repo-declared-containers.yaml@b59b24fbb343d5838f90eb8abd7f943488e0846c # repo-ci-v1.1.0
+    uses: jbruns/homelab-components/.github/workflows/repo-declared-containers.yaml@10df8f81684de522356a4a7627bd817676ced32f # repo-ci-v1.2.0
 
   gitleaks:
     name: gitleaks
-    uses: jbruns/homelab-components/.github/workflows/repo-gitleaks.yaml@b59b24fbb343d5838f90eb8abd7f943488e0846c # repo-ci-v1.1.0
+    uses: jbruns/homelab-components/.github/workflows/repo-gitleaks.yaml@10df8f81684de522356a4a7627bd817676ced32f # repo-ci-v1.2.0
 
   tooling:
     name: renovate config, actionlint
-    uses: jbruns/homelab-components/.github/workflows/repo-lint.yaml@b59b24fbb343d5838f90eb8abd7f943488e0846c # repo-ci-v1.1.0
+    uses: jbruns/homelab-components/.github/workflows/repo-lint.yaml@10df8f81684de522356a4a7627bd817676ced32f # repo-ci-v1.2.0
 
   # Single required check for branch protection.
   validate:
