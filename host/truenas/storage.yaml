@@ -60,14 +60,14 @@ datasets:
     purpose: none; the retired local restic repository, destroyed by #705.
     permissions: {mode: '0770', owner: root, group: root}
   andromeda/games:
-    purpose: The Games Library. verified/ holds Verified Sets (Operator only); library/ is the curated ES-DE tree and switch/ the Switch titles, both read by group gaming.
+    purpose: The Games Library. sources/ holds Source Sets (Operator only); library/ is the curated ES-DE tree and switch/ the Switch titles, both read by group gaming.
     recordsize: 1M  # files block-cloned in from roms and emulation keep their 128K records
     permissions:
       mode: '2750'
       owner: operator
       group: gaming
       paths:
-        verified: {mode: '0700', owner: operator, group: operator}
+        sources: {mode: '0700', owner: operator, group: operator}
         library: {mode: '2750', owner: operator, group: gaming, default_acl: [user::rwx, group::r-x, other::---]}
         switch: {mode: '2750', owner: operator, group: gaming, default_acl: [user::rwx, group::r-x, other::---]}
   andromeda/home:

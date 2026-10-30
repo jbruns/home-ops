@@ -1,0 +1,106 @@
+# Title Select: an Owned Application (ADR 0018) that audits Source Sets against their DATs. A Protected
+# Service (ADR 0006); see README.md for the workbench, the headless Audit, and parking the Service.
+services:
+  title-select:
+    extends:
+      file: ../_baseline.yaml
+      service: baseline
+    # https://github.com/jbruns/title-select ; Renovate keeps tag and digest current.
+    image: ghcr.io/jbruns/title-select:0.1.0@sha256:ce62fe1c8d214570e32aade06eddd8669d714f8a60fbc8242cf5683a676a9c88
+    container_name: title-select
+    # The Operator's uid and gid (host/truenas/identities.yaml), so it can read sources/ (mode 0700). A pilot
+    # crutch: it gets its own user and group when it takes the Organizer role (ADR 0009).
+    user: "1000:1001"
+    read_only: true
+    command: ["--config", "/etc/title-select.toml", "serve", "--listen", "0.0.0.0:8080"]
+    healthcheck:
+      test: ["CMD", "/title-select", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+      start_interval: 5s
+    deploy:
+      resources:
+        limits:
+          # Starting point; set to ~1.5x the peak measured during the acceptance Audit.
+          memory: 512M
+          cpus: "1"
+    environment:
+      - TZ=${TZ}
+      - TITLE_SELECT_OPERATOR_TOKEN_FILE=/run/secrets/title_select_operator_token
+    secrets:
+      - title_select_operator_token
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: warning
+      startup-order: "3"
+      # The store is backed up as it is; a restore may replay the WAL.
+      stack-back.volumes: true
+      stack-back.volumes.include: "title-select_store"
+
+      traefik.enable: true
+      traefik.docker.network: proxy
+
+      traefik.http.routers.title-select-http.rule: Host(`titleselect.${DOMAIN}`)
+      traefik.http.routers.title-select-http.entrypoints: http
+      traefik.http.routers.title-select-http.middlewares: redirect-https
+
+      # The workbench and its API: `protected` is crowdsec-bouncer then idp-forward-auth (edge Stack), which
+      # sets X-authentik-username.
+      traefik.http.routers.title-select-https.rule: Host(`titleselect.${DOMAIN}`)
+      traefik.http.routers.title-select-https.entrypoints: https
+      traefik.http.routers.title-select-https.tls: true
+      traefik.http.routers.title-select-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.title-select-https.service: title-select
+      traefik.http.routers.title-select-https.middlewares: protected
+
+      # The Probe's path, without forward auth.
+      traefik.http.routers.title-select-health.rule: Host(`titleselect.${DOMAIN}`) && Path(`/api/v1/health`)
+      traefik.http.routers.title-select-health.entrypoints: https
+      traefik.http.routers.title-select-health.tls: true
+      traefik.http.routers.title-select-health.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.title-select-health.service: title-select
+      traefik.http.routers.title-select-health.middlewares: crowdsec-bouncer,strip-idp-headers
+
+      # The Client Path: the headless Audit, authenticated by the Operator token. Covers /api/v1/events (SSE).
+      traefik.http.routers.title-select-client-api.rule: Host(`titleselect.${DOMAIN}`) && PathPrefix(`/api/v1`) && HeaderRegexp(`Authorization`, `^Bearer .+`)
+      traefik.http.routers.title-select-client-api.entrypoints: https
+      traefik.http.routers.title-select-client-api.tls: true
+      traefik.http.routers.title-select-client-api.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.title-select-client-api.service: title-select
+      traefik.http.routers.title-select-client-api.middlewares: crowdsec-bouncer,strip-idp-headers,client-ratelimit
+
+      traefik.http.services.title-select.loadbalancer.server.port: 8080
+
+      # Probes: probe.url is the health router; probe.idp_url is the workbench, which must redirect to the IdP.
+      probe.url: https://titleselect.${DOMAIN}/api/v1/health
+      probe.idp_url: https://titleselect.${DOMAIN}/
+    volumes:
+      - title-select_store:/store
+      - ./title-select.toml:/etc/title-select.toml:ro
+      # The Root `sources`. Never created by the Deploy (ADR 0009).
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/games/sources
+        target: /sources
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - default
+      - proxy
+
+secrets:
+  title_select_operator_token:
+    file: ./operator_token.sops.txt
+
+volumes:
+  title-select_store:
+    # Holds data, so external (ADR 0010): created, and chowned to the user above, before the first Deploy.
+    name: title-select_store
+    external: true
+
+networks:
+  proxy:
+    name: proxy
+    external: true

@@ -1,0 +1,17 @@
+# Title Select's configuration; keys as in its README for the pinned version.
+
+[roots.sources]
+path = "/sources"
+writable = false
+
+[audits]
+keep = 20
+
+[auth]
+identity_header = "X-authentik-username"
+# Traefik's static address on `proxy` (tn/edge), the only peer that may set the header.
+trusted_proxies = ["172.30.0.10/32"]
+
+[jobs]
+concurrent = 1
+pace = "gentle"
