@@ -28,13 +28,28 @@ groups:
   - name: probes
     rules:
       # Uptime of an Exposed Service (GLOSSARY.md). `tier`, `stack` and `container` come from
-      # the probed Service. Inhibited while InternetDown or Traefik's own Probe fails (alertmanager).
+      # the probed Service. Inhibited while InternetDown, TraefikDown or Traefik's own Probe fails
+      # (alertmanager).
       - alert: ProbeFailed
         expr: probe_success{job=~"probe|probe-tcp|probe-idp"} == 0
         for: 3m
         annotations:
           summary: "{{ $labels.container }} is unreachable"
           description: "The {{ $labels.module }} Probe of {{ $labels.container }} ({{ $labels.instance }}) has failed for 3 minutes."
+
+      # Traefik stopped or hung. docker_sd lists only running containers, so a stopped Traefik loses
+      # its Probe target and ProbeFailed{container="traefik"} never fires. This fires before
+      # ProbeFailed's 3m and inhibits the other Exposed Services' Probes (alertmanager).
+      - alert: TraefikDown
+        expr: max(up{job="traefik"}) == 0
+        for: 1m
+        labels:
+          tier: critical
+          stack: edge
+          container: traefik
+        annotations:
+          summary: Traefik is down
+          description: Prometheus cannot scrape Traefik for 1 minute; Probe alerts for Exposed Services are inhibited.
 
       - alert: InternetDown
         expr: max(probe_success{job="internet"}) == 0

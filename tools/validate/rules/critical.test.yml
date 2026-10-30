@@ -55,6 +55,42 @@ tests:
         eval_time: 4m
         exp_samples: []
 
+  # A stopped Traefik has no Probe target (docker_sd), so TraefikDown must already be firing, with the
+  # labels the inhibitions match on, when every other Service's ProbeFailed would (alertmanager).
+  - name: TraefikDown fires before the ProbeFailed it inhibits
+    interval: 1m
+    input_series:
+      - series: up{job="traefik",instance="traefik:8082",container="traefik",tier="critical",stack="edge"}
+        values: 0x4
+      - series: probe_success{job="probe",container="vaultwarden",tier="critical",stack="vaultwarden"}
+        values: 0x4
+      - series: probe_success{job="probe-idp",auth="forward",container="sonarr",tier="warning",stack="sonarr"}
+        values: 0x4
+    promql_expr_test:
+      - expr: &traefik sum by (alertname) (ALERTS{alertname=~"TraefikDown|ProbeFailed",alertstate="firing"})
+        eval_time: 1m
+        exp_samples:
+          - labels: '{alertname="TraefikDown"}'
+            value: 1
+      - expr: *traefik
+        eval_time: 3m
+        exp_samples:
+          - labels: '{alertname="TraefikDown"}'
+            value: 1
+          - labels: '{alertname="ProbeFailed"}'
+            value: 2
+    alert_rule_test:
+      - alertname: TraefikDown
+        eval_time: 0m
+        exp_alerts: []
+      - alertname: TraefikDown
+        eval_time: 1m
+        exp_alerts:
+          - exp_labels: {tier: critical, stack: edge, container: traefik}
+            exp_annotations:
+              summary: Traefik is down
+              description: Prometheus cannot scrape Traefik for 1 minute; Probe alerts for Exposed Services are inhibited.
+
   - name: DependencyDown requires every dependent to fail and preserves inhibition labels
     interval: 1m
     input_series:
