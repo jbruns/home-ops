@@ -87,7 +87,7 @@ Renovate runs every morning (America/Los_Angeles) with no hourly PR limit, pins 
 - Edit a Stack's values with `sops tn/<stack>/.sops.env`. Add a new key to `env.template` too, or CI fails.
 - Files a Compose file mounts or loads (`env_file`, `secrets`) must be named `*.sops.*` and tracked. Plaintext `.env` and `*.txt` files under `tn/` are gitignored.
 - Home public addresses are whitelisted in CrowdSec by `tn/edge/crowdsec/home-whitelist.sops.yaml` (a parser, edited with `sops`). Only this Host carries it.
-- doco-cd writes decrypted files as root with mode 0600. A non-root Service must therefore read secrets through `env_file`, not Compose `secrets`.
+- doco-cd writes decrypted files as root with mode 0644, so a non-root Service can read a Compose `secrets` file (as prometheus and alertmanager do).
 - doco-cd parses `env_file` with the default format only; `format: raw` fails the Deploy. Single-quote values that contain `$`.
 
 Validate locally before pushing. It needs Docker and `homelab-validate` with `homelab-declared-containers` on `PATH` (each documented in its README under `repo-tools/` in the Repo Tooling repo):
