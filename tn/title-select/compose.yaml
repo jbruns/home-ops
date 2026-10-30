@@ -77,7 +77,12 @@ services:
       probe.url: https://titleselect.${DOMAIN}/api/v1/health
       probe.idp_url: https://titleselect.${DOMAIN}/
     volumes:
-      - title-select_store:/store
+      # nocopy: Docker would otherwise reset an empty volume's owner to the image's /store (65532) on first mount.
+      - type: volume
+        source: title-select_store
+        target: /store
+        volume:
+          nocopy: true
       - ./title-select.toml:/etc/title-select.toml:ro
       # The Root `sources`. Never created by the Deploy (ADR 0009).
       - type: bind
