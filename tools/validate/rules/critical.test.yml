@@ -91,6 +91,32 @@ tests:
               summary: Traefik is down
               description: Prometheus cannot scrape Traefik for 1 minute; Probe alerts for Exposed Services are inhibited.
 
+  # Traefik recovers just before 3m, but the Probes it broke are scraped every 30-60s: their stale
+  # failures still reach ProbeFailed's and IdpForwardAuthFailing's 3m, so TraefikDown must still be
+  # firing to inhibit them (alertmanager).
+  - name: TraefikDown keeps firing while the Probes it broke catch up
+    interval: 1m
+    input_series:
+      - series: up{job="traefik",instance="traefik:8082",container="traefik",tier="critical",stack="edge"}
+        values: 0x2 1x4
+      - series: probe_success{job="probe",container="vaultwarden",tier="critical",stack="vaultwarden"}
+        values: 0x3 1x3
+      - series: probe_success{job="probe-idp",auth="forward",container="sonarr",tier="warning",stack="sonarr"}
+        values: 0x3 1x3
+    promql_expr_test:
+      - expr: &recovering sum by (alertname) (ALERTS{alertname=~"TraefikDown|ProbeFailed|IdpForwardAuthFailing",alertstate="firing"})
+        eval_time: 3m
+        exp_samples:
+          - labels: '{alertname="TraefikDown"}'
+            value: 1
+          - labels: '{alertname="ProbeFailed"}'
+            value: 2
+          - labels: '{alertname="IdpForwardAuthFailing"}'
+            value: 1
+      - expr: *recovering
+        eval_time: 5m
+        exp_samples: []
+
   - name: DependencyDown requires every dependent to fail and preserves inhibition labels
     interval: 1m
     input_series:

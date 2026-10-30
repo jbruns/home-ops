@@ -40,9 +40,12 @@ groups:
       # Traefik stopped or hung. docker_sd lists only running containers, so a stopped Traefik loses
       # its Probe target and ProbeFailed{container="traefik"} never fires. This fires before
       # ProbeFailed's 3m and inhibits the other Exposed Services' Probes (alertmanager).
+      # `keep_firing_for: 2m` outlasts a stale failed Probe (probe-idp scrapes every 60s) plus one 1m
+      # evaluation, so a Traefik that recovers just before 3m still inhibits the Probes it broke.
       - alert: TraefikDown
         expr: max(up{job="traefik"}) == 0
         for: 1m
+        keep_firing_for: 2m
         labels:
           tier: critical
           stack: edge
