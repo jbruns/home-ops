@@ -32,7 +32,9 @@ route:
     - matchers: [tier=~"critical|warning"]
       receiver: discord
 
-# With the Internet or Traefik down every Probe fails; report the cause, not each Service.
+# With the Internet or Traefik down every Probe fails; report the cause, not each Service. A stopped
+# container is ContainerDown, not its TargetDown or internal DependencyDown; those wait 9m in
+# alerting-rules.yml so ContainerDown is already firing when they would.
 inhibit_rules:
   - source_matchers: [alertname="InternetDown"]
     target_matchers: [alertname="ProbeFailed"]
@@ -43,6 +45,9 @@ inhibit_rules:
     equal: [container]
   - source_matchers: [alertname="InternetDown"]
     target_matchers: [alertname="DependencyDown", kind="external"]
+  - source_matchers: [alertname="ContainerDown"]
+    target_matchers: [alertname=~"TargetDown|DependencyDown"]
+    equal: [container]
   - source_matchers: [alertname="ContainerDown"]
     target_matchers: [alertname="DatastoreDown"]
     equal: [name]

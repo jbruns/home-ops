@@ -16,12 +16,14 @@ groups:
     rules:
       # `tier` and `stack` come from the scrape target's labels (prometheus.yml).
       # For Probe jobs `up` only says blackbox-exporter answered; its own job covers that.
+      # `for: 9m` outlasts ContainerDown (about 7-8 minutes), which inhibits it on `container`
+      # (alertmanager): an inhibition only holds while its source is firing.
       - alert: TargetDown
         expr: up{job!~"probe|probe-tcp|probe-idp|internet|dependency"} == 0
-        for: 5m
+        for: 9m
         annotations:
           summary: "{{ $labels.job }} scrape target is down"
-          description: "Prometheus cannot scrape {{ $labels.instance }} ({{ $labels.job }}) for 5 minutes."
+          description: "Prometheus cannot scrape {{ $labels.instance }} ({{ $labels.job }}) for 9 minutes."
 
   - name: probes
     rules:
@@ -80,10 +82,19 @@ groups:
           description: Prometheus has no Probe targets; check docker-socket-proxy and the probe.url labels.
 
       # A Dependency (GLOSSARY.md) fails for every dependent: alert once, on the Dependency, at the
-      # Tier its edges carry (dependencies.yaml). Inhibited by the Dependency's own ProbeFailed
-      # (internal) or InternetDown (external).
+      # Tier its edges carry (dependencies.yaml). Inhibited by the Dependency's own ProbeFailed or
+      # ContainerDown (internal) or InternetDown (external). Internal waits 9m to outlast ContainerDown
+      # (about 7-8 minutes): an inhibition only holds while its source is firing. External keeps 5m so
+      # DependencyDown{to="idp"} fires before, and inhibits, IdpOutpostDisconnected.
       - alert: DependencyDown
-        expr: max by (to, kind, container, tier, stack) (probe_success{job="dependency"}) == 0
+        expr: max by (to, kind, container, tier, stack) (probe_success{job="dependency",kind="internal"}) == 0
+        for: 9m
+        annotations:
+          summary: "{{ $labels.to }} is failing its dependents"
+          description: "Every Dependency Probe of {{ $labels.to }} ({{ $labels.kind }}) has failed for 9 minutes."
+
+      - alert: DependencyDown
+        expr: max by (to, kind, container, tier, stack) (probe_success{job="dependency",kind="external"}) == 0
         for: 5m
         annotations:
           summary: "{{ $labels.to }} is failing its dependents"
@@ -109,7 +120,9 @@ groups:
       # covers a first Deploy's image pull and the Deploy of monitoring trailing a removal. Held while
       # cAdvisor is down: TargetDown reports that once. `name` (Compose's guess without
       # container_name) only serves inhibitions on Services that set container_name; the text uses
-      # the Stack and Service.
+      # the Stack and Service. `container` copies `name` so it inhibits TargetDown and internal
+      # DependencyDown (alertmanager). doco-cd misses: its scrape target says `container: doco-cd`,
+      # its `name` is `doco-cd-doco-cd-1`; accepted, as its TargetDown is a Warning in the same Digest.
       - alert: ContainerDown
         expr: |
           max by (stack, service, name, tier) (homeops_container_declared{tier=~"critical|warning"})
@@ -120,6 +133,8 @@ groups:
                 "service", "$1", "container_label_com_docker_compose_service", "(.+)")
             unless on () (up{job="cadvisor"} == 0)
         for: 5m
+        labels:
+          container: "{{ $labels.name }}"
         annotations:
           summary: "{{ $labels.stack }}/{{ $labels.service }} is not running"
           description: "Service {{ $labels.service }} of Stack {{ $labels.stack }} is declared in tn/, but no container of it has been seen running for 7 minutes."
