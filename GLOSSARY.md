@@ -58,18 +58,18 @@ A Service that fetches media and is responsible for each file until an Organizer
 _Avoid_: Download client (when meaning the role), grabber
 
 **Organizer**:
-A Service that takes over a Downloader's finished file, directly or through an Ingest Folder, moving it (or copying it while seeding must continue) into its own Library, or that publishes a Selection from a Verified Set into it, and is responsible for it from then on (Sonarr for TV, Radarr for Movies, Shelfmark for Audiobooks, Calibre-Web-Automated for Books). It cannot change any other Library. The Operator is the Organizer of a Library, or of the part of one, that no Service organizes, curating it by hand (e.g. Rarities, or the Games folders no Service manages).
+A Service that takes over a Downloader's finished file, directly or through an Ingest Folder, moving it (or copying it while seeding must continue) into its own Library, or that publishes a Selection from a Source Set into it, and is responsible for it from then on (Sonarr for TV, Radarr for Movies, Shelfmark for Audiobooks, Calibre-Web-Automated for Books). It cannot change any other Library. The Operator is the Organizer of a Library, or of the part of one, that no Service organizes, curating it by hand (e.g. Rarities, or the Games folders no Service manages).
 _Avoid_: arr, *arr, manager
 
-**Verified Set**:
-A raw collection that can be audited against its published DAT (e.g. Redump, No-Intro, MAME), kept with that DAT; the source from which the Games Library is curated. It changes only through an approved repair Change Plan.
-_Avoid_: Archive, romset, dump folder
+**Source Set**:
+A raw collection that can be audited against its published DAT (e.g. Redump, No-Intro, MAME), recorded with the DAT Revision of its latest Audit; the source from which the Games Library is curated. It changes only through an approved repair Change Plan.
+_Avoid_: Verified Set, archive, romset, dump folder
 
 **DAT Revision**:
 One particular edition of a published inventory of expected game files and their identifying checksums. A newer revision does not replace the reference used by an earlier Audit or Selection.
 
 **Audit**:
-An assessment of a Verified Set against a particular DAT Revision, recording discrepancies and the verification evidence actually obtained. The name Verified Set alone does not mean its current contents have passed an Audit.
+An assessment of a Source Set against a particular DAT Revision, recording discrepancies and the verification evidence actually obtained.
 
 **Selection Profile**:
 The Operator's rules for including or excluding releases and choosing preferred releases of a game.
@@ -83,7 +83,7 @@ _Avoid_: Profile (when meaning the chosen releases)
 An item the Operator approves for management in the Games Library independently of an official DAT, such as a ROM hack. Its recorded provenance and local integrity checks do not make it an official DAT match.
 
 **Change Plan**:
-A proposed set of changes that the Operator approves before a Verified Set is repaired or a Selection is published into the Games Library. Approval to repair a Verified Set is separate from approval to publish into the Library.
+A proposed set of changes that the Operator approves before a Source Set is repaired or a Selection is published into the Games Library. Approval to repair a Source Set is separate from approval to publish into the Library.
 
 **Ingest Folder**:
 A folder outside a Library through which its Organizer takes over finished files that the Requester, not the Downloader, passes on (Calibre-Web-Automated's, which Shelfmark fills with Books; the `tv-ingest`, `movies-ingest` and `books-ingest` SMB shares, which people fill).
@@ -128,7 +128,7 @@ The stated upstream or community capability whose arrival makes a Custom Compone
 _Avoid_: Sunset, deprecation note
 
 **Owned Application**:
-An application we build and intend to maintain as a product, in its own repo, shipped and pinned like a Custom Component but without a Retirement Condition (e.g. Fuzzbin, the Games Organizer).
+An application we build and intend to maintain as a product, in its own repo, shipped and pinned like a Custom Component but without a Retirement Condition (e.g. Fuzzbin, Title Select).
 _Avoid_: Custom Component (when meaning this), app
 
 **Contract Test**:

@@ -50,7 +50,7 @@ smb_shares:
   games:
     purpose: The Operator curates the Games Library; gaming appliances read library/ and switch/ as gaming.
     path: /mnt/andromeda/games
-    share_acl: [operator, gaming read]  # gaming gets READ; file permissions keep it out of verified/
+    share_acl: [operator, gaming read]  # gaming gets READ; file permissions keep it out of sources/
   tv-ingest:
     purpose: Ingest Folder for TV episodes added by hand.
     path: /mnt/andromeda/media/tv/ingest
