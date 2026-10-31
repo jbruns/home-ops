@@ -48,4 +48,5 @@ The Service runs (`tier: warning`). To park it between milestones, set `deploy.r
 and secret stay; Probe targets come from running containers, so a parked Service has none, and Backups skip the store
 while parked. Run `homelab-declared-containers` and open a PR; doco-cd Deploys either change.
 
-Keep the memory limit, measured at the pilot, and re-measure it after the first build on the Host.
+The memory limit is deliberately generous while the pilot changes. Profile it and tighten it once the pilot settles:
+the selection engine's memory grows with the DAT (`compose.yaml` notes what was measured).
