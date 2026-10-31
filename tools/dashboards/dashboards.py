@@ -18,7 +18,7 @@ OUT = Path(__file__).resolve().parents[2] / "tn/monitoring/grafana/dashboards"
 
 PROM = {"type": "prometheus", "uid": "prometheus"}
 LOKI = {"type": "loki", "uid": "loki"}
-REMOTE = {"type": "prometheus", "uid": "prometheus-remote"}  # nzbhydra2's machine (ADR 0005)
+REMOTE = {"type": "prometheus", "uid": "prometheus-remote"}  # the machine running nzbhydra2 and Dispatcharr (ADR 0005)
 # The Grafana folder (grafana/provisioning/dashboards.yml) and the tag every generated dashboard carries.
 FOLDER = "home-ops"
 MACHINE = {"type": "prometheus", "uid": "${ds}"}
@@ -777,8 +777,118 @@ def arr():
                      desc="Sonarr, Radarr and sabnzbd: health, library, queue and downloads (exportarr, arr-queue-exporter).")
 
 
+def dispatcharr():
+    """Dispatcharr runs on the remote machine; every query goes to its Prometheus (ADR 0005)."""
+    rate = "$__rate_interval"
+    live = 'type="live"'
+    meta = f"dispatcharr_stream_metadata{{{live}}}"
+    names = f"max by (channel_uuid, channel_name) ({meta})"
+
+    def per_channel(metric):
+        # Per-stream series carry only uuid/number; the name comes from the metadata series.
+        return (f"max by (channel_uuid, channel_number) ({metric}{{{live}}})"
+                f" * on (channel_uuid) group_left (channel_name) {names}")
+
+    def t(expr, legend="", ref="A", **kw):
+        return target(expr, legend, ref, ds=REMOTE, **kw)
+
+    channel = "{{channel_number}} {{channel_name}}"
+    speed_steps = {"mode": "absolute", "steps": [
+        {"color": "red", "value": None}, {"color": "orange", "value": 0.95}, {"color": "green", "value": 1}]}
+    states = ("active", "waiting_for_clients", "buffering", "stopping", "error")
+    state_colors = ("green", "blue", "orange", "text", "red")
+    state_map = [{"type": "value", "options": {
+        str(i): {"text": s.replace("_", " ").upper(), "color": c, "index": i - 1}
+        for i, (s, c) in enumerate(zip(states, state_colors), 1)}}]
+    state_expr = "max by (channel_name) (" + " or ".join(
+        f'{meta[:-1]}, state="{s}"}} * {i}' for i, s in enumerate(states, 1)) + ")"
+    container = 'job="cadvisor", name="dispatcharr"'
+    hidden = {"custom.hidden": True}
+    panels = [
+        row("Now"),
+        stat("Uptime", 'max(service:uptime:ok{container="dispatcharr"})', w=3, mappings=UP_MAPPING,
+             steps=UP_STEPS, ds=REMOTE, desc="Dispatcharr's Uptime now, from its machine's Probe."),
+        stat("Exporter", 'max(up{job="dispatcharr"})', w=3, mappings=UP_MAPPING, steps=UP_STEPS, ds=REMOTE,
+             desc="The exporter plugin's scrape. Down means every panel below is blank (TargetDown alerts)."),
+        stat("Live channels", f"max(dispatcharr_active_streams{{{live}}})", w=3, ds=REMOTE,
+             desc="Channels Dispatcharr is pulling from a provider."),
+        stat("Clients", f"sum(dispatcharr_stream_active_clients{{{live}}}) or vector(0)", w=3, ds=REMOTE),
+        stat("Buffering", f'count({meta[:-1]}, state="buffering"}}) or vector(0)', w=3,
+             steps=count_steps("orange"), ds=REMOTE,
+             desc="DispatcharrChannelBuffering alerts after 3 minutes."),
+        stat("Slow (< 0.95x)", f"count(dispatcharr_stream_buffering_speed{{{live}}} < 0.95) or vector(0)", w=3,
+             steps=count_steps("orange"), ds=REMOTE,
+             desc="ffmpeg reading slower than real time. DispatcharrChannelSlow alerts after 5 minutes."),
+        stat("On failover", f"count(dispatcharr_stream_index{{{live}}} > 0) or vector(0)", w=3,
+             steps=count_steps("orange"), ds=REMOTE, desc="Channels playing a backup source, not their first."),
+        stat("Provider connections", "sum(dispatcharr_profile_connections)", w=3, ds=REMOTE,
+             desc="Upstream connections in use across M3U accounts; limits are in Providers below."),
+
+        row("Channels"),
+        table("Live channels", [
+            t(f"max by (channel_uuid, channel_number, channel_name, channel_group, state, stream_profile, provider) ({meta})",
+              ref="A", instant=True, table=True),
+            t(f"max by (channel_uuid) (dispatcharr_stream_buffering_speed{{{live}}})", ref="B", instant=True, table=True),
+            t(f"max by (channel_uuid) (dispatcharr_stream_current_bitrate_bps{{{live}}})", ref="C", instant=True, table=True),
+            t(f"max by (channel_uuid) (dispatcharr_stream_active_clients{{{live}}})", ref="D", instant=True, table=True),
+            t(f"max by (channel_uuid) (dispatcharr_stream_uptime_seconds{{{live}}})", ref="E", instant=True, table=True),
+            t(f"max by (channel_uuid) (dispatcharr_stream_index{{{live}}})", ref="F", instant=True, table=True),
+        ], {"Value #A": "n", "Value #B": "Speed", "Value #C": "Bitrate", "Value #D": "Clients",
+            "Value #E": "Up for", "Value #F": "Source"}, w=24, h=8, join="channel_uuid", sort="channel_number",
+            ds=REMOTE, desc="Source 0 is the channel's first stream; higher means failover.",
+            overrides=[column_override("channel_uuid", **hidden), column_override("n", **hidden),
+                       column_override("Speed", decimals=2, thresholds=speed_steps,
+                                       **{"custom.cellOptions": cell_color()}),
+                       column_override("Bitrate", unit="bps"), column_override("Up for", unit="dtdurations"),
+                       column_override("state", mappings=[{"type": "value", "options": {
+                           s: {"color": c, "index": i} for i, (s, c) in enumerate(zip(states, state_colors))}}],
+                           **{"custom.cellOptions": cell_color("color-text")})]),
+        timeseries("ffmpeg speed", [t(per_channel("dispatcharr_stream_buffering_speed"), channel)],
+                   ds=REMOTE, defaults={"thresholds": speed_steps, "decimals": 2},
+                   custom={"thresholdsStyle": {"mode": "dashed"}},
+                   desc="Read speed against real time (1.0). Below 0.95 for 5 minutes alerts. ffmpeg profiles only."),
+        timeseries("Bitrate", [t(per_channel("dispatcharr_stream_current_bitrate_bps"), channel)],
+                   unit="bps", ds=REMOTE),
+        state_timeline("Channel state", [t(state_expr, "{{channel_name}}")], mappings=state_map,
+                       steps=[{"color": "text", "value": None}], ds=REMOTE),
+        timeseries("Streams and clients", [
+            t("max by (type) (dispatcharr_active_streams{type!=\"\"})", "{{type}} streams", "A"),
+            t("sum by (type) (dispatcharr_stream_active_clients)", "{{type}} clients", "B")], ds=REMOTE),
+
+        row("Providers"),
+        table("M3U accounts", [
+            t("max by (account_name, account_type, status) (dispatcharr_m3u_account_stream_count)",
+              ref="A", instant=True, table=True),
+            t("max by (account_name) (dispatcharr_profile_connections)", ref="B", instant=True, table=True),
+            t("max by (account_name) (dispatcharr_profile_max_connections)", ref="C", instant=True, table=True),
+            t("min by (account_name) (dispatcharr_profile_days_to_expiry)", ref="D", instant=True, table=True),
+        ], {"Value #A": "Streams", "Value #B": "Connections", "Value #C": "Max", "Value #D": "Expires in"},
+            w=12, join="account_name", ds=REMOTE, desc="Max 0 means no limit.",
+            overrides=[column_override("Expires in", unit="d", thresholds={"mode": "absolute", "steps": [
+                {"color": "red", "value": None}, {"color": "orange", "value": 7}, {"color": "green", "value": 30}]},
+                **{"custom.cellOptions": cell_color("color-text")}),
+                column_override("status", mappings=[{"type": "value", "options": {
+                    "success": {"color": "green", "index": 0}, "error": {"color": "red", "index": 1}}}],
+                    **{"custom.cellOptions": cell_color("color-text")})]),
+        timeseries("Connections by account", [
+            t("max by (account_name) (dispatcharr_profile_connections)", "{{account_name}}", "A")],
+            ds=REMOTE, defaults={"decimals": 0}),
+
+        row("Container"),
+        timeseries("CPU", [t(f"sum(rate(container_cpu_usage_seconds_total{{{container}}}[{rate}]))", "CPU cores")],
+                   ds=REMOTE),
+        timeseries("Memory", [t(f"sum(container_memory_working_set_bytes{{{container}}})", "working set", "A"),
+                              t(f"max(container_spec_memory_limit_bytes{{{container}}})", "limit", "B")],
+                   unit="bytes", ds=REMOTE,
+                   overrides=[column_override("limit", **{"custom.lineStyle": {"fill": "dash", "dash": [10, 10]},
+                                                          "custom.fillOpacity": 0})]),
+    ]
+    return dashboard("dispatcharr", "Dispatcharr", panels, links=DASH_LINKS, time="now-6h",
+                     desc="Dispatcharr live channels, ffmpeg speed, providers and container (exporter plugin, remote Prometheus).")
+
+
 DASHBOARDS = {"overview": overview, "service": service, "machine": machine, "dependencies": dependencies,
-              "plex": plex, "arr": arr}
+              "plex": plex, "arr": arr, "dispatcharr": dispatcharr}
 
 
 def render():

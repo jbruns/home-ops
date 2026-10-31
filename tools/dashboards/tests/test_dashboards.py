@@ -12,7 +12,7 @@ sys.path.insert(0, str(TOOL_DIR))
 
 import dashboards  # noqa: E402
 
-NAMES = ["overview.json", "service.json", "machine.json", "dependencies.json", "plex.json", "arr.json"]
+NAMES = ["overview.json", "service.json", "machine.json", "dependencies.json", "plex.json", "arr.json", "dispatcharr.json"]
 
 
 def run(*args: str) -> subprocess.CompletedProcess:
