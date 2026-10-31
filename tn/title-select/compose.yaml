@@ -6,7 +6,7 @@ services:
       file: ../_baseline.yaml
       service: baseline
     # An Owned Application, released from its own repo; Renovate keeps tag and digest current.
-    image: ghcr.io/jbruns/title-select:0.1.0@sha256:ce62fe1c8d214570e32aade06eddd8669d714f8a60fbc8242cf5683a676a9c88
+    image: ghcr.io/jbruns/title-select:0.2.0@sha256:ef7a2e96d24efa428885707157449b74fe256a61bcf5262be818c16d49ba6c58
     container_name: title-select
     # The Operator's uid and gid (host/truenas/identities.yaml), so it can read sources/ (mode 0700). A pilot
     # crutch: it gets its own user and group when it takes the Organizer role (ADR 0009).
@@ -21,8 +21,6 @@ services:
       start_period: 60s
       start_interval: 5s
     deploy:
-      # Parked between pilot milestones; to resume, drop this and set tier back to warning (README.md).
-      replicas: 0
       resources:
         limits:
           # 6.4M peak auditing a 843-ZIP Source Set at pace gentle (#796); ~1.5x, rounded up to 16M.
@@ -35,8 +33,8 @@ services:
     secrets:
       - title_select_operator_token
     labels:
-      # Alert Tier (GLOSSARY.md): critical | warning | info. info while parked, so ContainerDown stays quiet.
-      tier: info
+      # Alert Tier (GLOSSARY.md): critical | warning | info. Set it to info while parked (README.md).
+      tier: warning
       startup-order: "3"
       # The store is backed up as it is; a restore may replay the WAL.
       stack-back.volumes: true
@@ -93,6 +91,13 @@ services:
         source: ${ZFS_POOL_ROOT_HDD}/games/sources
         target: /sources
         read_only: true
+        bind:
+          create_host_path: false
+      # A Managed Folder in the Root `play`, mounted on its own and read-write (ADR 0009); staging stays inside it,
+      # so renames never cross mounts. Never created by the Deploy: the Operator creates it, empty.
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/games/library/roms/atari2600
+        target: /play/atari2600
         bind:
           create_host_path: false
     networks:

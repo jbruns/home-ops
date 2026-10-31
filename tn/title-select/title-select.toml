@@ -4,6 +4,11 @@
 path = "/sources"
 writable = false
 
+# Managed Folders, each bind-mounted on its own under /play (compose.yaml).
+[roots.play]
+path = "/play"
+writable = true
+
 [audits]
 keep = 20
 

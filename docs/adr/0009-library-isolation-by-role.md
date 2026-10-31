@@ -10,8 +10,10 @@ Games is the exception to the `/media/<library>` layout: it has its own dataset,
 
 During the pilot (#796), Title Select runs as the Operator's uid and gid so that it can read `sources/` (mode `0700`), mounted read-only. This is a temporary crutch: once Title Select takes the Organizer role (the repair slice), it gets its own user and group, as Sonarr does.
 
+Title Select builds into Managed Folders: Play Library folders it owns, such as `library/roms/atari2600`. Each Managed Folder is bind-mounted on its own, read-write, an exception to mounting a whole Library tree. Title Select keeps its staging inside each Managed Folder and never moves files between them, so no rename crosses a mount, and a compromised Title Select can reach only the folders it manages, not the rest of the ES-DE tree. Each Managed Folder is created empty by the Operator before it is mounted (#812).
+
 ## Considered Options
 
 - **One `/media` mount for every Organizer** (the TRaSH Guides layout): rejected; it gives every Organizer write access to every Library.
-- **Separate bind mounts per folder**: rejected; every import becomes a full copy, and seeding hardlinks break.
+- **Separate bind mounts per folder**: rejected for Organizers that import between folders; every import becomes a full copy, and seeding hardlinks break. Title Select's Managed Folders are the exception, since it builds within each folder.
 - **Separate datasets for every Library**: not needed for isolation; one tree per Library on the existing media dataset gives the same isolation with renames only. Games uses a separate dataset for its different Periodic Snapshot policy.
