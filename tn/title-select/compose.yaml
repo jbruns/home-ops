@@ -23,9 +23,10 @@ services:
     deploy:
       resources:
         limits:
-          # 6.4M peak auditing a 843-ZIP Source Set at pace gentle (#796); ~1.5x, rounded up to 16M.
-          # Re-measure on a larger Source Set when resumed.
-          memory: 16M
+          # The Service peaks at 6.4M auditing an 843-ZIP Source Set (#796), but the selection engine it runs needs
+          # 28-32M on its own for the Atari 2600 DAT, measured on the Host (#812), and grows with the DAT. 512M is
+          # deliberately generous while the pilot changes; profile it and tighten once the pilot settles.
+          memory: 512M
           cpus: "1"
     environment:
       - TZ=${TZ}
