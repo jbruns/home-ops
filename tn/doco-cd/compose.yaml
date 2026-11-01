@@ -3,7 +3,7 @@
 services:
   doco-cd:
     # Pinned by digest: a self-updating deployer must never move on its own (Renovate bumps it).
-    image: ghcr.io/kimdre/doco-cd:0.128.0@sha256:f7e9d2cf21770b157fd37413236965ac93cad9b5bc05ff78efc55c3b9c6f0008
+    image: ghcr.io/kimdre/doco-cd:0.132.0@sha256:ed22583456c60c88c5cabdb47803aa0ab51284f00d70d5bb63fa56b223fa250a
     restart: unless-stopped
     dns_search: .
     security_opt:
