@@ -98,7 +98,7 @@ One published version of a work (a translation, an abridgement, an annotated or 
 _Avoid_: Version, release, copy
 
 **Format**:
-The one file type a Book holds, chosen by its content: EPUB for reflowable text, or PDF only where no EPUB exists and the layout is the content (textbooks, manuals). Comics and magazines are not Books.
+The one file type a Book holds, chosen by its content: EPUB for reflowable text, or PDF only where no EPUB exists and the layout is the content (textbooks, manuals). Single comic issues and magazines are not Books; children's books and graphic novels are.
 _Avoid_: File, copy, version
 
 **Retail EPUB**:
