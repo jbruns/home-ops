@@ -20,8 +20,9 @@ services:
     deploy:
       resources:
         limits:
-          # 30-day peak 293M
-          memory: 512M
+          # 30-day peak 293M, but importing a retail EPUB of 170M (full-size photo inserts) was OOM-killed
+          # at 512M, and the kill left a stale /tmp/ingest_processor.lock that stalled ingest until removed.
+          memory: 2G
     environment:
       - PUID=${CWA_UID}
       - PGID=${MEDIA_SHARED_GID}
