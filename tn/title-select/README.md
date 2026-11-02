@@ -1,8 +1,9 @@
 # Title Select
 
 Title Select audits Source Sets against their DATs and builds Selections into Managed Folders (an Owned Application,
-ADR 0018). It reads `sources/` in the Games dataset read-only, as the Root `sources`, writes only to the Managed
-Folders mounted under the Root `play`, and keeps its SQLite store and DAT files in the volume `title-select_store`. Its own README, at the pinned version, documents the commands, API and configuration.
+ADR 0018). It reads `sources/` in the Games dataset read-only, as the Root `sources`, and writes only to the Managed
+Folders mounted under the Root `play`, the Source Sets it repairs, the Ingest Folder (`games/ingest`, Root `ingest`)
+and the Additions Root (`games/additions`), each bound read-write on its own (ADR 0009). It keeps its SQLite store and DAT files in the volume `title-select_store`. Its own README, at the pinned version, documents the commands, API and configuration.
 
 ## The workbench
 
@@ -18,11 +19,21 @@ Open `https://titleselect.<domain>/` and sign in through the IdP. The workbench 
 
 ## Managed Folders
 
-Each Managed Folder is a separate read-write bind mount under `/play` (ADR 0009), today only
-`library/roms/atari2600`. To add one, the Operator creates the folder empty, owned by the Operator's uid with the
+Each Managed Folder is a separate read-write bind mount under `/play` (ADR 0009), today
+`library/roms/atari2600` and `library/roms/gba`. To add one, the Operator creates the folder empty, owned by the Operator's uid with the
 folder's usual group and mode, then adds its bind to `compose.yaml` in a PR; the Deploy never creates it. Title
 Select refuses a folder that isn't empty or carries another store's `.title-select` marker. Updating ES-DE's
 `gamelists/` for the built files (for example `.a26` to `.zip`) is the Operator's.
+
+## Repairs, ingest and additions
+
+A Source Set that repairs may write is bound read-write on its own over the read-only `/sources` mount and listed in
+`writable_paths` in `title-select.toml`; today `No-Intro/Atari - Atari 2600` and `No-Intro/Nintendo - Game Boy
+Advance`. To add one, add both in a PR. The first repair writes a `.title-select` marker into the Source Set.
+
+Drop files into `games/ingest` and scan the Ingest Folder from the workbench. Title Select moves what it can place
+into a Source Set or an additions set through a plan you approve, and keeps the rest aside. Additions sets live in
+`games/additions`, one folder per system.
 
 ## Headless Audit
 

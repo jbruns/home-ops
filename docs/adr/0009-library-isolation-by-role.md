@@ -12,6 +12,8 @@ During the pilot (#796), Title Select runs as the Operator's uid and gid so that
 
 Title Select builds into Managed Folders: Play Library folders it owns, such as `library/roms/atari2600`. Each Managed Folder is bind-mounted on its own, read-write, an exception to mounting a whole Library tree. Title Select keeps its staging inside each Managed Folder and never moves files between them, so no rename crosses a mount, and a compromised Title Select can reach only the folders it manages, not the rest of the ES-DE tree. Each Managed Folder is created empty by the Operator before it is mounted (#812).
 
+The same per-folder exception covers what Title Select may change outside its Managed Folders (#819): its Ingest Folder (`games/ingest`), where new files arrive and which it empties as it moves them, the Additions Root (`games/additions`), and each Source Set it repairs, bound read-write on its own over the read-only `sources/` mount and listed in that Root's `writable_paths`. A rename within a Source Set stays on one mount; a move from the Ingest Folder into a Source Set crosses mounts, so Title Select copies the file, checks the copy by hash, and only then deletes the original. Every other Source Set stays read-only. The Operator creates each folder before it is mounted.
+
 ## Considered Options
 
 - **One `/media` mount for every Organizer** (the TRaSH Guides layout): rejected; it gives every Organizer write access to every Library.
