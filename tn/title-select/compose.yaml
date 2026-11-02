@@ -23,10 +23,10 @@ services:
     deploy:
       resources:
         limits:
-          # The Service peaks at 6.4M auditing an 843-ZIP Source Set (#796), but the selection engine it runs needs
-          # 28-32M on its own for the Atari 2600 DAT, measured on the Host (#812), and grows with the DAT. 512M is
-          # deliberately generous while the pilot changes; profile it and tighten once the pilot settles.
-          memory: 512M
+          # Twice the largest peak measured on the Host (#819): 84.7M, previewing a selection profile for the Game Boy
+          # Advance DAT. Audits, repairs and builds stay under 27M; selection grows with the DAT, so measure again
+          # before adding a system with a much larger DAT (the method is in the application's docs/memory.md).
+          memory: 192M
           cpus: "1"
     environment:
       - TZ=${TZ}
