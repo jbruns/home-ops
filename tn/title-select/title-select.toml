@@ -3,10 +3,23 @@
 [roots.sources]
 path = "/sources"
 writable = false
+# Source Sets that repairs may write; each is bound read-write on its own (compose.yaml).
+writable_paths = ["No-Intro/Atari - Atari 2600", "No-Intro/Nintendo - Game Boy Advance"]
 
 # Managed Folders, each bind-mounted on its own under /play (compose.yaml).
 [roots.play]
 path = "/play"
+writable = true
+
+# The Ingest Folder, where new files arrive; assessed when you scan it.
+[roots.ingest]
+path = "/ingest"
+writable = true
+kind = "ingest"
+
+# The additions sets, one folder per system.
+[roots.additions]
+path = "/additions"
 writable = true
 
 [audits]

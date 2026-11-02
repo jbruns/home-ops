@@ -6,7 +6,7 @@ services:
       file: ../_baseline.yaml
       service: baseline
     # An Owned Application, released from its own repo; Renovate keeps tag and digest current.
-    image: ghcr.io/jbruns/title-select:0.3.0@sha256:590322325f294b217c8d858eff15b20f3d10fe778c08b68bd63324de23410673
+    image: ghcr.io/jbruns/title-select:0.4.0@sha256:d033d0634b93eb83c6a838405c5f64359347fd16420603263a4c7777ea7bc60b
     container_name: title-select
     # The Operator's uid and gid (host/truenas/identities.yaml), so it can read sources/ (mode 0700). A pilot
     # crutch: it gets its own user and group when it takes the Organizer role (ADR 0009).
@@ -94,11 +94,40 @@ services:
         read_only: true
         bind:
           create_host_path: false
+      # Source Sets that repairs may write, each bound read-write over the read-only `sources` mount and listed in
+      # the Root's writable_paths (ADR 0009). Same dataset, so renames within a Source Set stay on one mount.
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/games/sources/No-Intro/Atari - Atari 2600
+        target: /sources/No-Intro/Atari - Atari 2600
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/games/sources/No-Intro/Nintendo - Game Boy Advance
+        target: /sources/No-Intro/Nintendo - Game Boy Advance
+        bind:
+          create_host_path: false
+      # The Ingest Folder (Root `ingest`) and the Additions Root, read-write. Moves from ingest into a Source Set cross
+      # mounts, so Title Select copies, checks the copy by hash, and only then deletes the original.
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/games/ingest
+        target: /ingest
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/games/additions
+        target: /additions
+        bind:
+          create_host_path: false
       # A Managed Folder in the Root `play`, mounted on its own and read-write (ADR 0009); staging stays inside it,
       # so renames never cross mounts. Never created by the Deploy: the Operator creates it, empty.
       - type: bind
         source: ${ZFS_POOL_ROOT_HDD}/games/library/roms/atari2600
         target: /play/atari2600
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/games/library/roms/gba
+        target: /play/gba
         bind:
           create_host_path: false
     networks:
