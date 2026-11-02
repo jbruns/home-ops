@@ -6,7 +6,7 @@ services:
       file: ../_baseline.yaml
       service: baseline
     # An Owned Application, released from its own repo; Renovate keeps tag and digest current.
-    image: ghcr.io/jbruns/title-select:0.4.0@sha256:d033d0634b93eb83c6a838405c5f64359347fd16420603263a4c7777ea7bc60b
+    image: ghcr.io/jbruns/title-select:0.4.1@sha256:d59ddbfba2e92cdef76aece3c0dd7cb8d3465ab24911c6fdab3adf5afbd32a29
     container_name: title-select
     # The Operator's uid and gid (host/truenas/identities.yaml), so it can read sources/ (mode 0700). A pilot
     # crutch: it gets its own user and group when it takes the Organizer role (ADR 0009).
@@ -23,10 +23,10 @@ services:
     deploy:
       resources:
         limits:
-          # The Service peaks at 6.4M auditing an 843-ZIP Source Set (#796), but the selection engine it runs needs
-          # 28-32M on its own for the Atari 2600 DAT, measured on the Host (#812), and grows with the DAT. 512M is
-          # deliberately generous while the pilot changes; profile it and tighten once the pilot settles.
-          memory: 512M
+          # Twice the largest peak measured on the Host (#819): 84.7M, previewing a selection profile for the Game Boy
+          # Advance DAT. Audits, repairs and builds stay under 27M; selection grows with the DAT, so measure again
+          # before adding a system with a much larger DAT (the method is in the application's docs/memory.md).
+          memory: 192M
           cpus: "1"
     environment:
       - TZ=${TZ}
