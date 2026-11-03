@@ -1,15 +1,33 @@
-# Self-hosted Services
+# Self-hosted Infrastructure
 
-The self-hosted services running on the TrueNAS host, and how they are deployed, ordered, watched, and alerted on.
+The Hosts this repo manages: the self-hosted services on the TrueNAS Host and the Guests on the Proxmox Host, and how they are deployed, ordered, backed up, watched, and alerted on.
 
 ## Topology
 
 **Host**:
-The single TrueNAS machine that runs every Service.
-_Avoid_: Server, NAS, box
+A machine whose declared state this repo manages: the TrueNAS Host or the Proxmox Host. Say which one wherever "the Host" would be ambiguous.
+_Avoid_: Server, NAS, box, node
+
+**TrueNAS Host**:
+The Host that runs every Service and holds the Libraries, shares and Backups.
+
+**Proxmox Host**:
+The Host that runs Guests and no Services. It runs only when the Operator turns it on, so its being down is never a failure.
+_Avoid_: Hypervisor, PVE box
+
+**Guest**:
+A virtual machine or container on the Proxmox Host.
+_Avoid_: VM, LXC, CT (when meaning either)
+
+**Kept Guest**:
+A Guest declared in this repo and backed up, that must survive a rebuild of the Proxmox Host (e.g. the Windows Server 2003 VM and the RetroNAS relay, which serve the retro PC network). A Scratch Guest becomes a Kept Guest only by being declared.
+
+**Scratch Guest**:
+An undeclared Guest marked as disposable, for a trial such as evaluating an OS or a project. It is never backed up and may be destroyed at any time.
+_Avoid_: Test VM, dev box, lab
 
 **Host Configuration**:
-The Host's own settings that no Stack declares (its storage layout, shares, users, services and network), each kept only for a recorded purpose.
+A Host's own settings that no Stack or Kept Guest declares (its storage layout, shares, users, services and network), each kept only for a recorded purpose.
 _Avoid_: TrueNAS settings, system config
 
 **Stack**:
@@ -116,11 +134,11 @@ _Avoid_: Type, kind
 ## Custom code
 
 **Custom Component**:
-Code we wrote that runs on the Host, kept only because no upstream or community option covers the need, and generic enough to adopt on another host.
+Code we wrote that runs on a Host, kept only because no upstream or community option covers the need, and generic enough to adopt on another host.
 _Avoid_: Script, glue, homegrown exporter
 
 **Repo Tooling**:
-Code we wrote that runs only in CI or on a contributor's machine, never on the Host.
+Code we wrote that runs only in CI or on a contributor's machine, never on a Host.
 _Avoid_: Scripts, helpers
 
 **Retirement Condition**:
@@ -141,7 +159,7 @@ _Avoid_: Nightly, smoke test
 ## Delivery
 
 **Deploy**:
-Making the Host match what the repo's default branch declares for a Stack.
+Making the TrueNAS Host match what the repo's default branch declares for a Stack.
 _Avoid_: Sync, rollout, redeploy
 
 **Baseline**:
@@ -153,11 +171,11 @@ A recorded, reasoned waiver of one Baseline item for one Service; an Exemption f
 _Avoid_: Override, exception
 
 **Stray**:
-A container, image, volume, or network on the Host that no Stack declares or uses, or a Rollback Snapshot past its release date. Data that belongs to a Stack is never a Stray, even while nothing uses it.
+A container, image, volume, or network on the TrueNAS Host that no Stack declares or uses, a Guest that is neither a Kept Guest nor marked as a Scratch Guest, or a Rollback Snapshot past its release date. Data that belongs to a Stack is never a Stray, even while nothing uses it.
 _Avoid_: Ad-hoc, orphan, leftover
 
 **Rollback Snapshot**:
-A ZFS snapshot taken before a risky change, recording the change it serves and a release date, and released once the change is verified. It replaces hand-made copies of data on the Host; it is never a Backup.
+A ZFS snapshot taken before a risky change, recording the change it serves and a release date, and released once the change is verified. It replaces hand-made copies of data on the TrueNAS Host; it is never a Backup.
 _Avoid_: .bak, pre-change copy, safety copy
 
 **Periodic Snapshot**:
@@ -165,7 +183,7 @@ A ZFS snapshot taken on a schedule of data that people write to over a share, ke
 _Avoid_: Auto snapshot, shadow copy
 
 **Offline Copy**:
-A copy of data that can be obtained again but is costly to rebuild (Libraries, software), kept on disks disconnected from the Host between runs. It is never a Backup.
+A copy of data that can be obtained again but is costly to rebuild (Libraries, software), kept on disks disconnected from the TrueNAS Host between runs. It is never a Backup.
 _Avoid_: Cold backup, offline backup, external backup
 
 ## Secrets
@@ -175,11 +193,11 @@ The person who edits this repo's secrets and holds the offline copies of its key
 _Avoid_: Admin, owner
 
 **Host Key**:
-The age key doco-cd decrypts SOPS files with on the Host; the only key the Host holds.
+The age key doco-cd decrypts SOPS files with on the TrueNAS Host; the only age key any Host holds.
 _Avoid_: SOPS key, age key (ambiguous), deploy key
 
 **Operator Key**:
-The Operator's own age key, the second recipient of every SOPS file; it never goes on the Host.
+The Operator's own age key, the second recipient of every SOPS file; it never goes on a Host.
 _Avoid_: Personal key, admin key
 
 ## Reliability
@@ -189,7 +207,7 @@ A restic snapshot of a Stack's volumes and database dumps, of Device Backups and
 _Avoid_: Dump, archive, copy, .bak
 
 **Device Backup**:
-A backup that a device off the Host writes into its own space on the Host. A device can reach only its own Device Backups, never another's.
+A backup that a device, including another Host, writes into its own space on the TrueNAS Host. A device can reach only its own Device Backups, never another's.
 _Avoid_: Backup (alone), device dump
 
 **Tier**:
@@ -232,11 +250,11 @@ Something a Service needs in order to do its job, such as Sonarr needing its ind
 _Avoid_: Upstream, backend
 
 **Internal Dependency**:
-A Dependency that is itself a Service on the Host.
+A Dependency that is itself a Service on the same Host.
 
 **External Dependency**:
-A Dependency outside the Host, whether on another machine at home (e.g. nzbhydra2) or a third party (e.g. a Usenet provider).
+A Dependency outside the Service's Host, whether on another machine at home (e.g. nzbhydra2) or a third party (e.g. a Usenet provider).
 
 **Startup Order**:
-The sequence in which Services must become ready after the Host boots, so that dependents start only after what they depend on.
+The sequence in which Services must become ready after the TrueNAS Host boots, so that dependents start only after what they depend on.
 _Avoid_: Boot order, dependency chain
