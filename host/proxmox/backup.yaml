@@ -1,4 +1,9 @@
-# Backup: the vzdump job (`cluster/backup`). See README.md. The update notification comes with #833.
+# Backup: the vzdump job (`cluster/backup`), and the update notification (`cluster/notifications`, and `notify` in
+# `cluster/options`). See README.md.
+# The only notice the Proxmox Host sends is its available-updates notice, to the Digest (ADR 0019). Found before
+# #833: the built-in sendmail target `mail-to-root` and `default-matcher` (every notification to it), root@pam with an
+# email address set, no other target or matcher, and `notify` unreadable through hops (its default, `auto`, sends
+# update notices only with an active subscription).
 
 kept-guests:
   purpose: Weekly vzdump of every Kept Guest to the Device Backup share, which the nightly Backup carries offsite (ADR 0019).
@@ -9,5 +14,42 @@ kept-guests:
   mode: snapshot  # a running Guest's disks support it; vzdump backs up a stopped Guest, as both usually are, in stop mode
   compress: '0'  # uncompressed, so restic deduplicates unchanged blocks between weeks
   prune-backups: keep-last=3
-  notification-mode: legacy-sendmail  # with no mailto, vzdump sends nothing (ADR 0019: no alerting)
+  notification-mode: legacy-sendmail  # with no mailto, vzdump sends nothing, so no matcher sees its result (ADR 0019: no alerting)
   enabled: true
+
+notify:
+  purpose: Lets the daily update check (pve-daily-update) send its notice. With `auto`, the default, it sends only with an active subscription.
+  package-updates: always  # a notice whenever a package version is newly pending; each version is notified once
+
+targets:
+  digest:
+    purpose: Posts the available-updates notice to the Digest channel, through the same webhook and in the same embed shape as Alertmanager's `discord` receiver.
+    type: webhook
+    method: post
+    url: 'https://discord.com/api/webhooks/{{ secrets.path }}'
+    header:
+      - {name: Content-Type, value: application/json}  # values in plain text here; the API takes them in base64
+    secret: [path]  # the webhook's <id>/<token>, cut from tn/monitoring/alertmanager/discord_webhook.sops.txt; Proxmox VE keeps it in /etc/pve/priv/notifications.cfg
+    # The API takes it in base64. Grey, as Alertmanager colours a notice that is neither firing nor resolved. A notice
+    # longer than an embed holds (4096 characters) would be refused, so it is replaced by a pointer to the list.
+    body: |-
+      {"content": "", "embeds": [{"title": {{ json title }}, "color": 9807270, "description": {{#if (gt (len message) 4080)}}"The list is too long for one message. Run `hops host --host proxmox` to see it."{{else}}"```\n{{ escape message }}\n```"{{/if}}}]}
+    comment: Available updates to the Digest
+  mail-to-root:
+    purpose: Built-in, unchanged. Mails root@pam's address. It gets system mail; default-matcher keeps update notices from it.
+    origin: builtin
+    type: sendmail
+    mailto-user: [root@pam]
+
+matchers:
+  package-updates-to-digest:
+    purpose: Sends the daily update check's notices, and nothing else, to the Digest.
+    match-field: ['exact:type=package-updates']
+    target: [digest]
+    comment: Available updates to the Digest
+  default-matcher:
+    purpose: Built-in, routing every notification to mail-to-root. Inverted to leave out package-updates, so turning those on sends no new mail; everything else reaches mail-to-root as before.
+    origin: modified-builtin
+    match-field: ['exact:type=package-updates']
+    invert-match: true
+    target: [mail-to-root]

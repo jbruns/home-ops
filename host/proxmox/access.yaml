@@ -22,4 +22,4 @@ acl:
 
 agent_login:
   purpose: The agent's Linux login over SSH (HOPS_PROXMOX_SSH_USER), with the agent's key; applies merged changes.
-  sudo: /etc/sudoers.d/homeops-agent  # NOPASSWD for pvesh, qm, pct, vzdump, tee to /etc/subuid, /etc/subgid, Guest configs and snippets, and `pvesm set truenas-backup --password` (the password from stdin) only
+  sudo: /etc/sudoers.d/homeops-agent  # NOPASSWD for pvesh, qm, pct, vzdump, tee to /etc/subuid, /etc/subgid, Guest configs and snippets, `pvesm set truenas-backup --password` (the password from stdin), and tee to /etc/pve/priv/notifications.cfg (notification secrets from stdin) only

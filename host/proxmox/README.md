@@ -3,7 +3,8 @@
 The Proxmox Host's declared state: its own settings that no Kept Guest declares, and its Kept Guests, each with
 the purpose it serves (ADR 0019). A change is a PR here. Once it merges, the agent applies it over SSH with
 `sudo -n pvesh`, `qm` or `pct` and checks the result with `hops proxmox call`. It never reads with `pvesh`, which
-prints credentials unredacted.
+prints credentials unredacted. A secret never goes in an argument: it comes from SOPS over stdin, into
+`pvesm set truenas-backup --password` or `tee /etc/pve/priv/notifications.cfg`.
 The agent's login and read token come from [`tools/proxmox-access`](../../tools/proxmox-access/README.md).
 
 Before each batch, the agent runs vzdump of every Kept Guest the batch touches. A change that could cut off access,
