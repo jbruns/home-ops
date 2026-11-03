@@ -4,6 +4,7 @@ The Proxmox Host's declared state: its own settings that no Kept Guest declares,
 the purpose it serves (ADR 0019). A change is a PR here. Once it merges, the agent applies it over SSH with
 `sudo -n pvesh`, `qm` or `pct` and checks the result with `hops proxmox call`. It never reads with `pvesh`, which
 prints credentials unredacted.
+The agent's login and read token come from [`tools/proxmox-access`](../../tools/proxmox-access/README.md).
 
 Before each batch, the agent runs vzdump of every Kept Guest the batch touches. A change that could cut off access,
 such as a bridge or firewall change, keeps a console-reachable way back.
