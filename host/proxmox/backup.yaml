@@ -33,7 +33,7 @@ targets:
     # The API takes it in base64. Grey, as Alertmanager colours a notice that is neither firing nor resolved. A notice
     # longer than an embed holds (4096 characters) would be refused, so it is replaced by a pointer to the list.
     body: |-
-      {"content": "", "embeds": [{"title": {{ json title }}, "color": 9807270, "description": {{#if (gt (len message) 4080)}}"The list is too long for one message. Run `hops host --host proxmox` to see it."{{else}}"```\n{{ escape message }}\n```"{{/if}}}]}
+      {"username": "pve.proxmox", "content": "", "embeds": [{"title": {{ json title }}, "color": 9807270, "description": {{#if (gt (len message) 4080)}}"The list is too long for one message. Run `hops host --host proxmox` to see it."{{else}}"```\n{{ escape message }}\n```"{{/if}}}]}
     comment: Available updates to the Digest
   mail-to-root:
     purpose: Built-in, unchanged. Mails root@pam's address. It gets system mail; default-matcher keeps update notices from it.
