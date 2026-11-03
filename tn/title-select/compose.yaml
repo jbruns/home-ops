@@ -27,7 +27,7 @@ services:
           # Advance DAT. Audits, repairs and builds stay under 27M; selection grows with the DAT, so measure again
           # before adding a system with a much larger DAT (the method is in the application's docs/memory.md).
           memory: 192M
-          cpus: "4"
+          cpus: "1"
     environment:
       - TZ=${TZ}
       - TITLE_SELECT_OPERATOR_TOKEN_FILE=/run/secrets/title_select_operator_token
