@@ -12,15 +12,17 @@ such as a bridge or firewall change, keeps a console-reachable way back.
 ## Files
 
 One YAML file per area. The top-level keys are the area's items. Items and settings are named as the Proxmox API
-names them. The inventory fills these in.
+names them. `hops host --host proxmox` and `hops strays --host proxmox` read this record: each Kept Guest's
+`vmid` and `type` in `guests.yaml`, and `exclusive_networks` in `network.yaml` (the hops README, "Guests on a
+Proxmox VE Host").
 
 | File | Items |
 |---|---|
 | `guests.yaml` | Kept Guests: ID, kind (VM or container), resources, disks, network, mounts, idmap, boot order |
 | `storage.yaml` | storage definitions, including the TrueNAS Host's `retronas` export and the Device Backup share |
-| `network.yaml` | bridges, VLANs, addresses, the firewall |
+| `network.yaml` | the exclusive networks, bridges, VLANs, addresses, the firewall |
 | `access.yaml` | the agent's user, its token and their ACLs |
-| `backup.yaml` | the vzdump job and the update notification |
+| `backup.yaml` | the vzdump job (#832) and the update notification (#833) |
 
 ## Rules
 
