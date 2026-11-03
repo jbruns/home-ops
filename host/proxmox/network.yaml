@@ -57,6 +57,6 @@ firewall:
       options: {enable: 1, policy_in: DROP, policy_out: DROP, ipfilter: 1, macfilter: 1, dhcp: 0, ndp: 0, radv: 0}  # ipfilter drops packets from any address but the relay's own, so it can't forward or spoof; ndp 0 and no IPv6 ACCEPT rule leave IPv6 to the DROP policies
       rules:  # in order; replies to allowed connections pass by conntrack
         - {type: group, action: retronas-no-lan}
-        - {type: group, action: retronas-retro, iface: net0}
+        - {type: group, action: retronas-retro, iface: net0}  # disabled while RetroNAS playbooks run with mp0 detached (guests.yaml)
         - {type: out, action: ACCEPT, iface: net0, dest: 0.0.0.0/0, comment: IPv4 only; the retro network, DNS and WINS on 105, and the internet for updates}
         # net1 (main LAN) has no rule, so the DROP policies close it both ways, sshd included
