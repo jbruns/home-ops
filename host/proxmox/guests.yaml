@@ -54,7 +54,7 @@ rnas:
     retronas: {uid: 3256, gid: 3000}  # the same IDs as the TrueNAS Host's retronas user and group (../truenas/identities.yaml)
   retronas:
     retronas_path: /data/retronas  # RetroNAS's default, in /opt/retronas/ansible/retronas_vars.yml
-    playbooks: run only with mp0 detached  # with the retronas-retro rule (network.yaml) disabled first, and re-enabled only after mp0 is back and smbd runs from it. They chmod retronas_path and its config/ to 2775 (hard-coded); ../truenas/storage.yaml keeps the dataset at 2770 chmod retronas_path and its config/ to 2775 (hard-coded); ../truenas/storage.yaml keeps the dataset at 2770
+    playbooks: run only with mp0 detached  # with the retronas-retro rule (network.yaml) disabled first, and re-enabled only after mp0 is back and smbd and nmbd each run (one `systemctl is-active` per unit). They chmod retronas_path and its config/ to 2775 (hard-coded); ../truenas/storage.yaml keeps the dataset at 2770
     samba_guard: /etc/systemd/system/{smbd,nmbd}.service.d/10-retronas-export.conf  # ConditionPathIsMountPoint=/data/retronas and ConditionPathExists=/data/retronas/.retronas-export: smbd and nmbd stay down whenever mp0 is missing, even if a playbook starts them, so the relay never serves its rootfs
     services: [samba]  # SMB1 and NetBIOS (smbd, nmbd) only; no Cockpit or other installer. The firewall (network.yaml) opens only these, to the retro network
   access: console only  # `pct enter 102` on the Proxmox Host; openssh-server is purged, root has no key and a locked password, and the firewall drops tcp 22
