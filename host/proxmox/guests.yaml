@@ -54,17 +54,18 @@ rnas:
     retronas: {uid: 3256, gid: 3000}  # the same IDs as the TrueNAS Host's retronas user and group (../truenas/identities.yaml)
   retronas:
     retronas_path: /data/retronas  # RetroNAS's default, in /opt/retronas/ansible/retronas_vars.yml
-    services: [samba]  # nmbd and smbd; the firewall (network.yaml) opens only these to the retro network
-  sysctl: {net.ipv4.ip_forward: 0, net.ipv6.conf.all.forwarding: 0}  # /etc/sysctl.d/90-relay-no-forward.conf; the firewall's ipfilter and outbound policy hold even if root in the relay changes them
+    services: [samba]  # SMB1 and NetBIOS (smbd, nmbd) only; no Cockpit or other installer. The firewall (network.yaml) opens only these, to the retro network
+  access: console only  # `pct enter 102` on the Proxmox Host; openssh-server is purged, root has no key and a locked password, and the firewall drops tcp 22
+  sysctl: {net.ipv4.ip_forward: 0, net.ipv6.conf.all.disable_ipv6: 1, net.ipv6.conf.default.disable_ipv6: 1}  # /etc/sysctl.d/90-relay.conf: no forwarding, no IPv6 (the retro network has none). The firewall's ipfilter and IPv4-only rules hold even if root in the relay changes them
   network:
     net0: {name: eth0, bridge: vmbr0, tag: 50, ip: {address: relay-retro-v4}, gw: {address: retro-gateway-v4}, hwaddr: 101's net0, firewall: 1}  # retro network; also its way to the internet for updates
-    net1: {name: eth1, bridge: vmbr0, ip: {address: relay-lan-v4}, hwaddr: 101's net1, firewall: 1}  # main LAN, for the Operator's admin access only
+    net1: {name: eth1, bridge: vmbr0, ip: {address: relay-lan-v4}, hwaddr: 101's net1, firewall: 1}  # main LAN; keeps 101's address, but the firewall lets nothing in or out on it
   nameserver: {address: dc-retro-v4}  # the Windows Server 2003 VM (105)
   searchdomain: retro.<domain>
   onboot: false  # starts only when the Operator starts it
 
 rnas-101:
-  purpose: none; the old, privileged RetroNAS relay, kept stopped until the Operator has verified 102, then destroyed by #760.
+  purpose: none; the old, privileged RetroNAS relay, kept stopped for 2 weeks after the cutover to 102 (its first start), then destroyed by #760.
   vmid: 101
   type: lxc
   hostname: rnas.retro.<domain>
