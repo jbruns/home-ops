@@ -235,17 +235,17 @@ fi
 if pve_ssh sudo -n pvesh get /version >/dev/null 2>&1; then
   say "The agent can already log in and run pvesh; skipping the root script."
 else
-  pubkey=$(cat "${HOPS_PROXMOX_SSH_KEY/#\~/$HOME}.pub")
+  printf -v pubkey_q '%q' "$(cat "${HOPS_PROXMOX_SSH_KEY/#\~/$HOME}.pub")"
   paste_file=$(mktemp)
   cat > "$paste_file" <<ROOTEOF
-set -e; u='${HOPS_PROXMOX_SSH_USER}'; pub='${pubkey}'
+set -e; u='${HOPS_PROXMOX_SSH_USER}'; pub=${pubkey_q}
 command -v sudo >/dev/null || apt-get install -y sudo
 id "\$u" >/dev/null 2>&1 || useradd -m -s /bin/bash "\$u"
 install -d -m 700 -o "\$u" -g "\$u" "/home/\$u/.ssh"
 touch "/home/\$u/.ssh/authorized_keys"; grep -qxF "\$pub" "/home/\$u/.ssh/authorized_keys" || echo "\$pub" >> "/home/\$u/.ssh/authorized_keys"
 chown "\$u:\$u" "/home/\$u/.ssh/authorized_keys"; chmod 600 "/home/\$u/.ssh/authorized_keys"
 t=\$(command -v tee); f=\$(mktemp)
-echo "\$u ALL=(root) NOPASSWD: \$(command -v pvesh), \$(command -v qm), \$(command -v pct), \$(command -v vzdump), \$t /etc/subuid, \$t /etc/subgid, \$t /etc/pve/lxc/*.conf, \$t /var/lib/vz/snippets/*" > "\$f"
+echo "\$u ALL=(root) NOPASSWD: \$(command -v pvesh), \$(command -v qm), \$(command -v pct), \$(command -v vzdump), \$t /etc/subuid, \$t /etc/subgid, \$t ^/etc/pve/lxc/[0-9]+[.]conf\$, \$t ^/var/lib/vz/snippets/[a-z0-9_-]+[.]sh\$" > "\$f"
 visudo -cf "\$f" && install -m 440 "\$f" /etc/sudoers.d/homeops-agent; rm -f "\$f"; echo "agent login ready"
 ROOTEOF
   open_url "https://${HOPS_PROXMOX_SSH_HOST}:8006"
@@ -274,14 +274,23 @@ if ! pve_ssh sudo -n pvesh get "/access/users/${READER}" >/dev/null 2>&1; then
   pve_ssh sudo -n pvesh create /access/users --userid "${READER}" --comment "'Read-only API user for repo tooling'" >/dev/null
 fi
 pve_ssh sudo -n pvesh set /access/acl --path / --users "${READER}" --roles PVEAuditor >/dev/null
+secret_saved=$(_existing HOPS_PROXMOX_PROXMOX_TOKEN_SECRET || true)
 make_token=1
-if pve_ssh sudo -n pvesh get "/access/users/${READER}/token/${TOKEN_NAME}" >/dev/null 2>&1; then
-  if [[ -n "$(_existing HOPS_PROXMOX_PROXMOX_TOKEN_SECRET || true)" ]] && ! confirm "The token exists and .env has a secret. Replace both?"; then
+if token_json=$(pve_ssh sudo -n pvesh get "/access/users/${READER}/token/${TOKEN_NAME}" --output-format json 2>/dev/null); then
+  privsep=$(printf '%s' "$token_json" | python3 -c 'import json,sys; print(int(json.load(sys.stdin).get("privsep", 1)))')
+  if [[ "$privsep" != "1" ]]; then
+    warn "the existing token is not privilege-separated, so it must be recreated"
+    confirm "Delete and recreate it?" || exit 1
+  elif [[ -n "$secret_saved" ]] && ! confirm "The token exists and .env has a secret. Replace both?"; then
     make_token=0
-  elif [[ -z "$(_existing HOPS_PROXMOX_PROXMOX_TOKEN_SECRET || true)" ]] && ! confirm "The token exists but .env has no secret for it. Delete and recreate it?"; then
+  elif [[ -z "$secret_saved" ]] && ! confirm "The token exists but .env has no secret for it. Delete and recreate it?"; then
     warn "a token secret is required"; exit 1
   fi
-  (( make_token )) && pve_ssh sudo -n pvesh delete "/access/users/${READER}/token/${TOKEN_NAME}" >/dev/null
+  if (( make_token )); then
+    # Clear the saved secret first, so a failure below leaves .env visibly unconfigured, not holding a revoked secret.
+    write_env HOPS_PROXMOX_PROXMOX_TOKEN_SECRET ""
+    pve_ssh sudo -n pvesh delete "/access/users/${READER}/token/${TOKEN_NAME}" >/dev/null
+  fi
 fi
 if (( make_token )); then
   HOPS_PROXMOX_PROXMOX_TOKEN_SECRET=$(pve_ssh sudo -n pvesh create "/access/users/${READER}/token/${TOKEN_NAME}" \
@@ -290,17 +299,42 @@ if (( make_token )); then
   [[ -n "$HOPS_PROXMOX_PROXMOX_TOKEN_SECRET" ]] || { warn "no token secret came back"; exit 1; }
   write_env HOPS_PROXMOX_PROXMOX_TOKEN_SECRET "$HOPS_PROXMOX_PROXMOX_TOKEN_SECRET"
 else
-  HOPS_PROXMOX_PROXMOX_TOKEN_SECRET=$(_existing HOPS_PROXMOX_PROXMOX_TOKEN_SECRET)
+  HOPS_PROXMOX_PROXMOX_TOKEN_SECRET=$secret_saved
 fi
 pve_ssh sudo -n pvesh set /access/acl --path / --tokens "'${TOKEN_ID}'" --roles PVEAuditor >/dev/null
 write_env HOPS_PROXMOX_PROXMOX_TOKEN_ID "$TOKEN_ID"
+# Adding PVEAuditor never removes other roles, so check the token's effective privileges on every path.
+auditor=$(pve_ssh sudo -n pvesh get /access/roles/PVEAuditor --output-format json)
+effective=$(pve_ssh sudo -n pvesh get /access/permissions --userid "'${TOKEN_ID}'" --output-format json)
+extra=$(AUDITOR="$auditor" EFFECTIVE="$effective" python3 - <<'CHECKEOF'
+import json, os
+def privs(v):
+    if isinstance(v, dict): return {k for k, on in v.items() if on}
+    if isinstance(v, list): return set(v)
+    return {p for p in str(v).split(",") if p}
+a = json.loads(os.environ["AUDITOR"])
+allowed = privs(a.get("privs", a) if isinstance(a, dict) else a)
+bad = sorted({f"{path}:{p}" for path, ps in json.loads(os.environ["EFFECTIVE"]).items() for p in privs(ps) - allowed})
+print(" ".join(bad))
+CHECKEOF
+)
+if [[ -n "$extra" ]]; then
+  warn "the token holds privileges beyond PVEAuditor: ${extra}"
+  warn "remove the other ACL entries for ${READER} and its token, then re-run"; exit 1
+fi
+say "${GREEN}✓${RESET} The token's effective privileges are PVEAuditor's only."
 note "The secret went straight to .env and was never shown."
 pause
 
 # ── Stage 4 ───────────────────────────────────────────────────────────────
 stage "API URL and check"
-HOPS_PROXMOX_PROXMOX_URL=$(_existing HOPS_PROXMOX_PROXMOX_URL || echo "https://${HOPS_PROXMOX_SSH_HOST}:8006")
-say "API base URL: ${HOPS_PROXMOX_PROXMOX_URL}"
+url_default="https://${HOPS_PROXMOX_SSH_HOST}:8006"
+url_saved=$(_existing HOPS_PROXMOX_PROXMOX_URL || true)
+[[ -n "$url_saved" && "$url_saved" == *"//${HOPS_PROXMOX_SSH_HOST}"[:/]* ]] && url_default=$url_saved
+printf '  %sAPI base URL%s %s[Enter keeps %s]%s ' "$BOLD" "$RESET" "$DIM" "$url_default" "$RESET"
+read -r HOPS_PROXMOX_PROXMOX_URL || true
+HOPS_PROXMOX_PROXMOX_URL=${HOPS_PROXMOX_PROXMOX_URL:-$url_default}
+HOPS_PROXMOX_PROXMOX_URL=${HOPS_PROXMOX_PROXMOX_URL%/}
 curl_api() {
   curl -sS -o /dev/null -w '%{http_code}' ${insecure:+-k} \
     -H @<(printf 'Authorization: PVEAPIToken=%s=%s\n' "$TOKEN_ID" "$HOPS_PROXMOX_PROXMOX_TOKEN_SECRET") "$@"
@@ -322,9 +356,9 @@ if [[ "$wcode" != "403" ]]; then
   (( wcode == 200 )) && warn "remove the pool 'hops-write-probe' it created, then narrow the token's ACL"
   exit 1
 fi
-say "${GREEN}✓${RESET} The token is refused writes (403)."
+say "${GREEN}✓${RESET} The token is refused a write (403)."
 write_env HOPS_PROXMOX_PROXMOX_URL "$HOPS_PROXMOX_PROXMOX_URL"
-[[ -n "$insecure" ]] && write_env HOPS_PROXMOX_PROXMOX_INSECURE 1
+write_env HOPS_PROXMOX_PROXMOX_INSECURE "${insecure:-0}"
 pause
 
 finish

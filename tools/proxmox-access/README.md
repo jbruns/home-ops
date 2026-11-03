@@ -14,5 +14,5 @@ tools/proxmox-access/grant-access.sh
 
 Run it from the repo root with console access to the Proxmox Host at hand. It writes only the `HOPS_PROXMOX_*` keys
 in `.env`, and the token secret goes straight there without being shown. It checks that SSH and the scoped sudo work,
-that other `sudo` commands are refused, that the token can read, and that the token is refused writes (403).
+that other `sudo` commands are refused, that the token can read, that its effective privileges are PVEAuditor's only, and that it is refused a write (403).
 Re-running it keeps existing values unless you choose to replace them.
