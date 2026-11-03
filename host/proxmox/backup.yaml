@@ -7,7 +7,7 @@
 
 kept-guests:
   purpose: Weekly vzdump of every Kept Guest to the Device Backup share, which the nightly Backup carries offsite (ADR 0019).
-  vmid: [101, 105]  # every Kept Guest in guests.yaml, listed rather than `all`, so a Scratch Guest is never backed up
+  vmid: [101, 102, 105]  # every Kept Guest in guests.yaml, listed rather than `all`, so a Scratch Guest is never backed up; 101 until #760 destroys it
   storage: truenas-backup
   schedule: sun 03:00
   repeat-missed: true  # the Proxmox Host is often off; a missed week runs at the next boot

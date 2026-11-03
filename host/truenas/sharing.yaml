@@ -4,7 +4,7 @@
 smb:
   purpose: File access for the Operator's computers and for devices that write Device Backups (one login and share per device).
   bindip: [{address: host-v4}, {address: host-v6}]
-  enable_smb1: false  # SMB1 clients are served by the retronas relay on another host
+  enable_smb1: false  # SMB1 clients are served by the RetroNAS relay on the Proxmox Host
   ntlmv1_auth: false
   aapl_extensions: false
   multichannel: false
@@ -12,11 +12,11 @@ smb:
   admin_group: smbadmins
 
 nfs:
-  purpose: The retronas relay's mount.
+  purpose: The Proxmox Host's mount of the retronas export, which the RetroNAS relay bind-mounts (#760).
   bindip: [{address: host-v4}]
   protocols: [NFSV4]
   servers: 32
-  allow_nonroot: false  # no `insecure`: clients must use a reserved source port, as the relay's kernel client does
+  allow_nonroot: false  # no `insecure`: clients must use a reserved source port, as the Proxmox Host's kernel client does
   userd_manage_gids: false
 
 smb_shares:
@@ -51,7 +51,7 @@ smb_shares:
   retronas:
     purpose: The Operator adds retro PC software through their own login, a member of group retronas.
     path: /mnt/andromeda/retronas
-    share_acl: [operator]  # the relay uses NFS, so no other login needs it
+    share_acl: [operator]  # the relay reaches it over NFS, so no other login needs it
   games:
     purpose: The Operator curates the Games Library; gaming appliances read library/ and switch/ as gaming.
     path: /mnt/andromeda/games
@@ -75,7 +75,7 @@ smb_shares:
 
 nfs_exports:
   retronas:
-    purpose: The retronas relay mounts this (NFSv4, read-write) and re-serves it to the retro network; no other host can mount it.
+    purpose: The Proxmox Host mounts this (NFSv4.2, read-write) for the RetroNAS relay, which re-serves it to the retro network (#760); no other host can mount it.
     path: /mnt/andromeda/retronas
-    hosts: [{address: retronas-relay}]
-    mapall: retronas:retronas  # every user on the relay, root included, writes as retronas
+    hosts: [{address: proxmox-host-v4}]  # the Proxmox Host, not the relay: the relay can't mount it itself
+    mapall: retronas:retronas  # every user on the Proxmox Host, root and the relay's users included, writes as retronas

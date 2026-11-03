@@ -1,7 +1,7 @@
 # Storage: the Proxmox Host's storage definitions (`storage`). See README.md.
 # Two disks back them: the boot disk (LVM volume group `pve`) and a SATA SSD pool (ZFS pool `pve-zfs-satassd`).
-# `truenas-backup` is the Proxmox Host's Device Backup share on the TrueNAS Host (ADR 0019); the retronas export
-# comes with #760.
+# `truenas-backup` is the Proxmox Host's Device Backup share on the TrueNAS Host (ADR 0019); `retronas` is the
+# TrueNAS Host's retronas export, which the relay bind-mounts (#760).
 
 local:
   purpose: Proxmox VE's default directory on the boot disk; no Kept Guest disk is on it.
@@ -38,3 +38,12 @@ truenas-backup:
   share: proxmox-backups  # ../truenas/sharing.yaml
   username: proxmox  # its password is passwords.proxmox in ../truenas/device-logins.sops.yaml; Proxmox VE keeps it in /etc/pve/priv/storage/truenas-backup.pw
   content: [backup]
+retronas:
+  purpose: The TrueNAS Host's retronas export, which the Proxmox Host mounts at /mnt/pve/retronas for the RetroNAS relay (102) to bind-mount (#760). It holds no Proxmox VE content.
+  type: nfs
+  server: {address: host-v4}  # the TrueNAS Host's address, which its NFS service binds to (../truenas/sharing.yaml)
+  export: /mnt/andromeda/retronas  # ../truenas/sharing.yaml nfs_exports.retronas, open only to the Proxmox Host
+  path: /mnt/pve/retronas
+  options: vers=4.2  # NFSv4.2 only; the kernel client's reserved source port satisfies the export's lack of `insecure`
+  content: [snippets]  # an NFS storage needs a content type; nothing writes snippets to it, and the UI can't upload them
+  create-subdirs: false  # so Proxmox VE never creates its content directory on the export

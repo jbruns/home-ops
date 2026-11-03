@@ -6,7 +6,7 @@ exclusive_networks:
   networks:
     main-lan: {bridge: vmbr0}  # untagged: the Proxmox Host's own LAN
     retro: {bridge: vmbr0, tag: 50}  # the retro PC network
-  may_join_several: [101]  # the RetroNAS relay
+  may_join_several: [102, 101]  # the RetroNAS relay, and the old relay until #760 destroys it
 
 interfaces:
   enp1s0:
@@ -30,6 +30,33 @@ interfaces:
     autostart: true
 
 firewall:
-  purpose: none; the datacenter and node firewalls are off, with no rules, groups, aliases or IP sets.
-  cluster: {options: {}, rules: []}
-  node: {options: {}, rules: []}
+  purpose: Confines the RetroNAS relay (102, #760). From the retro network it reaches only RetroNAS's Samba (SMB1 and NetBIOS), over IPv4; nothing reaches it from the main LAN, it starts nothing towards the main LAN, and it has no IPv6. Its only access is the Proxmox Host's console. Nothing else is filtered.
+  # Aliases are roles, whose values are not recorded in this repo. The apply runbook derives each network from an
+  # address the Proxmox Host already holds and never prints it.
+  cluster:
+    options: {enable: 1, policy_in: ACCEPT, policy_out: ACCEPT}  # Guest firewalls need the datacenter switch on; ACCEPT keeps the Proxmox Host's own traffic as before
+    aliases:
+      main-lan-v4: {cidr: main-lan-v4}  # the network of vmbr0's address
+      retro-net-v4: {cidr: retro-net-v4}  # the network of the relay's net0 address
+    groups:
+      retronas-retro:
+        purpose: RetroNAS's services, to the retro network only.
+        rules:
+          - {type: in, action: ACCEPT, source: retro-net-v4, proto: udp, dport: '137:138', comment: NetBIOS name and datagram services (nmbd)}
+          - {type: in, action: ACCEPT, source: retro-net-v4, proto: tcp, dport: '139,445', comment: SMB over NetBIOS and direct SMB (smbd)}
+          - {type: in, action: ACCEPT, source: retro-net-v4, proto: icmp, icmp-type: echo-request, comment: ping from retro PCs}
+      retronas-no-lan:
+        purpose: Nothing the relay starts reaches the main LAN, directly or through the retro network's router.
+        rules:
+          - {type: out, action: DROP, dest: main-lan-v4, comment: main LAN}
+  node:
+    options: {enable: 0}  # the Proxmox Host's own traffic stays unfiltered, as before #760
+    rules: []
+  guests:
+    102:
+      options: {enable: 1, policy_in: DROP, policy_out: DROP, ipfilter: 1, macfilter: 1, dhcp: 0, ndp: 0, radv: 0}  # ipfilter drops packets from any address but the relay's own, so it can't forward or spoof; ndp 0 and no IPv6 ACCEPT rule leave IPv6 to the DROP policies
+      rules:  # in order; replies to allowed connections pass by conntrack
+        - {type: group, action: retronas-no-lan}
+        - {type: group, action: retronas-retro, iface: net0}  # disabled while RetroNAS playbooks run with mp0 detached (guests.yaml)
+        - {type: out, action: ACCEPT, iface: net0, dest: 0.0.0.0/0, comment: IPv4 only; the retro network, DNS and WINS on 105, and the internet for updates}
+        # net1 (main LAN) has no rule, so the DROP policies close it both ways, sshd included
