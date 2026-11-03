@@ -4,7 +4,7 @@
 # roles, whose values are not recorded in this repo yet. Sizes are the disks' provisioned sizes.
 
 dc:
-  purpose: The Windows Server 2003 VM, the retro PC network's server.  # what it serves there: an open fact on #831
+  purpose: The Windows Server 2003 VM, the retro domain's server: AD, DNS and WINS, and WDS network installs; the nameserver for everything on the retro network. DHCP comes from the retro network's router, on another machine.
   vmid: 105
   type: qemu
   name: dc.retro.<domain>
@@ -41,6 +41,6 @@ rnas:
   network:
     net0: {name: eth0, bridge: vmbr0, tag: 50, ip: {address: relay-retro-v4}, gw: {address: retro-gateway-v4}}  # retro network
     net1: {name: eth1, bridge: vmbr0, ip: {address: relay-lan-v4}}  # main LAN, to reach the TrueNAS Host
-  nameserver: {address: retro-dns-v4}
+  nameserver: {address: dc-retro-v4}  # the Windows Server 2003 VM (105)
   searchdomain: retro.<domain>
   onboot: false  # starts only when the Operator starts it

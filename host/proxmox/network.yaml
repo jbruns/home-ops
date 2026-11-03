@@ -25,7 +25,7 @@ interfaces:
     cidr6: {address: host-v6}
     gateway6: {address: gateway-v6}
   vmbr1:
-    purpose: unknown; an Open vSwitch bridge with no ports and no Guests, kept until the Operator decides (#831).
+    purpose: none; an unused Open vSwitch bridge with no ports and no Guests, removed by #837.
     type: OVSBridge
     autostart: true
 
