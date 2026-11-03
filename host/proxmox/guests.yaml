@@ -4,7 +4,7 @@
 # roles, whose values are not recorded in this repo yet. Sizes are the disks' provisioned sizes.
 
 dc:
-  purpose: The Windows Server 2003 VM, the retro domain's server: AD, DNS and WINS, and WDS network installs; the nameserver for everything on the retro network. DHCP comes from the retro network's router, on another machine.
+  purpose: The Windows Server 2003 VM, the retro domain's server (AD, DNS and WINS, and WDS network installs), the nameserver for everything on the retro network. DHCP comes from the retro network's router, on another machine.
   vmid: 105
   type: qemu
   name: dc.retro.<domain>
