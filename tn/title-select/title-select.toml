@@ -32,4 +32,4 @@ trusted_proxies = ["172.30.0.10/32"]
 
 [jobs]
 concurrent = 1
-pace = "unthrottled"
+pace = "gentle"
