@@ -12,6 +12,10 @@ services:
     # crutch: it gets its own user and group when it takes the Organizer role (ADR 0009).
     user: "1000:1001"
     read_only: true
+    # SQLite's temporary files: without a writable /tmp, recovering a Job interrupted by a restart fails with
+    # "store: disk I/O error" and the container loops. Counts against the memory limit; SQLite's use is small.
+    tmpfs:
+      - /tmp:size=64m,uid=1000,gid=1001,mode=0700
     command: ["--config", "/etc/title-select.toml", "serve", "--listen", "0.0.0.0:8080"]
     healthcheck:
       test: ["CMD", "/title-select", "health"]
