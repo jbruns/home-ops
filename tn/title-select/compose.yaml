@@ -6,16 +6,12 @@ services:
       file: ../_baseline.yaml
       service: baseline
     # An Owned Application, released from its own repo; Renovate keeps tag and digest current.
-    image: ghcr.io/jbruns/title-select:0.4.1@sha256:d59ddbfba2e92cdef76aece3c0dd7cb8d3465ab24911c6fdab3adf5afbd32a29
+    image: ghcr.io/jbruns/title-select:0.4.2@sha256:9255b33b11f556d1269b38752490405f7594b2a9b8e78ae537d5512dcd9dc338
     container_name: title-select
     # The Operator's uid and gid (host/truenas/identities.yaml), so it can read sources/ (mode 0700). A pilot
     # crutch: it gets its own user and group when it takes the Organizer role (ADR 0009).
     user: "1000:1001"
     read_only: true
-    # SQLite's temporary files: without a writable /tmp, recovering a Job interrupted by a restart fails with
-    # "store: disk I/O error" and the container loops. Counts against the memory limit; SQLite's use is small.
-    tmpfs:
-      - /tmp:size=64m,uid=1000,gid=1001,mode=0700
     command: ["--config", "/etc/title-select.toml", "serve", "--listen", "0.0.0.0:8080"]
     healthcheck:
       test: ["CMD", "/title-select", "health"]
