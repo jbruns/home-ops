@@ -1,0 +1,13 @@
+# Backup: the vzdump job (`cluster/backup`). See README.md. The update notification comes with #833.
+
+kept-guests:
+  purpose: Weekly vzdump of every Kept Guest to the Device Backup share, which the nightly Backup carries offsite (ADR 0019).
+  vmid: [101, 105]  # every Kept Guest in guests.yaml, listed rather than `all`, so a Scratch Guest is never backed up
+  storage: truenas-backup
+  schedule: sun 03:00
+  repeat-missed: true  # the Proxmox Host is often off; a missed week runs at the next boot
+  mode: snapshot  # a running Guest's disks support it; vzdump backs up a stopped Guest, as both usually are, in stop mode
+  compress: '0'  # uncompressed, so restic deduplicates unchanged blocks between weeks
+  prune-backups: keep-last=3
+  notification-mode: legacy-sendmail  # with no mailto, vzdump sends nothing (ADR 0019: no alerting)
+  enabled: true
