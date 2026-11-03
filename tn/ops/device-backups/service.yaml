@@ -21,7 +21,7 @@ services:
     command: ["sleep", "infinity"]
     # Unhealthy if a device dataset is no longer mounted.
     healthcheck:
-      test: ["CMD-SHELL", "for d in hassio harpi-nodered eisy; do test -d /device-backups/$$d || exit 1; done"]
+      test: ["CMD-SHELL", "for d in hassio harpi-nodered eisy proxmox; do test -d /device-backups/$$d || exit 1; done"]
       interval: 5m
       timeout: 5s
       retries: 2
@@ -38,6 +38,7 @@ services:
       - device-backups_hassio:/device-backups/hassio:ro
       - device-backups_harpi-nodered:/device-backups/harpi-nodered:ro
       - device-backups_eisy:/device-backups/eisy:ro
+      - device-backups_proxmox:/device-backups/proxmox:ro
 
 
 # External (ADR 0010): each is a bind of one device dataset, created before the first Deploy with
@@ -51,4 +52,7 @@ volumes:
     external: true
   device-backups_eisy:
     name: ops_device-backups_eisy
+    external: true
+  device-backups_proxmox:
+    name: ops_device-backups_proxmox
     external: true
