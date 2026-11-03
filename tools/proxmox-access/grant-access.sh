@@ -309,7 +309,7 @@ effective=$(pve_ssh sudo -n pvesh get /access/permissions --userid "'${TOKEN_ID}
 extra=$(AUDITOR="$auditor" EFFECTIVE="$effective" python3 - <<'CHECKEOF'
 import json, os
 def privs(v):
-    if isinstance(v, dict): return {k for k, on in v.items() if on}
+    if isinstance(v, dict): return set(v)  # values are propagate flags; a key at 0 is still granted
     if isinstance(v, list): return set(v)
     return {p for p in str(v).split(",") if p}
 a = json.loads(os.environ["AUDITOR"])
