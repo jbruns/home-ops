@@ -5,7 +5,7 @@ services:
     extends:
       file: ../../_baseline.yaml
       service: baseline
-    image: nextcloud:35.0.2@sha256:3f05f4d5eded9d3d029e617926500645cca6344710364737a374088f6811095a
+    image: nextcloud:35.0.2@sha256:e0b1a2af52c82c07b7a0e8e59878bd8769e704447734d5d238a836982f51b9c8
     container_name: nextcloud
     # Run as the image's www-data instead of root-then-su, so no caps. The entrypoint supports this
     # (installs and upgrades rsync without --chown); /var/www/html must stay wholly www-data owned.
@@ -92,7 +92,7 @@ services:
     extends:
       file: ../../_baseline.yaml
       service: baseline
-    image: nextcloud:35.0.2@sha256:3f05f4d5eded9d3d029e617926500645cca6344710364737a374088f6811095a
+    image: nextcloud:35.0.2@sha256:e0b1a2af52c82c07b7a0e8e59878bd8769e704447734d5d238a836982f51b9c8
     container_name: nextcloud-cron
     # The image's /cron.sh is busybox crond, which needs root to switch to www-data. Run the same
     # job (*/5 php -f cron.php) as www-data in a loop instead, so no caps; the marker file gives the
