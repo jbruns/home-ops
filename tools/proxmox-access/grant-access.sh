@@ -233,7 +233,7 @@ fi
 [[ "$HOPS_PROXMOX_SSH_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || { warn "not a valid Linux user name"; exit 1; }
 
 # The last rule the sudoers file gained; a login without it gets the root script again, which rewrites the file.
-if pve_ssh sudo -n pvesh get /version >/dev/null 2>&1 && pve_ssh sudo -n -l tee /etc/pve/priv/notifications.cfg >/dev/null 2>&1; then
+if pve_ssh sudo -n pvesh get /version >/dev/null 2>&1 && pve_ssh sudo -n -l chmod 0755 /var/lib/vz/snippets/retronas-relay-mount.sh >/dev/null 2>&1; then
   say "The agent can already log in and run every allowed command; skipping the root script."
 else
   printf -v pubkey_q '%q' "$(cat "${HOPS_PROXMOX_SSH_KEY/#\~/$HOME}.pub")"
@@ -246,7 +246,7 @@ install -d -m 700 -o "\$u" -g "\$u" "/home/\$u/.ssh"
 touch "/home/\$u/.ssh/authorized_keys"; grep -qxF "\$pub" "/home/\$u/.ssh/authorized_keys" || echo "\$pub" >> "/home/\$u/.ssh/authorized_keys"
 chown "\$u:\$u" "/home/\$u/.ssh/authorized_keys"; chmod 600 "/home/\$u/.ssh/authorized_keys"
 t=\$(command -v tee); f=\$(mktemp)
-echo "\$u ALL=(root) NOPASSWD: \$(command -v pvesh), \$(command -v qm), \$(command -v pct), \$(command -v vzdump), \$(command -v pvesm) set truenas-backup --password, \$t /etc/pve/priv/notifications.cfg, \$t /etc/subuid, \$t /etc/subgid, \$t ^/etc/pve/lxc/[0-9]+[.]conf\$, \$t ^/var/lib/vz/snippets/[a-z0-9_-]+[.]sh\$" > "\$f"
+echo "\$u ALL=(root) NOPASSWD: \$(command -v pvesh), \$(command -v qm), \$(command -v pct), \$(command -v vzdump), \$(command -v pvesm) set truenas-backup --password, \$t /etc/pve/priv/notifications.cfg, \$t /etc/subuid, \$t /etc/subgid, \$t ^/etc/pve/lxc/[0-9]+[.]conf\$, \$t ^/var/lib/vz/snippets/[a-z0-9_-]+[.]sh\$, \$(command -v chmod) ^0755 /var/lib/vz/snippets/[a-z0-9_-]+[.]sh\$" > "\$f"
 visudo -cf "\$f" && install -m 440 "\$f" /etc/sudoers.d/homeops-agent; rm -f "\$f"; echo "agent login ready"
 ROOTEOF
   open_url "https://${HOPS_PROXMOX_SSH_HOST}:8006"
