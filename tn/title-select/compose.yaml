@@ -118,7 +118,7 @@ services:
         target: /additions
         bind:
           create_host_path: false
-      # A Managed Folder in the Root `play`, mounted on its own and read-write (ADR 0009); staging stays inside it,
+      # A Library Folder in the Root `play`, mounted on its own and read-write (ADR 0009); staging stays inside it,
       # so renames never cross mounts. Never created by the Deploy: the Operator creates it, empty.
       - type: bind
         source: ${ZFS_POOL_ROOT_HDD}/games/library/roms/atari2600
