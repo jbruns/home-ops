@@ -26,7 +26,7 @@ Keep every secret value out of tool output, logs and commits, whether it comes f
 ### Host access
 
 Reach the Hosts through `hops`, shared Repo Tooling from the Repo Tooling repo (install with
-`uv tool install "git+https://github.com/jbruns/homelab-components@hops-v1.4.0#subdirectory=repo-tools/hops"`;
+`uv tool install "git+https://github.com/jbruns/homelab-components@hops-v2.0.0#subdirectory=repo-tools/hops"`;
 read its README, `repo-tools/hops/README.md` in the Repo Tooling repo at that tag, before first use), with
 `--json` when you parse its output. `hosts.yaml` declares two Hosts: `truenas`, the TrueNAS Host, which runs the
 Stacks, and `proxmox`, the Proxmox Host, which runs Guests and no Stacks. Stack commands target the TrueNAS Host
