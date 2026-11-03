@@ -1,5 +1,5 @@
-# Network: bridges, VLANs, addresses and the firewall (`nodes/pve/network`, `cluster/firewall`,
-# `nodes/pve/firewall`). See README.md. Addresses are roles, whose values are not recorded in this repo yet.
+# Network: bridges, VLANs, addresses and the firewall (`nodes/<node>/network`, `cluster/firewall`,
+# `nodes/<node>/firewall`). See README.md. Addresses are roles, whose values are not recorded in this repo yet.
 
 # Read by hops: the networks a Guest may join only one of, and the one Guest that may join both (ADR 0019).
 exclusive_networks:
