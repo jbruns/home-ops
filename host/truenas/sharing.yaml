@@ -43,6 +43,11 @@ smb_shares:
     path: /mnt/andromeda/backups/eisy
     share_acl: [eisy]  # no other login can open it
     audit: {watch_list: [eisy]}  # TrueNAS needs a list; the device is the only login that can open it
+  proxmox-backups:
+    purpose: The Proxmox Host writes its vzdump archives of its Kept Guests here, through its CIFS storage.
+    path: /mnt/andromeda/backups/proxmox
+    share_acl: [proxmox]  # no other login can open it
+    audit: {watch_list: [proxmox]}  # TrueNAS needs a list; the device is the only login that can open it
   retronas:
     purpose: The Operator adds retro PC software through their own login, a member of group retronas.
     path: /mnt/andromeda/retronas

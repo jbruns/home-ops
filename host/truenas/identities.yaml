@@ -46,6 +46,14 @@ users:
     home: /var/empty
     shell: /usr/sbin/nologin
     smb: true
+  proxmox:
+    purpose: The Proxmox Host logs in as this to write its Device Backups (vzdump archives) over SMB, and can reach no other device's.
+    uid: 1015
+    group: proxmox
+    groups: [devices, builtin_users]
+    home: /var/empty
+    shell: /usr/sbin/nologin
+    smb: true
   gaming:
     purpose: Gaming appliances log in as this to read the Games Library's library/ and switch/ over SMB; it can't write.
     uid: 1014
@@ -96,10 +104,13 @@ groups:
   eisy:
     purpose: eisy's primary group.
     gid: 1012
+  proxmox:
+    purpose: proxmox's primary group.
+    gid: 1015
   devices:
     purpose: Every login that writes Device Backups; denied on every share except its own.
     gid: 1013
-    members: [hassio, harpi-nodered, eisy]
+    members: [hassio, harpi-nodered, eisy, proxmox]
   homeops-agent:
     purpose: The agent's primary group.
     gid: 3001

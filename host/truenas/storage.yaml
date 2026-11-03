@@ -56,6 +56,10 @@ datasets:
     purpose: eisy backups, saved by hand from its Admin Console (it has no scheduler).
     quota: 5 GiB
     permissions: {mode: '2750', owner: eisy, group: backups, default_acl: [user::rwx, group::r-x, other::---]}
+  andromeda/backups/proxmox:
+    purpose: The Proxmox Host's weekly vzdump archives of its Kept Guests (ADR 0019); its backup job prunes them to the last 3.
+    quota: 300 GiB  # each week's archives are about 26 GB (#831): 3 kept, a 4th until the run prunes, and about 4 more held by the backups task's 30-day snapshots, which count against the quota
+    permissions: {mode: '2750', owner: proxmox, group: backups, default_acl: [user::rwx, group::r-x, other::---]}
   andromeda/docker-backups:
     purpose: none; the retired local restic repository, destroyed by #705.
     permissions: {mode: '0770', owner: root, group: root}

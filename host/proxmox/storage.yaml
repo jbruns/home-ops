@@ -1,7 +1,7 @@
 # Storage: the Proxmox Host's storage definitions (`storage`). See README.md.
 # Two disks back them: the boot disk (LVM volume group `pve`) and a SATA SSD pool (ZFS pool `pve-zfs-satassd`).
-# No storage on the TrueNAS Host is defined yet: the retronas export (#760) and the Device Backup share (ADR 0019)
-# come with #760 and #832.
+# `truenas-backup` is the Proxmox Host's Device Backup share on the TrueNAS Host (ADR 0019); the retronas export
+# comes with #760.
 
 local:
   purpose: Proxmox VE's default directory on the boot disk; no Kept Guest disk is on it.
@@ -27,7 +27,14 @@ sources:
   path: /pve-zfs-satassd/sources
   content: [snippets, vztmpl, iso]
 dump:
-  purpose: Local vzdump target on the SATA SSD pool; empty, as no backup job exists yet (#832).
+  purpose: Local vzdump target on the SATA SSD pool; empty, as the backup job writes to truenas-backup.
   type: dir
   path: /pve-zfs-satassd/dump
+  content: [backup]
+truenas-backup:
+  purpose: The Proxmox Host's Device Backup share on the TrueNAS Host, which the weekly vzdump job writes to; the nightly Backup carries it offsite.
+  type: cifs
+  server: {address: host-v4}  # the TrueNAS Host's address, addresses.host-v4 in ../truenas/identifiers.sops.yaml
+  share: proxmox-backups  # ../truenas/sharing.yaml
+  username: proxmox  # its password is passwords.proxmox in ../truenas/device-logins.sops.yaml; Proxmox VE keeps it in /etc/pve/priv/storage/truenas-backup.pw
   content: [backup]
