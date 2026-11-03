@@ -1,0 +1,46 @@
+# Kept Guests: one top-level key per Guest, each declared and backed up (ADR 0019). See README.md.
+# hops reads `vmid` and `type` (Kept or Stray, in `hops host`/`hops strays --host proxmox`); the rest is the record.
+# A Guest not listed here exists only with the `scratch` tag. Names hold the domain as `<domain>`; addresses are
+# roles, whose values are not recorded in this repo yet. Sizes are the disks' provisioned sizes.
+
+dc:
+  purpose: The Windows Server 2003 VM, the retro domain's server (AD, DNS and WINS, and WDS network installs), the nameserver for everything on the retro network. DHCP comes from the retro network's router, on another machine.
+  vmid: 105
+  type: qemu
+  name: dc.retro.<domain>
+  ostype: wxp  # Proxmox VE's type for Windows XP and Server 2003
+  machine: pc-i440fx-9.0
+  cpu: x86-64-v2-AES
+  sockets: 1
+  cores: 1
+  memory: 2048  # MiB
+  balloon: 0  # no balloon driver for Server 2003
+  disks:
+    ide0: {storage: local-lvm, size: 64 GiB}  # system disk
+    ide3: {storage: vmdata-sata, size: 136 GiB}
+  ide2: none,media=cdrom  # empty drive for installer ISOs from `sources`
+  boot: order=ide0;ide2
+  network:
+    net0: {model: virtio, bridge: vmbr0, tag: 50}  # retro network only
+  onboot: false  # starts only when the Operator starts it
+
+rnas:
+  purpose: The RetroNAS relay, serving the TrueNAS Host's retronas export to retro PCs over their old protocols; the only Guest on both the retro network and the main LAN.
+  vmid: 101
+  type: lxc
+  hostname: rnas.retro.<domain>
+  ostype: debian
+  arch: amd64
+  unprivileged: false  # no idmap; the config sets no `unprivileged`
+  features: {mount: nfs;cifs, nesting: 1}  # lets the relay mount NFS and SMB itself; #760 moves the retronas mount to the Proxmox Host
+  tags: [retro]
+  cores: 2
+  memory: 2048  # MiB
+  swap: 2048  # MiB
+  rootfs: {storage: local-lvm, size: 256 GiB, mountoptions: noatime}
+  network:
+    net0: {name: eth0, bridge: vmbr0, tag: 50, ip: {address: relay-retro-v4}, gw: {address: retro-gateway-v4}}  # retro network
+    net1: {name: eth1, bridge: vmbr0, ip: {address: relay-lan-v4}}  # main LAN, to reach the TrueNAS Host
+  nameserver: {address: dc-retro-v4}  # the Windows Server 2003 VM (105)
+  searchdomain: retro.<domain>
+  onboot: false  # starts only when the Operator starts it

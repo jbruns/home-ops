@@ -1,0 +1,25 @@
+# Access: Proxmox VE users, their tokens and ACLs (`access/users`, `access/acl`), and the agent's SSH login.
+# See README.md. tools/proxmox-access/grant-access.sh creates the agent's access (ADR 0019). Logins are roles.
+
+users:
+  root@pam:
+    purpose: Proxmox VE's built-in administrator, for the console and the web UI.
+  operator@pam:  # the Operator's login, by role
+    purpose: The Operator's own login, for the web UI and the console.
+  hops-reader@pve:
+    purpose: Read-only API user for hops (Repo Tooling); owns the audit token.
+    comment: Read-only API user for repo tooling
+    tokens:
+      hops:
+        purpose: hops reads the Proxmox VE API with it (HOPS_PROXMOX_PROXMOX_TOKEN_ID).
+        privsep: true
+        expire: 0
+        comment: repo tooling reads
+
+acl:
+  - {path: /, user: hops-reader@pve, role: PVEAuditor, propagate: true}  # the user's ceiling for its token
+  - {path: /, token: hops-reader@pve!hops, role: PVEAuditor, propagate: true}  # the token's only privileges
+
+agent_login:
+  purpose: The agent's Linux login over SSH (HOPS_PROXMOX_SSH_USER), with the agent's key; applies merged changes.
+  sudo: /etc/sudoers.d/homeops-agent  # NOPASSWD for pvesh, qm, pct, vzdump, and tee to /etc/subuid, /etc/subgid, Guest configs and snippets only

@@ -93,8 +93,8 @@ Renovate runs every morning (America/Los_Angeles) with no hourly PR limit, pins 
 Validate locally before pushing. It needs Docker and `homelab-validate` with `homelab-declared-containers` on `PATH` (each documented in its README under `repo-tools/` in the Repo Tooling repo):
 
 ```sh
-uv tool install "git+https://github.com/jbruns/homelab-components@validate-v1.4.0#subdirectory=repo-tools/validate"
-uv tool install "git+https://github.com/jbruns/homelab-components@declared-containers-v1.0.2#subdirectory=repo-tools/declared-containers"
+uv tool install "git+https://github.com/jbruns/homelab-components@validate-v1.5.0#subdirectory=repo-tools/validate"
+uv tool install "git+https://github.com/jbruns/homelab-components@declared-containers-v1.1.0#subdirectory=repo-tools/declared-containers"
 tools/validate/homelab-validate secrets env compose monitoring cloudflare
 ```
 

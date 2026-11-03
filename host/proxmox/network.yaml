@@ -1,0 +1,35 @@
+# Network: bridges, VLANs, addresses and the firewall (`nodes/<node>/network`, `cluster/firewall`,
+# `nodes/<node>/firewall`). See README.md. Addresses are roles, whose values are not recorded in this repo yet.
+
+# Read by hops: the networks a Guest may join only one of, and the one Guest that may join both (ADR 0019).
+exclusive_networks:
+  networks:
+    main-lan: {bridge: vmbr0}  # untagged: the Proxmox Host's own LAN
+    retro: {bridge: vmbr0, tag: 50}  # the retro PC network
+  may_join_several: [101]  # the RetroNAS relay
+
+interfaces:
+  enp1s0:
+    purpose: The Proxmox Host's only wired port; vmbr0's uplink.
+    type: eth
+  vmbr0:
+    purpose: Bridge for the Proxmox Host and every Guest. Untagged it is the main LAN; Guest interfaces tagged 50 join the retro network.
+    type: bridge
+    bridge_ports: enp1s0
+    bridge_vlan_aware: false  # Proxmox VE puts a tagged interface on its own per-VLAN bridge (vmbr0v50)
+    bridge_stp: off
+    bridge_fd: 0
+    autostart: true
+    cidr: {address: host-v4}  # the API, SSH and the web UI
+    gateway: {address: gateway-v4}
+    cidr6: {address: host-v6}
+    gateway6: {address: gateway-v6}
+  vmbr1:
+    purpose: none; an unused Open vSwitch bridge with no ports and no Guests, removed by #837.
+    type: OVSBridge
+    autostart: true
+
+firewall:
+  purpose: none; the datacenter and node firewalls are off, with no rules, groups, aliases or IP sets.
+  cluster: {options: {}, rules: []}
+  node: {options: {}, rules: []}

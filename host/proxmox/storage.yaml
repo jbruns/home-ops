@@ -1,0 +1,33 @@
+# Storage: the Proxmox Host's storage definitions (`storage`). See README.md.
+# Two disks back them: the boot disk (LVM volume group `pve`) and a SATA SSD pool (ZFS pool `pve-zfs-satassd`).
+# No storage on the TrueNAS Host is defined yet: the retronas export (#760) and the Device Backup share (ADR 0019)
+# come with #760 and #832.
+
+local:
+  purpose: Proxmox VE's default directory on the boot disk; no Kept Guest disk is on it.
+  type: dir
+  path: /var/lib/vz
+  content: [snippets, vztmpl, iso, images, rootdir, backup]
+  prune-backups: keep-all=1
+local-lvm:
+  purpose: Thin pool on the boot disk for Guest disks; holds both Kept Guests' system disks. Supports Guest snapshots.
+  type: lvmthin
+  vgname: pve
+  thinpool: data
+  content: [images, rootdir]
+vmdata-sata:
+  purpose: ZFS dataset on the SATA SSD pool for Guest disks; holds the Windows Server 2003 VM's second disk. Supports Guest snapshots.
+  type: zfspool
+  pool: pve-zfs-satassd/vmdata
+  sparse: true
+  content: [images, rootdir]
+sources:
+  purpose: Installer ISOs, container templates and snippets, on the SATA SSD pool.
+  type: dir
+  path: /pve-zfs-satassd/sources
+  content: [snippets, vztmpl, iso]
+dump:
+  purpose: Local vzdump target on the SATA SSD pool; empty, as no backup job exists yet (#832).
+  type: dir
+  path: /pve-zfs-satassd/dump
+  content: [backup]

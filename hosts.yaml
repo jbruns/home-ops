@@ -1,6 +1,6 @@
 # The Hosts this repo's shared Repo Tooling (hops, homelab-validate, homelab-declared-containers) may reach
-# (ADR 0012). Schema: repo-tools/hosts/README.md in the Repo Tooling repo, at hosts-v1.1.1.
-# Connection details stay in the gitignored .env as HOPS_TRUENAS_* (see .env.example).
+# (ADR 0012). Schema: repo-tools/hosts/README.md in the Repo Tooling repo, at hosts-v1.2.0.
+# Connection details stay in the gitignored .env as HOPS_<NAME>_* (see .env.example).
 version: 1
 default_branch: main
 validate: [tools/validate/homelab-validate, secrets, env, compose]   # what `hops bump` runs before it commits
@@ -9,3 +9,6 @@ hosts:
     stack_root: tn
     deployer: doco-cd
     capabilities: [truenas, zfs]
+  proxmox:
+    deployer: none   # runs no Stacks; its Guests are declared in host/proxmox/ (ADR 0019)
+    capabilities: [proxmox]
