@@ -25,22 +25,61 @@ dc:
   onboot: false  # starts only when the Operator starts it
 
 rnas:
-  purpose: The RetroNAS relay, serving the TrueNAS Host's retronas export to retro PCs over their old protocols; the only Guest on both the retro network and the main LAN.
+  purpose: The RetroNAS relay, serving the TrueNAS Host's retronas export to retro PCs over their old protocols; the only Guest on both the retro network and the main LAN, firewalled from the main LAN (network.yaml).
+  vmid: 102
+  type: lxc
+  hostname: rnas.retro.<domain>  # 101's name, so the retro domain's DNS and WINS records still point here
+  ostype: debian
+  arch: amd64
+  template: sources:vztmpl/debian-13-standard_13.6-1_amd64.tar.zst  # what it was created from
+  unprivileged: true
+  features: {nesting: 1}  # systemd in Debian 13 needs it; no `mount`, so the relay can't mount NFS or SMB itself
+  tags: [retro]
+  cores: 2
+  memory: 2048  # MiB
+  swap: 512  # MiB
+  rootfs: {storage: local-lvm, size: 32 GiB, mountoptions: noatime}  # the files live on the TrueNAS Host; this holds the OS and RetroNAS
+  mounts:
+    mp0: {source: /mnt/pve/retronas, mp: /data/retronas}  # bind mount of the retronas storage (storage.yaml) at RetroNAS's retronas_path; vzdump and snapshots leave it out
+  hookscript: local:snippets/retronas-relay-mount.sh  # source: snippets/retronas-relay-mount.sh; pre-start refuses unless the export is mounted
+  idmap:  # lxc.idmap: uid 3256 and gid 3000 (retronas) pass straight through, so the export's files keep their owner; the rest maps to 100000 up
+    - u 0 100000 3256
+    - u 3256 3256 1
+    - u 3257 103257 62279
+    - g 0 100000 3000
+    - g 3000 3000 1
+    - g 3001 103001 62535
+  subids: {subuid: 'root:3256:1', subgid: 'root:3000:1'}  # the Proxmox Host's /etc/subuid and /etc/subgid allow root those two IDs, beside root:100000:65536
+  users:
+    retronas: {uid: 3256, gid: 3000}  # the same IDs as the TrueNAS Host's retronas user and group (../truenas/identities.yaml)
+  retronas:
+    retronas_path: /data/retronas  # RetroNAS's default, in /opt/retronas/ansible/retronas_vars.yml
+    services: [samba]  # nmbd and smbd; the firewall (network.yaml) opens only these to the retro network
+  sysctl: {net.ipv4.ip_forward: 0, net.ipv6.conf.all.forwarding: 0}  # /etc/sysctl.d/90-relay-no-forward.conf; the firewall's ipfilter and outbound policy hold even if root in the relay changes them
+  network:
+    net0: {name: eth0, bridge: vmbr0, tag: 50, ip: {address: relay-retro-v4}, gw: {address: retro-gateway-v4}, hwaddr: 101's net0, firewall: 1}  # retro network; also its way to the internet for updates
+    net1: {name: eth1, bridge: vmbr0, ip: {address: relay-lan-v4}, hwaddr: 101's net1, firewall: 1}  # main LAN, for the Operator's admin access only
+  nameserver: {address: dc-retro-v4}  # the Windows Server 2003 VM (105)
+  searchdomain: retro.<domain>
+  onboot: false  # starts only when the Operator starts it
+
+rnas-101:
+  purpose: none; the old, privileged RetroNAS relay, kept stopped until the Operator has verified 102, then destroyed by #760.
   vmid: 101
   type: lxc
   hostname: rnas.retro.<domain>
   ostype: debian
   arch: amd64
   unprivileged: false  # no idmap; the config sets no `unprivileged`
-  features: {mount: nfs;cifs, nesting: 1}  # lets the relay mount NFS and SMB itself; #760 moves the retronas mount to the Proxmox Host
+  features: {mount: nfs;cifs, nesting: 1}  # it mounts the retronas export itself
   tags: [retro]
   cores: 2
   memory: 2048  # MiB
   swap: 2048  # MiB
   rootfs: {storage: local-lvm, size: 256 GiB, mountoptions: noatime}
   network:
-    net0: {name: eth0, bridge: vmbr0, tag: 50, ip: {address: relay-retro-v4}, gw: {address: retro-gateway-v4}}  # retro network
-    net1: {name: eth1, bridge: vmbr0, ip: {address: relay-lan-v4}}  # main LAN, to reach the TrueNAS Host
+    net0: {name: eth0, bridge: vmbr0, tag: 50, ip: {address: relay-retro-v4}, gw: {address: retro-gateway-v4}}  # retro network; 102 took over its address and MAC
+    net1: {name: eth1, bridge: vmbr0, ip: {address: relay-lan-v4}}  # main LAN; 102 took over its address and MAC
   nameserver: {address: dc-retro-v4}  # the Windows Server 2003 VM (105)
   searchdomain: retro.<domain>
-  onboot: false  # starts only when the Operator starts it
+  onboot: false  # never start it while 102 runs: they share addresses and MACs

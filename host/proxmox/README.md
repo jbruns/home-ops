@@ -24,6 +24,7 @@ Proxmox VE Host").
 | `network.yaml` | the exclusive networks, bridges, VLANs, addresses, the firewall |
 | `access.yaml` | the agent's user, its token and their ACLs |
 | `backup.yaml` | the vzdump job (#832) and the update notification (#833) |
+| `snippets/` | hookscripts, installed as `local:snippets/<name>` with mode 0755 (`retronas-relay-mount.sh`, the relay's pre-start mount check) |
 
 ## Rules
 
