@@ -6,7 +6,7 @@ services:
       file: ../_baseline.yaml
       service: baseline
     # An Owned Application, released from its own repo; Renovate keeps tag and digest current.
-    image: ghcr.io/jbruns/title-select:0.5.0@sha256:411d257a299a4df2e2b6c77bf6af46405cb2bd7695f5cd0c748621180470b91c
+    image: ghcr.io/jbruns/title-select:0.6.0@sha256:61e7070b0abab1c9ec6567c086e61c2774c8d11d1630c2ba525fcc45483820e7
     container_name: title-select
     # The Operator's uid and gid (host/truenas/identities.yaml), so it can read sources/ (mode 0700). A pilot
     # crutch: it gets its own user and group when it takes the Organizer role (ADR 0009).
