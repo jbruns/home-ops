@@ -49,7 +49,7 @@ rnas:
   swap: 512  # MiB
   rootfs: {storage: local-lvm, size: 32 GiB, mountoptions: noatime}  # the files live on the TrueNAS Host; this holds the OS and RetroNAS
   mounts:
-    mp0: {source: /mnt/pve/retronas, mp: /data/retronas}  # bind mount of the retronas storage (storage.yaml) at RetroNAS's retronas_path; vzdump and snapshots leave it out
+    mp0: {source: /mnt/pve/retronas, mp: /data/retronas}  # bind mount of the retronas storage (storage.yaml) at RetroNAS's retronas_path; vzdump leaves it out, and with it the relay can't take a `pct snapshot` (the snapshot feature check fails), so its rollback point is a vzdump
   hookscript: local:snippets/retronas-relay-mount.sh  # source: snippets/retronas-relay-mount.sh; pre-start refuses unless the export is mounted
   idmap:  # lxc.idmap: uid 3256 and gid 3000 (retronas) pass straight through, so the export's files keep their owner; the rest maps to 100000 up
     - u 0 100000 3256
@@ -59,15 +59,48 @@ rnas:
     - g 3000 3000 1
     - g 3001 103001 62535
   subids: {subuid: 'root:3256:1', subgid: 'root:3000:1'}  # the Proxmox Host's /etc/subuid and /etc/subgid allow root those two IDs, beside root:100000:65536
-  users:
+  users:  # local Unix accounts; the two SMB logins are named by uid (ADR 0013)
     retronas: {uid: 3256, gid: 3000}  # the same IDs as the TrueNAS Host's retronas user and group (../truenas/identities.yaml)
+    smb-1000: {uid: 1000, gid: 1000, groups: [retronas], shell: /usr/sbin/nologin, home: /nonexistent}  # local SMB login, 101's IDs; smbd needs a Unix account for each passdb entry
+    smb-1001: {uid: 1001, gid: 1001, shell: /usr/sbin/nologin, home: /nonexistent}  # local SMB login, 101's IDs
   retronas:
-    retronas_path: /data/retronas  # RetroNAS's default, in /opt/retronas/ansible/retronas_vars.yml
-    playbooks: run only with mp0 detached  # with the retronas-retro rule (network.yaml) disabled first, and re-enabled only after mp0 is back and smbd and nmbd each run (one `systemctl is-active` per unit). They chmod retronas_path and its config/ to 2775 (hard-coded); ../truenas/storage.yaml keeps the dataset at 2770
+    retronas_path: /data/retronas  # RetroNAS's default, in /opt/retronas/ansible/retronas_vars.yml, its only config file: the current layout has no /opt/retronas/etc, and nothing needs a user_agreement
+    playbooks: run only with mp0 detached, as `env LC_ALL=C.UTF-8 LANG=C.UTF-8 ansible-playbook …`  # ansible refuses to start without a UTF-8 locale, and the template sets none. Run them with the retronas-retro rule (network.yaml) disabled first, and re-enabled only after mp0 is back and smbd and nmbd each run (one `systemctl is-active` per unit). They chmod retronas_path and its config/ to 2775 (hard-coded); ../truenas/storage.yaml keeps the dataset at 2770
     samba_guard: /etc/systemd/system/{smbd,nmbd}.service.d/10-retronas-export.conf  # ConditionPathIsMountPoint=/data/retronas and ConditionPathExists=/data/retronas/.retronas-export: smbd and nmbd stay down whenever mp0 is missing, even if a playbook starts them, so the relay never serves its rootfs
-    services: [samba]  # SMB1 and NetBIOS (smbd, nmbd) only; no Cockpit or other installer. The firewall (network.yaml) opens only these, to the retro network
+    services: [samba]  # SMB1 and NetBIOS (smbd, nmbd), with winbind for the retro domain; no Cockpit or other installer. The firewall (network.yaml) opens only these, to the retro network. The Samba playbook installs avahi-daemon too; its service and socket are disabled and stopped. 101's NFS server and avahi were not carried (Operator)
+  samba:  # /etc/samba/smb.conf. RetroNAS's playbook wrote it; 101's [global] additions and includes were carried over (#760). Below, the [global] settings that matter; the rest are Samba 4.22's defaults
+    shares:  # every share sets force user and force group retronas, so files land as 3256:3000 whoever logs in; none sets valid users or guest ok
+      retronas: /etc/samba/retronas.conf, included in [retronas]  # written by RetroNAS's playbook; writeable
+      per-site: an include carried from 101, at the end of smb.conf  # WXPPostInstall, W2KPostInstall, archive, NETBOOT, osinstall; read-only
+    global:
+      server role: member server  # was standalone server; the relay is a member of the retro domain (#760)
+      security: ads
+      workgroup: RETRO  # the retro domain's NetBIOS name (was WORKGROUP), so browse lists show the relay in RETRO
+      realm: RETRO.<DOMAIN>  # the relay's searchdomain, upper-cased
+      netbios name: rnas  # local SMB logins are RNAS\<login>
+      'idmap config * : backend': tdb
+      'idmap config * : range': 10000-19999  # BUILTIN and well-known SIDs
+      'idmap config RETRO : backend': rid
+      'idmap config RETRO : range': 20000-59999  # uid = 20000 + RID, so RIDs up to 39999. Inside the relay's mapped 0-65535 (idmap above), clear of system IDs, the local logins, 3000 and 3256, and systemd's dynamic users from 61184
+      winbind use default domain: no  # the default; domain users stay RETRO\<user>, so none collides with a local login
+      client min protocol: NT1  # the DC (105) speaks only SMB1
+      reject md5 servers:RETRO: no  # the DC's netlogon has no AES; Samba rejects MD5 schannel by default since CVE-2022-38023
+      kerberos encryption types: all  # the default; must keep RC4, the DC's only Kerberos cipher besides DES
+      local master: no  # the DC is the domain and local master browser; the relay never stands in an election
+      preferred master: no
+      domain master: no
+      wins server: {address: dc-retro-v4}  # 105, so the relay registers its NetBIOS name there
+      map to guest: Bad User  # unchanged; no share allows guests
+      lanman auth: yes  # unchanged: LM and NTLMv1 for the local logins. For domain users the DC decides, and Server 2003 accepts both
+      ntlm auth: ntlmv1-permitted  # unchanged
+      server min protocol: CORE  # unchanged
+      interfaces: lo eth0  # unchanged, with bind interfaces only: smbd and nmbd never listen on net1
+    removed: [client ntlm auth, ntlmv2 auth]  # carried from 101; Samba 4.22 doesn't know them, and testparm warns
+    join: net ads join --no-dns-updates, run by the Operator at the relay's console  # the machine account RNAS$; the retro domain's DNS record for the relay is left as it is
+  krb5: /etc/krb5.conf  # [libdefaults] default_realm = RETRO.<DOMAIN>, dns_lookup_realm = false, dns_lookup_kdc = true. MIT krb5 1.21's client still permits RC4 (allow_rc4 governs only a KDC), so no enctype settings
+  nsswitch: {passwd: files systemd winbind, group: files systemd winbind}  # smbd resolves each domain user through winbind's NSS (libnss-winbind) before it applies force user
   access: console only  # `pct enter 102` on the Proxmox Host; openssh-server is purged, root has no key and a locked password, and the firewall drops tcp 22
-  sysctl: {net.ipv4.ip_forward: 0, net.ipv6.conf.all.disable_ipv6: 1, net.ipv6.conf.default.disable_ipv6: 1}  # /etc/sysctl.d/90-relay.conf: no forwarding, no IPv6 (the retro network has none). The firewall's ipfilter and IPv4-only rules hold even if root in the relay changes them
+  sysctl: {net.ipv4.ip_forward: 0, net.ipv6.conf.all.disable_ipv6: 1, net.ipv6.conf.default.disable_ipv6: 1}  # /etc/sysctl.d/90-relay.conf: no forwarding, no IPv6 (the retro network has none). The firewall's ipfilter and IPv4-only rules hold even if root in the relay changes them. `sysctl --system` exits 1 in the unprivileged relay over keys from other files it may not set; check these three with `sysctl -n`
   network:
     net0: {name: eth0, bridge: vmbr0, tag: 50, ip: {address: relay-retro-v4}, gw: {address: retro-gateway-v4}, hwaddr: 101's net0, firewall: 1}  # retro network; also its way to the internet for updates
     net1: {name: eth1, bridge: vmbr0, ip: {address: relay-lan-v4}, hwaddr: 101's net1, firewall: 1}  # main LAN; keeps 101's address, but the firewall lets nothing in or out on it
@@ -84,6 +117,7 @@ rnas-101:
   arch: amd64
   unprivileged: false  # no idmap; the config sets no `unprivileged`
   features: {mount: nfs;cifs, nesting: 1}  # it mounts the retronas export itself
+  services: [samba, nfs-server, avahi]  # only Samba moved to 102 (Operator)
   tags: [retro]
   cores: 2
   memory: 2048  # MiB

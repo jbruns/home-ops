@@ -44,7 +44,8 @@ itself are not listed.
   name that holds the domain is written `name: <role>`. The Operator's login and its group are written
   `operator`. The real values are under `addresses.<role>`, `names.<role>` and `logins.<role>` in
   `identifiers.sops.yaml`. SOPS leaves the keys in plain text, so read the file itself to see which roles
-  exist; decrypt it only to use a value, never to print one.
+  exist; decrypt it only to use a value, never to print one. An interface address (such as `host-v4`) is stored
+  in CIDR form; a command that needs the bare address strips the prefix (`${v%/*}`).
 - **No secrets.** Passwords, keys and certificates never go here. Neither does anything else the API reports
   as a credential.
 - **Settings are written in a form the drift check can compare.** Sizes are `100 GiB`. A schedule is a cron
