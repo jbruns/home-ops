@@ -18,10 +18,10 @@ dc:
   # Disk and NIC settings below fix the I/O stalls after the PVE 9 upgrade (#854, docs/research/0854-pve9-ws2003-guest.md).
   # aio=threads: moves disk I/O off io_uring (the QEMU 10.2+ default) and removed the last copy pauses.
   disks:
-    ide0: {storage: local-lvm, size: 64 GiB, aio: threads}  # system disk; stays IDE (boot)
+    virtio0: {storage: local-lvm, size: 64 GiB, aio: threads, iothread: 1}  # system disk, was ide0; boots via viostor
     virtio2: {storage: vmdata-sata, size: 136 GiB, aio: threads, iothread: 1}  # data disk, was ide3; viostor driver
   ide2: none,media=cdrom  # empty drive for installer ISOs from `sources`
-  boot: order=ide0;ide2
+  boot: order=virtio0;ide2
   network:
     net0: {model: virtio, bridge: vmbr0, tag: 50}  # retro network only; NetKVM driver, LSO off
   tablet: 1  # the Operator keeps it; costs about 9% idle host CPU on the USB 1.1 controller
@@ -30,7 +30,7 @@ dc:
     netkvm: Offload.Tx.LSO Disabled
     registry:
       - HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\SystemCacheDirtyPageThreshold = 0x40 (DWORD, MB)  # KB920739
-      - ResetErrorCountersOnSuccess = 1 (DWORD) on the IDE channel subkeys of Class\{4D36E96A-E325-11CE-BFC1-08002BE10318}  # KB817472; keeps DMA
+      - ResetErrorCountersOnSuccess = 1 (DWORD) on the IDE channel subkeys of Class\{4D36E96A-E325-11CE-BFC1-08002BE10318}  # KB817472; keeps DMA (only the CD drive is on IDE now)
   onboot: false  # starts only when the Operator starts it
 
 rnas:
