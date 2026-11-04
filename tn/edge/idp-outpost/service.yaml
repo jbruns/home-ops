@@ -8,7 +8,7 @@ services:
     extends:
       file: ../../_baseline.yaml
       service: baseline
-    image: ghcr.io/goauthentik/proxy:2026.5.5@sha256:6bb49066864e71b36a55cf91e5e75390625a808cc9fe365851e14b0978694d2e
+    image: ghcr.io/goauthentik/proxy:2026.8.5@sha256:34640cf41e009ab052d4b9119cea816713adcd1eaac95de6caefebfe86d3fcd9
     container_name: idp-outpost
     healthcheck:
       test: ["CMD", "/proxy", "healthcheck"]
