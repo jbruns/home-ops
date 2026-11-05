@@ -33,3 +33,7 @@ trusted_proxies = ["172.30.0.10/32"]
 [jobs]
 concurrent = 1
 pace = "gentle"
+
+[selections]
+keep = 20
+shadow = true
