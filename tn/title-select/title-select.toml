@@ -4,7 +4,7 @@
 path = "/sources"
 writable = false
 # Source Sets that repairs may write; each is bound read-write on its own (compose.yaml).
-writable_paths = ["No-Intro/Atari - Atari 2600", "No-Intro/Nintendo - Game Boy Advance"]
+writable_paths = ["No-Intro/Atari - Atari 2600", "No-Intro/Nintendo - Game Boy Advance", "Redump/Sony - PlayStation (America)"]
 
 # Library Folders, each bind-mounted on its own under /play (compose.yaml).
 [roots.play]
@@ -37,3 +37,8 @@ pace = "gentle"
 [selections]
 keep = 20
 shadow = true
+
+# Fetch newer DATs, cue packs and SBI packs from Redump for the systems a Source Set follows: each at most once a
+# day per system. Never No-Intro.
+[fetch]
+redump = true
