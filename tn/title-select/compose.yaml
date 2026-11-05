@@ -23,10 +23,12 @@ services:
     deploy:
       resources:
         limits:
-          # Twice the largest peak measured on the Host (#819): 84.7M, previewing a selection profile for the Game Boy
-          # Advance DAT. Audits, repairs and builds stay under 27M; selection grows with the DAT, so measure again
-          # before adding a system with a much larger DAT (the method is in the application's docs/memory.md).
-          memory: 192M
+          # Was 192M: twice the largest peak measured on the Host (#819), 84.7M, previewing a selection profile for the
+          # Game Boy Advance DAT; audits, repairs and builds stay under 27M. Raised while shadow mode also runs the
+          # built-in selection engine in a child process in this container, and for the PlayStation DAT, which is
+          # larger than Game Boy Advance's. Measure during the acceptance (the method is in the application's
+          # docs/memory.md) and set it back to twice the measured peak once shadow mode ends.
+          memory: 512M
           cpus: "1"
     environment:
       - TZ=${TZ}
@@ -106,6 +108,11 @@ services:
         target: /sources/No-Intro/Nintendo - Game Boy Advance
         bind:
           create_host_path: false
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/games/sources/Redump/Sony - PlayStation (America)
+        target: /sources/Redump/Sony - PlayStation (America)
+        bind:
+          create_host_path: false
       # The Ingest Folder (Root `ingest`) and the Additions Root, read-write. Moves from ingest into a Source Set cross
       # mounts, so Title Select copies, checks the copy by hash, and only then deletes the original.
       - type: bind
@@ -128,6 +135,13 @@ services:
       - type: bind
         source: ${ZFS_POOL_ROOT_HDD}/games/library/roms/gba
         target: /play/gba
+        bind:
+          create_host_path: false
+      # The milestone acceptance's PlayStation Library Folder, apart from the hand-laid ES-DE library, which Title
+      # Select can't yet adopt.
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/games/library/acceptance/psx
+        target: /play/psx
         bind:
           create_host_path: false
     networks:
