@@ -36,7 +36,6 @@ pace = "gentle"
 
 [selections]
 keep = 20
-shadow = true
 
 # Fetch newer DATs, cue packs and SBI packs from Redump for the systems a Source Set follows: each at most once a
 # day per system. Never No-Intro.
