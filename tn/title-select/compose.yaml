@@ -23,12 +23,10 @@ services:
     deploy:
       resources:
         limits:
-          # Was 192M: twice the largest peak measured on the Host (#819), 84.7M, previewing a selection profile for the
-          # Game Boy Advance DAT; audits, repairs and builds stay under 27M. Raised while shadow mode also runs the
-          # built-in selection engine in a child process in this container, and for the PlayStation DAT, which is
-          # larger than Game Boy Advance's. Measure during the acceptance (the method is in the application's
-          # docs/memory.md) and set it back to twice the measured peak once shadow mode ends.
-          memory: 512M
+          # Twice the largest peak measured on the Host, 195.75M, rounded up. That peak is an upper bound that
+          # includes page cache, from auditing, repairing and building the PlayStation set. Selections on the
+          # PlayStation DAT peaked lower, at 172M. The method is in the application's docs/memory.md.
+          memory: 400M
           cpus: "1"
     environment:
       - TZ=${TZ}
