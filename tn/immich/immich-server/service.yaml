@@ -91,6 +91,21 @@ services:
       traefik.http.routers.immich-server-https.service: immich-server
       traefik.http.routers.immich-server-https.middlewares: immich-server-chain
 
+      # Login only (#869): local accounts have no MFA (ADR 0006), so a strict per-client rate limit
+      # here and a CrowdSec scenario (tn/edge/crowdsec/immich-login-bf.yaml, which matches routers
+      # named immich-*) make up for it. The path matches as Immich routes it: case-insensitive,
+      # trailing or repeated slashes. Priority beats the Host-only router; nothing else is throttled.
+      # Not a Client Path (Immich is not Protected), but homelab-validate allows only the
+      # -http/-https/-health/-client-<protocol> router names, and a -client- router needs
+      # strip-idp-headers, which is harmless here.
+      traefik.http.routers.immich-server-client-login.rule: Host(`photos.${ALT_DOMAIN_HOME}`) && PathRegexp(`(?i)^/+api/+auth/+login/*$$`)
+      traefik.http.routers.immich-server-client-login.priority: 1000
+      traefik.http.routers.immich-server-client-login.entrypoints: https
+      traefik.http.routers.immich-server-client-login.tls: true
+      traefik.http.routers.immich-server-client-login.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.immich-server-client-login.service: immich-server
+      traefik.http.routers.immich-server-client-login.middlewares: crowdsec-bouncer, immich-server-headers, strip-idp-headers, login-ratelimit
+
       # Probe (GLOSSARY.md): the public path a user takes; see prometheus.yml. From inside the Host
       # it resolves to the Host's public address and relies on the router's NAT hairpin, as the
       # DNS-only Nextcloud Probe already does.
