@@ -156,6 +156,17 @@ services:
       traefik.http.middlewares.client-ratelimit.ratelimit.average: 30
       traefik.http.middlewares.client-ratelimit.ratelimit.burst: 120
       traefik.http.middlewares.client-ratelimit.ratelimit.sourcecriterion.ipstrategy.depth: 1
+      ## Per client, on a login router of its own (exact login path only, so uploads and other API
+      ## calls stay on the Service's main router): 5 attempts a minute after a burst of 10. Slower than
+      ## the hub's generic 401 scenario can see, so a Service-specific CrowdSec scenario does the ban
+      ## (tn/edge/crowdsec/immich-login-bf.yaml for Immich, whose local accounts have no MFA; ADR 0006).
+      ## For DNS-only Services (not proxied by Cloudflare, e.g. Immich, whose single-request uploads
+      ## exceed Cloudflare's body limit): keyed on the connection's address, the default with no
+      ## sourcecriterion. X-Forwarded-For is dropped from anything but Cloudflare, so depth 1 would
+      ## give every client the same empty key and one bucket. A proxied Service needs a depth-1 twin.
+      traefik.http.middlewares.login-ratelimit.ratelimit.average: 5
+      traefik.http.middlewares.login-ratelimit.ratelimit.period: 1m
+      traefik.http.middlewares.login-ratelimit.ratelimit.burst: 10
 
       ## Redirect to HTTPS
       traefik.http.middlewares.redirect-https.redirectScheme.scheme: https

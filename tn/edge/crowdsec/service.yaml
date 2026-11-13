@@ -45,6 +45,11 @@ services:
         target: /etc/crowdsec/parsers/s02-enrich/home-whitelist.yaml
         read_only: true
         x-sops: true
+      # Local scenarios, loaded alongside the hub's.
+      - type: bind
+        source: ./immich-login-bf.yaml
+        target: /etc/crowdsec/scenarios/immich-login-bf.yaml
+        read_only: true
       # Allow Crowdsec to read and parse Traefik access logs
       - traefik_log:/var/log/traefik:ro
     networks:

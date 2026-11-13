@@ -1,0 +1,30 @@
+# Failed Immich logins, from the Traefik access log (crowdsecurity/traefik-logs). Immich has local
+# accounts only and no MFA (ADR 0006), so this stands in for it alongside the login-ratelimit
+# middleware. The hub's generic 401 scenario (leakspeed 10s) never fires under that rate limit,
+# so this bucket drains far slower. Matched by router name, not host, so other Services'
+# /api/auth/login stay out; Immich's routers are named immich-*. Immich routes paths
+# case-insensitively and ignores a trailing slash, so the query-stripped path is matched the same
+# way (repeated slashes too). Immich is DNS-only, so source_ip (the log's ClientHost) is the
+# connection's address: Traefik drops X-Forwarded-For from anything but Cloudflare.
+type: leaky
+name: homeops/immich-login-bf
+description: "Detect brute force on the Immich login"
+filter: >-
+  evt.Meta.log_type == 'http_access-log' &&
+  evt.Meta.http_verb == 'POST' &&
+  evt.Meta.http_status == '401' &&
+  evt.Meta.traefik_router_name startsWith 'immich-' &&
+  Split(evt.Meta.http_path, '?')[0] matches '(?i)^/+api/+auth/+login/*$'
+groupby: evt.Meta.source_ip
+capacity: 5
+leakspeed: 1m
+blackhole: 5m
+labels:
+  service: immich
+  confidence: 3
+  spoofable: 0
+  classification:
+    - attack.T1110
+  behavior: "http:bruteforce"
+  label: "Immich Login Bruteforce"
+  remediation: true
