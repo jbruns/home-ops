@@ -87,7 +87,7 @@ Renovate runs every morning (America/Los_Angeles) with no hourly PR limit, pins 
 - After changing either recipient in `.sops.yaml`, run `sops updatekeys -y` on every `*.sops.*` file under `tn/` and check each lists exactly those two recipients.
 - Edit a Stack's values with `sops tn/<stack>/.sops.env`. Add a new key to `env.template` too, or CI fails.
 - Files a Compose file mounts or loads (`env_file`, `secrets`) must be named `*.sops.*` and tracked. Plaintext `.env` and `*.txt` files under `tn/` are gitignored.
-- Home public addresses are whitelisted in CrowdSec by `tn/edge/crowdsec/home-whitelist.sops.yaml` (a parser, edited with `sops`). Only this Host carries it.
+- Home public addresses are whitelisted in CrowdSec by `tn/edge/crowdsec/home-whitelist.sops.yaml` (a parser, edited with `sops`). Only this Host carries it. Local scenarios (plain YAML, such as `immich-login-bf.yaml`) sit beside it and are bind-mounted into `/etc/crowdsec/scenarios/`.
 - doco-cd writes decrypted files as root with mode 0644, so a non-root Service can read a Compose `secrets` file (as prometheus and alertmanager do).
 - doco-cd parses `env_file` with the default format only; `format: raw` fails the Deploy. Single-quote values that contain `$`.
 
