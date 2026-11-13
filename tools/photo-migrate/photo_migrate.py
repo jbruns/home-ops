@@ -33,6 +33,7 @@ class Config:
         self.not_albums = set(data.get("not_albums", []))
         self.timezone = data.get("timezone", "UTC")
         self.quicktime_local = bool(data.get("quicktime_local_when_name_matches", True))
+        self.utc_names = [re.compile(p) for p in data.get("utc_name_patterns", [])]
         self.apple_names = [re.compile(p) for p in data.get("apple_name_patterns", [])]
 
     @property
@@ -132,15 +133,17 @@ def name_date(record):
     return None
 
 
-def resolve_date(record, tz, quicktime_local=True):
+def resolve_date(record, tz, quicktime_local=True, utc_names=()):
     """(date, source, uncertain): the capture date, offset-aware, from EXIF, else the filename, else the mtime.
 
     An EXIF date takes its own offset, else its own EXIF offset tag (EXIF groups only), else UTC for
     QuickTime's own dates, else `tz` (the household's). With `quicktime_local`, a bare QuickTime date whose
     wall clock is the filename's, to the minute, was written in local time: it is read in `tz`
-    (`quicktime-local`). A filename date is in `tz`; the mtime is shown in
+    (`quicktime-local`). A filename matching one of `utc_names` carries UTC: its date is UTC, and it never
+    makes a QuickTime date local. A filename date is in `tz`; the mtime is shown in
     `tz`. `uncertain` marks a wall-clock time `tz` makes ambiguous or skips (see `localize`).
     """
+    utc_name = any(p.search(os.path.basename(record["SourceFile"])) for p in utc_names)
     for name, offset_tag in EXIF_DATE_TAGS:
         for group, value in _tagged(record, name):
             dt = _exif_date(value)
@@ -152,7 +155,7 @@ def resolve_date(record, tz, quicktime_local=True):
                 if offset_tag and EXIF_GROUPS.match(group):
                     offset = next((o for o in map(_offset, tags(record, offset_tag)) if o), None)
                 elif QUICKTIME_GROUPS.match(group):
-                    named = name_date(record) if quicktime_local else None
+                    named = name_date(record) if quicktime_local and not utc_name else None
                     if named and named.replace(second=0, microsecond=0) == dt.replace(second=0, microsecond=0):
                         dt, uncertain = localize(dt, tz)
                         return _iso(dt), "quicktime-local", uncertain
@@ -161,7 +164,7 @@ def resolve_date(record, tz, quicktime_local=True):
             return _iso(dt), "exif", uncertain
     dt = name_date(record)
     if dt:
-        dt, uncertain = localize(dt, tz)
+        dt, uncertain = (dt.replace(tzinfo=timezone.utc), False) if utc_name else localize(dt, tz)
         return _iso(dt), "filename", uncertain
     dt = _exif_date(record.get("System:FileModifyDate", ""))
     if dt is None:
@@ -243,7 +246,7 @@ def plan(records, root, config):
             reason = APPLE
         else:
             reason = None
-        date, source, uncertain = resolve_date(r, tz, config.quicktime_local)
+        date, source, uncertain = resolve_date(r, tz, config.quicktime_local, config.utc_names)
         rows.append({"path": path, "action": "skip" if reason else "upload", "reason": reason,
                      "owner": owner_of(path, config), "album": album_of(path, config, tops), "media": media,
                      "date": date, "date_source": source, "date_uncertain": uncertain, "make": str(makes[0]).strip() if makes else None,

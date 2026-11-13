@@ -13,6 +13,7 @@ CONFIG = pm.Config({
     "not_albums": ["Member", "Member Phone", "Operator Phone", "DSLR"],
     "timezone": "America/Los_Angeles",
     "apple_name_patterns": ["_iOS\\."],
+    "utc_name_patterns": ["_iOS\\."],
 })
 TZ = CONFIG.tz
 
@@ -79,6 +80,18 @@ def test_a_bare_quicktime_date_stays_utc_unless_the_filename_clock_matches_or_wh
     assert pm.resolve_date(local, TZ, quicktime_local=False) == ("2014-08-08T22:40:39+00:00", "exif", False)
     assert pm.Config({"accounts": {}, "default_owner": "operator"}).quicktime_local is True
     assert pm.Config({"accounts": {}, "default_owner": "operator", "quicktime_local_when_name_matches": False}).quicktime_local is False
+
+
+def test_a_name_matching_a_utc_pattern_carries_utc_and_never_makes_its_quicktime_date_local():
+    utc = CONFIG.utc_names
+    assert pm.resolve_date(rec("20170116_213232000_iOS.jpg"), TZ, utc_names=utc) == (
+        "2017-01-16T21:32:32+00:00", "filename", False)
+    r = rec("20160711_011706000_iOS.mp4", **{"QuickTime:CreateDate": "2016:07:11 01:17:06"})
+    assert pm.resolve_date(r, TZ, utc_names=utc) == ("2016-07-11T01:17:06+00:00", "exif", False)
+    r = rec("20160711_011706.mp4", **{"QuickTime:CreateDate": "2016:07:11 01:17:06"})
+    assert pm.resolve_date(r, TZ, utc_names=utc)[1] == "quicktime-local"
+    assert planned(rec("20170116_213232000_iOS.jpg"))["Event 2015/20170116_213232000_iOS.jpg"]["date"] == (
+        "2017-01-16T21:32:32+00:00")
 
 
 def test_zero_or_garbage_exif_dates_are_ignored_and_mtime_is_shown_household_local():
