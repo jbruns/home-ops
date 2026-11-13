@@ -637,7 +637,7 @@ def keys_tar(env_path, out):
         data = "".join(line for line in f if line.startswith("IMMICH_API_KEY_")).encode()
     info = tarfile.TarInfo("keys.env")
     info.size, info.mode, info.mtime = len(data), 0o600, int(time.time())
-    with tarfile.open(fileobj=out, mode="w") as t:
+    with tarfile.open(fileobj=out, mode="w|") as t:
         t.addfile(info, io.BytesIO(data))
 
 

@@ -701,3 +701,21 @@ def test_keys_tar_packs_only_the_api_keys_into_a_file_for_docker_cp(tmp_path, ca
     assert text == "IMMICH_API_KEY_OPERATOR='op'\nIMMICH_API_KEY_MEMBER=me\n"
     (tmp_path / "keys.env").write_text(text)
     assert pm.load_keys(CONFIG, str(tmp_path / "keys.env")) == {"IMMICH_API_KEY_OPERATOR": "op", "IMMICH_API_KEY_MEMBER": "me"}
+
+
+def test_keys_tar_writes_to_a_pipe(tmp_path):
+    import tarfile
+
+    class Pipe(io.BytesIO):
+        def tell(self):
+            raise OSError(29, "Illegal seek")
+
+        def seek(self, *a):
+            raise OSError(29, "Illegal seek")
+
+    env = tmp_path / ".env"
+    env.write_text("IMMICH_API_KEY_OPERATOR=op\n")
+    out = Pipe()
+    pm.keys_tar(str(env), out)
+    with tarfile.open(fileobj=io.BytesIO(out.getvalue())) as t:
+        assert t.extractfile("keys.env").read() == b"IMMICH_API_KEY_OPERATOR=op\n"
