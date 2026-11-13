@@ -292,7 +292,7 @@ class FakeImmich:
                     a = fake.asset(self.path.split("/")[3])
                     if a is None or a["owner"] != user:
                         return self.reply(400, {"message": "Not found or no asset.read access"})
-                    return self.reply(200, {"id": a["id"], "localDateTime": a["localDateTime"].isoformat() + ".000Z",
+                    return self.reply(200, {"id": a["id"], "localDateTime": a["localDateTime"].isoformat(timespec="milliseconds") + "Z",
                                             "exifInfo": {"dateTimeOriginal": a["dateTimeOriginal"].isoformat(),
                                                          "timeZone": a["timeZone"]}})
                 if self.path.startswith("/api/albums?"):
@@ -719,3 +719,23 @@ def test_keys_tar_writes_to_a_pipe(tmp_path):
     pm.keys_tar(str(env), out)
     with tarfile.open(fileobj=io.BytesIO(out.getvalue())) as t:
         assert t.extractfile("keys.env").read() == b"IMMICH_API_KEY_OPERATOR=op\n"
+
+
+def test_fix_dates_ignores_sub_seconds_and_keeps_immichs(tmp_path, immich):
+    rows = [row("Event/a.jpg", date="2014-09-17T18:33:35-07:00", source="exif"),
+            row("Event/b.jpg", date="2014-09-17T18:33:35-07:00", source="exif")]
+    journal = uploaded_rows(immich, tmp_path, rows)
+    a, b = (immich.asset(j["id"]) for j in journal)
+    a.update(dateTimeOriginal=datetime(2014, 9, 18, 1, 33, 35, 839000, timezone.utc), timeZone="UTC-7",
+             localDateTime=datetime(2014, 9, 17, 18, 33, 35, 839000))
+    b.update(localDateTime=datetime(2014, 9, 17, 18, 33, 35, 839000))  # naive EXIF: wall clock right, instant not
+    out = fix(immich, rows, journal)
+    assert [d["status"] for d in out] == ["correct", "fixed"]
+    assert out[1]["after"] == "2014-09-17T18:33:35.839-07:00"
+
+
+def test_fix_dates_fixes_a_wrong_wall_clock_in_the_household_zone(tmp_path, immich):
+    rows = [row("Event/a.jpg", date="2014-09-17T18:33:35-07:00", source="exif")]
+    journal = uploaded_rows(immich, tmp_path, rows)
+    immich.asset(journal[0]["id"]).update(timeZone="America/Los_Angeles", localDateTime=datetime(2014, 9, 18, 1, 33, 35))
+    assert [d["status"] for d in fix(immich, rows, journal)] == ["fixed"]

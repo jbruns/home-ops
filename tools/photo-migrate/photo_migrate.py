@@ -483,9 +483,13 @@ def fix_dates(rows, journal, clients, tz, dry_run=False):
     """Give each asset this tool created, whose planned date's offset was assumed rather than the file's
     own, its date in household wall-clock time; yield one row per asset.
 
-    Status: `correct` (its instant and wall clock already right), `immich-zone` (Immich found a zone of
-    its own, e.g. from GPS: left alone), `would-fix` (dry run), `fixed`, or `error`.
+    Status: `correct` (its instant and wall clock already right, to the second), `immich-zone` (Immich
+    found a zone of its own other than `tz`, e.g. from GPS: left alone), `would-fix` (dry run), `fixed`,
+    or `error`. The date set keeps Immich's sub-seconds when its wall clock is right to the second.
     """
+    def second(dt):
+        return dt.replace(microsecond=0) if dt else None
+
     created = {j["path"]: j for j in journal if j.get("status") == "created" and j.get("id")}
     for r in sorted(rows, key=lambda r: r["path"]):
         j = created.get(r["path"])
@@ -501,10 +505,13 @@ def fix_dates(rows, journal, clients, tz, dry_run=False):
             out["before"] = {"dateTimeOriginal": exif.get("dateTimeOriginal"), "timeZone": exif.get("timeZone"),
                              "localDateTime": asset.get("localDateTime")}
             local = _when(asset.get("localDateTime"))
-            if (_when(exif.get("dateTimeOriginal")) == target
-                    and local and local.replace(tzinfo=None) == target.replace(tzinfo=None)):
+            local = local and local.replace(tzinfo=None)
+            if second(local) == target.replace(tzinfo=None):
+                target = target.replace(microsecond=local.microsecond)
+                out["after"] = _iso(target)
+            if second(_when(exif.get("dateTimeOriginal"))) == second(target) and second(local) == second(target).replace(tzinfo=None):
                 out["status"] = "correct"
-            elif exif.get("timeZone") not in UTC_ZONES:
+            elif exif.get("timeZone") not in UTC_ZONES | {getattr(tz, "key", None)}:
                 out["status"] = "immich-zone"
             elif dry_run:
                 out["status"] = "would-fix"

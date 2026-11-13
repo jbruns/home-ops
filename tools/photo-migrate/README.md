@@ -121,7 +121,8 @@ sets `dateTimeOriginal` on each asset `upload` created from such a row to the ma
 `timezone`, with its offset; Immich stores the offset as the asset's zone and recomputes
 `localDateTime` (asynchronously, through its sidecar and metadata jobs) as household wall-clock time.
 It skips an asset already right (`correct`) and one whose zone Immich found itself, from GPS say
-(`immich-zone`), so a re-run changes nothing. `--dry-run` changes nothing and reports counts; after
+(`immich-zone`; the household zone is not foreign), comparing to the second and keeping
+Immich's sub-seconds, so a re-run changes nothing. `--dry-run` changes nothing and reports counts; after
 `--max-consecutive-errors` (default 10) errors in a row it stops and exits 2.
 
 ```sh
