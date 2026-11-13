@@ -85,10 +85,12 @@ python3 tools/photo-migrate/photo_migrate.py report < $R/manifest.jsonl
 
 # 2. Upload, one file at a time (add --limit 0 to only check the keys and network, --limit 20 for a
 #    trial); re-run it until no file errors. The journal is appended inside the container, so a dropped
-#    SSH session loses nothing: follow progress with `$H logs -f photo-migrate`, wait with `$H wait photo-migrate`.
+#    SSH session loses nothing. ssh re-splits the command on the Host, so the -c script needs both quote
+#    layers; with one, python3 would read the keys on stdin as a script. Try a change with dummy keys first.
+#    Follow progress with `$H logs -f photo-migrate`; wait with `$H wait photo-migrate`.
 $H create -i --name photo-migrate --label startup-order=skip --network immich_default \
-  -v nextcloud_data:/d:ro -w /srv --entrypoint sh "$PY" -c "python3 photo_migrate.py upload --config config.json \
-  --manifest manifest.jsonl --journal journal.jsonl --root $GF --workers 1 >> journal.jsonl"
+  -v nextcloud_data:/d:ro -w /srv --entrypoint sh "$PY" -c "'python3 photo_migrate.py upload --config config.json \
+  --manifest manifest.jsonl --journal journal.jsonl --root $GF --workers 1 >> journal.jsonl'"
 COPYFILE_DISABLE=1 tar -c --no-xattrs -C tools/photo-migrate photo_migrate.py config.json -C run manifest.jsonl journal.jsonl \
   | $H cp - photo-migrate:/srv
 grep '^IMMICH_API_KEY_' .env | $H start -ai photo-migrate
