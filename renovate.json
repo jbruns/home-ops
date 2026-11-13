@@ -33,6 +33,32 @@
       "automerge": true
     },
     {
+      "description": "Immich server and machine learning move together in one PR, never automerged: releases can change the database or settings",
+      "matchPackageNames": [
+        "ghcr.io/immich-app/immich-server",
+        "ghcr.io/immich-app/immich-machine-learning"
+      ],
+      "groupName": "immich",
+      "automerge": false
+    },
+    {
+      "description": "Immich's Postgres follows the tag Immich's release docker-compose.yml names, by hand; never automerged",
+      "matchPackageNames": [
+        "ghcr.io/immich-app/postgres"
+      ],
+      "automerge": false
+    },
+    {
+      "description": "A Postgres major upgrade needs a dump and restore of the data directory",
+      "matchPackageNames": [
+        "ghcr.io/immich-app/postgres"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "enabled": false
+    },
+    {
       "description": "startup-order Custom Component on the Host (the preset already blocks automerge): after merging, install it on the Host (host/README.md)",
       "matchDatasources": [
         "github-release-attachments"

@@ -1,0 +1,62 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json
+services:
+  postgres:
+    # https://github.com/immich-app/base-images/tree/main/postgres
+    # Immich's Postgres with VectorChord, at the tag Immich's release docker-compose.yml names. A
+    # Postgres major upgrade needs a dump and restore, so Renovate never proposes one (renovate.json).
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23
+    container_name: immich-postgres
+    # The image's postgres user; the entrypoint skips its chown + gosu when not root, so no caps. The
+    # data volume must be owned by it before the first Deploy.
+    user: "999:999"
+    deploy:
+      resources:
+        limits:
+          # Immich's tuned postgresql.ssd.conf sets shared_buffers 512MB and work_mem 16MB; room for
+          # vector index builds. Revisit after 30 days of working-set data.
+          memory: 2G
+    # As upstream; Postgres's parallel queries use /dev/shm (Docker's default is 64M).
+    shm_size: 128mb
+    stop_grace_period: 60s
+    healthcheck:
+      # The image's check: pg_isready, then zero data-checksum failures, over the local socket.
+      test: ["CMD", "/usr/local/bin/healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+      start_interval: 5s
+    environment:
+      # stack-back reads POSTGRES_USER and POSTGRES_DB from the environment and runs pg_dump over the
+      # local socket, so it needs no password.
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=immich
+      - POSTGRES_PASSWORD_FILE=/run/secrets/immich_db_password
+      - POSTGRES_INITDB_ARGS=--data-checksums
+    secrets:
+      - immich_db_password
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: critical
+      startup-order: "1"
+      stack-back.postgres: true
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - default
+      # stack-back (ops) dumps the database; it reaches it by docker exec, the network is convention.
+      - backup
+
+# Immich's database password; letters and digits only (Immich's requirement). The server reads the
+# same file.
+secrets:
+  immich_db_password:
+    file: ../db_password.sops.txt
+
+volumes:
+  postgres_data:
+    name: immich_postgres_data
+    external: true

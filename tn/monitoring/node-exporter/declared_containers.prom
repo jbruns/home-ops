@@ -12,6 +12,10 @@ homeops_container_declared{stack="edge",service="nginx",name="nginx",tier="warni
 homeops_container_declared{stack="edge",service="traefik",name="traefik",tier="critical"} 1
 homeops_container_declared{stack="edge",service="traefik-logrotate",name="traefik-logrotate",tier="info"} 1
 homeops_container_declared{stack="emby",service="emby",name="emby",tier="warning"} 1
+homeops_container_declared{stack="immich",service="immich-machine-learning",name="immich-machine-learning",tier="warning"} 1
+homeops_container_declared{stack="immich",service="immich-server",name="immich-server",tier="critical"} 1
+homeops_container_declared{stack="immich",service="postgres",name="immich-postgres",tier="critical"} 1
+homeops_container_declared{stack="immich",service="valkey",name="immich-valkey",tier="critical"} 1
 homeops_container_declared{stack="monitoring",service="alertmanager",name="alertmanager",tier="critical"} 1
 homeops_container_declared{stack="monitoring",service="alloy",name="alloy",tier="warning"} 1
 homeops_container_declared{stack="monitoring",service="backup-coverage",name="backup-coverage",tier="warning"} 1
