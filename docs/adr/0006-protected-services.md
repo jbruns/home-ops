@@ -10,7 +10,7 @@ Each Service records its mechanism and the reason for it in its Compose file. Wh
 
 The outpost is Critical, because every Protected Service fails with it and the Host can fix it. The IdP runs on another machine and stays Warning, as an explicit exception to the rule that a Dependency takes the highest Tier among its dependents: an IdP outage is that machine's to Page on. While the IdP's DependencyDown is firing, it inhibits the outpost's lost-connection alert. The IdP Probe (a 302 to the authorize endpoint) is answered by the outpost, so the IdP itself is also Probed as an External Dependency. A native-OIDC Service's IdP Probe is answered by its own login path instead, so it is labelled apart and never counts towards the outpost's alert.
 
-A Critical Service is not Protected by default. Making it Protected would make the IdP a Dependency of a Critical Service and risk locking users out, so it is decided per Service by its audience. Vaultwarden and Nextcloud stay off the IdP for now. If a Critical Service does become Protected, revisit the IdP's Tier.
+A Critical Service is not Protected by default. Making it Protected would make the IdP a Dependency of a Critical Service and risk locking users out, so it is decided per Service by its audience. Vaultwarden, Nextcloud and Immich stay off the IdP for now. Immich stays off it even though its own accounts have no MFA, because the IdP runs on infrastructure with a shared audience; a login rate limit and a CrowdSec scenario for failed Immich logins make up for the missing MFA. If a Critical Service does become Protected, revisit the IdP's Tier.
 
 ## Considered Options
 

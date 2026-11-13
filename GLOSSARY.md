@@ -67,6 +67,10 @@ _Avoid_: Backend, DB container
 One kind of organized media that Media Servers present (e.g. TV, Movies, Music, Audiobooks, Books, Games).
 _Avoid_: Collection, share, media folder
 
+**Photo Collection**:
+One household member's own photos and videos: original data that cannot be obtained again, so it is always in the Backup. Each item belongs to exactly one member's Photo Collection; members see each other's by sharing, never by joint ownership. It is not a Library, and the Service that holds it is not a Media Server.
+_Avoid_: Library, gallery, camera roll
+
 **Requester**:
 A Service that decides what media to fetch and hands it to a Downloader, but never holds files itself (Shelfmark from users' requests, autobrr from announce filters).
 _Avoid_: Indexer, grabber
