@@ -1,0 +1,19 @@
+{
+  "accounts": {
+    "operator": "IMMICH_API_KEY_OPERATOR",
+    "member": "IMMICH_API_KEY_MEMBER"
+  },
+  "default_owner": "operator",
+  "owners": {
+    "<member>": "member",
+    "<member> Phone": "member"
+  },
+  "not_albums": [
+    "<member>",
+    "<member> Phone",
+    "<operator>",
+    "<operator> Phone",
+    "DSLR",
+    "Sony"
+  ]
+}
