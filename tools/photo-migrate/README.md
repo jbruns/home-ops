@@ -41,7 +41,7 @@ carry no offset. `quicktime_local_when_name_matches` (default `true`) turns the 
 `apple_name_patterns` are regular expressions searched in the filename of a file with
 no `Make`.
 
-Each account's API key, created by that account's user, needs the permissions `user.read`, `asset.upload`, `album.read`, `album.create`, `albumAsset.create` and `albumUser.create`.
+Each account's API key, created by that account's user, needs the permissions `user.read`, `asset.upload`, `album.read`, `album.create`, `albumAsset.create` and `albumUser.create`; `fix-dates` also needs `asset.read` and `asset.update`.
 
 ## Files
 
@@ -50,12 +50,17 @@ Run files live in `tools/photo-migrate/run/` (gitignored). Keep them until #871 
 - `exif.json`: the scan.
 - `manifest.jsonl`: the plan, one row per file: `path` (relative to the group folder), `action`
   (`upload` or `skip`), `reason`, `owner`, `album`, `media` (`image` or `video`), `date`, `date_source`,
-  `date_uncertain`, `make`, `size`, `pair`. `upload` stops on any malformed record: re-run `plan`.
+  `date_uncertain`, `date_offset_from_file` (the date's offset is the file's own, not assumed), `make`,
+  `size`, `pair`. `upload` stops on any malformed record: re-run `plan`.
 - `journal.jsonl`: one row per file `upload` handled: `path`, `owner`, `sha1`, `id` (the Immich asset),
   `status` (`created`, `duplicate`, `trashed`, `owner-mismatch` or `error`), `error`. A file journalled
   `created` or `duplicate` under its planned owner is not sent again; any other is checked again on the
   next run. One journalled as done under another owner is `owner-mismatch` until resolved by hand. A record cut off by an interrupted run is
   dropped, so its file is checked again.
+
+- `fix-dates.jsonl`: one row per asset `fix-dates` checked: `path`, `owner`, `id`, `status`
+  (`correct`, `immich-zone`, `would-fix`, `fixed` or `error`), `before` (Immich's `dateTimeOriginal`,
+  `timeZone`, `localDateTime`), `after` (the date set), `error`.
 
 **Reconciliation (#871)** reads the manifest's `apple` and `apple-live` rows: each has its owner,
 capture `date`, `media` and `album`. To import the files with no match in iCloud, write their rows to a
@@ -86,25 +91,50 @@ python3 tools/photo-migrate/photo_migrate.py report < $R/manifest.jsonl
 # 2. Upload, one file at a time (add --limit 0 to only check the keys and network, --limit 20 for a
 #    trial); re-run it until no file errors. The journal is appended inside the container, so a dropped
 #    SSH session loses nothing. ssh re-splits the command on the Host, so the -c script needs both quote
-#    layers; with one, python3 would read the keys on stdin as a script. Try a change with dummy keys first.
+#    layers. The keys reach the container only as the file keys.env, copied in with docker cp, never
+#    through a shell, stdin or argv; the container is removed with it. Try a change with dummy keys first.
 #    Follow progress with `$H logs -f photo-migrate`; wait with `$H wait photo-migrate`.
 $H create -i --name photo-migrate --label startup-order=skip --network immich_default \
   -v nextcloud_data:/d:ro -w /srv --entrypoint sh "$PY" -c "'python3 photo_migrate.py upload --config config.json \
-  --manifest manifest.jsonl --journal journal.jsonl --root $GF --workers 1 >> journal.jsonl'"
+  --manifest manifest.jsonl --journal journal.jsonl --root $GF --workers 1 --keys-file keys.env >> journal.jsonl'"
 COPYFILE_DISABLE=1 tar -c --no-xattrs -C tools/photo-migrate photo_migrate.py config.json -C run manifest.jsonl journal.jsonl \
   | $H cp - photo-migrate:/srv
-grep '^IMMICH_API_KEY_' .env | $H start -ai photo-migrate
+python3 tools/photo-migrate/photo_migrate.py keys-tar --env .env | $H cp - photo-migrate:/srv
+$H start -a photo-migrate
 $H cp photo-migrate:/srv/journal.jsonl - | tar -xO > $R/journal.jsonl.new && mv $R/journal.jsonl.new $R/journal.jsonl
 $H rm photo-migrate
 hops strays
 ```
 
-`upload` reads the API keys as `NAME=value` lines on stdin, so they never appear in a command line,
-prints a journal row per file to stdout and progress and one row per album to stderr (with `failed`,
+`upload` and `fix-dates` read the API keys as `NAME=value` lines from `--keys-file`, else from the
+environment, so they never appear in a command line. `upload` prints a journal row per file to stdout and progress and one row per album to stderr (with `failed`,
 the files the album refused other than duplicates), and exits 1 if any file failed, is trashed or has
 an owner mismatch, or any album failed. After `--max-consecutive-errors` (default 10) file errors in a
 row, a systemic failure (a revoked key, a full disk, Immich down), it stops, leaves the albums alone and
 exits 2.
+
+## Fix dates
+
+Immich keeps no time zone for an uploaded file's date: it shows a date whose offset `plan` assumed
+(filename, mtime, an EXIF or QuickTime date without its own offset) at its UTC wall clock. `fix-dates`
+sets `dateTimeOriginal` on each asset `upload` created from such a row to the manifest's instant in
+`timezone`, with its offset; Immich stores the offset as the asset's zone and recomputes
+`localDateTime` (asynchronously, through its sidecar and metadata jobs) as household wall-clock time.
+It skips an asset already right (`correct`) and one whose zone Immich found itself, from GPS say
+(`immich-zone`), so a re-run changes nothing. `--dry-run` changes nothing and reports counts; after
+`--max-consecutive-errors` (default 10) errors in a row it stops and exits 2.
+
+```sh
+$H create --name photo-fix --label startup-order=skip --network immich_default -w /srv --entrypoint sh "$PY" \
+  -c "'python3 photo_migrate.py fix-dates --config config.json --manifest manifest.jsonl --journal journal.jsonl \
+  --keys-file keys.env --dry-run >> fix-dates.jsonl'"   # drop --dry-run for the real run
+COPYFILE_DISABLE=1 tar -c --no-xattrs -C tools/photo-migrate photo_migrate.py config.json -C run manifest.jsonl journal.jsonl \
+  | $H cp - photo-fix:/srv
+python3 tools/photo-migrate/photo_migrate.py keys-tar --env .env | $H cp - photo-fix:/srv
+$H start -a photo-fix
+$H cp photo-fix:/srv/fix-dates.jsonl - | tar -xO > $R/fix-dates.jsonl
+$H rm photo-fix
+```
 
 ## Test
 

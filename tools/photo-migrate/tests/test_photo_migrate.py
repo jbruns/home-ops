@@ -54,6 +54,18 @@ def test_an_exif_offset_tag_never_shifts_a_bare_quicktime_date_which_stays_utc()
     assert pm.resolve_date(r, TZ) == ("2019-01-02T03:04:05+00:00", "exif", False)
 
 
+def test_the_plan_records_whether_a_dates_offset_came_from_the_file():
+    rows = planned(rec("own.jpg", **{"ExifIFD:DateTimeOriginal": "2021:03:04 05:06:07+09:00"}),
+                   rec("tag.jpg", **{"ExifIFD:DateTimeOriginal": "2021:03:04 05:06:07", "ExifIFD:OffsetTimeOriginal": "+09:00"}),
+                   rec("keys.mov", **{"Keys:CreationDate": "2019:01:02 03:04:05-08:00"}),
+                   rec("naive.jpg", **{"ExifIFD:DateTimeOriginal": "2021:03:04 05:06:07"}),
+                   rec("bare.mov", **{"QuickTime:CreateDate": "2019:01:02 03:04:05"}),
+                   rec("15-07-04 10-11-12 0001.jpg"), rec("none.jpg"))
+    assert {p.split("/")[1]: r["date_offset_from_file"] for p, r in rows.items()} == {
+        "own.jpg": True, "tag.jpg": True, "keys.mov": True, "naive.jpg": False, "bare.mov": False,
+        "15-07-04 10-11-12 0001.jpg": False, "none.jpg": False}
+
+
 def test_a_quicktime_creation_date_keeps_its_offset_and_a_bare_quicktime_date_is_utc():
     r = rec("IMG_1.MOV", **{"File:MIMEType": "video/quicktime", "Keys:CreationDate": "2019:01:02 03:04:05-08:00",
                             "QuickTime:CreateDate": "2019:01:02 11:04:05"})
@@ -167,7 +179,8 @@ def test_a_non_apple_file_is_planned_for_upload_to_its_owner_and_album():
                    rec("DSC_2.JPG", "/d/gf/Event 2015", **{"IFD0:Make": "NIKON"}))
     assert rows["Member Phone/IMG_1.JPG"] == {
         "path": "Member Phone/IMG_1.JPG", "action": "upload", "reason": None, "owner": "member", "album": None,
-        "media": "image", "date": "2019-01-02T03:04:05-08:00", "date_source": "exif", "date_uncertain": False, "make": "samsung",
+        "media": "image", "date": "2019-01-02T03:04:05-08:00", "date_source": "exif", "date_uncertain": False,
+        "date_offset_from_file": False, "make": "samsung",
         "size": 1000, "pair": None}
     assert rows["Event 2015/DSC_2.JPG"]["album"] == "Event 2015"
     assert rows["Event 2015/DSC_2.JPG"]["owner"] == "operator"
@@ -230,6 +243,8 @@ def test_files_exiftool_cannot_read_or_that_are_not_media_are_skipped():
 # --- Upload and albums, against a fake Immich ---
 
 import hashlib  # noqa: E402
+import io  # noqa: E402
+from datetime import datetime, timezone  # noqa: E402
 import json  # noqa: E402
 import threading  # noqa: E402
 import uuid  # noqa: E402
@@ -251,6 +266,7 @@ class FakeImmich:
         self.trashed = set()  # asset ids in the trash
         self.forbidden = set()  # asset ids an album add refuses
         self.drop_album_creates = 0  # create the album but lose the response this many times
+        self.date_updates = []  # asset ids whose date was set
         fake = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -272,6 +288,13 @@ class FakeImmich:
                 user = fake.users[self.headers["x-api-key"]]
                 if self.path == "/api/users/me":
                     return self.reply(200, {"id": user})
+                if self.path.startswith("/api/assets/"):
+                    a = fake.asset(self.path.split("/")[3])
+                    if a is None or a["owner"] != user:
+                        return self.reply(400, {"message": "Not found or no asset.read access"})
+                    return self.reply(200, {"id": a["id"], "localDateTime": a["localDateTime"].isoformat() + ".000Z",
+                                            "exifInfo": {"dateTimeOriginal": a["dateTimeOriginal"].isoformat(),
+                                                         "timeZone": a["timeZone"]}})
                 if self.path.startswith("/api/albums?"):
                     return self.reply(200, [fake.album_dto(a) for a in fake.albums.values() if a["owner"] == user])
                 self.reply(404, {})
@@ -297,7 +320,9 @@ class FakeImmich:
                     fake.uploads.append({k: v if k == "assetData" else v.decode() for k, v in fields.items()})
                     if (user, sha1) in fake.assets:
                         return self.reply(200, {"id": fake.assets[(user, sha1)]["id"], "status": "duplicate"})
-                    a = fake.assets[(user, sha1)] = {"id": str(uuid.uuid4())}
+                    taken = datetime.fromisoformat(fields["fileCreatedAt"].decode()).astimezone(timezone.utc)
+                    a = fake.assets[(user, sha1)] = {"id": str(uuid.uuid4()), "owner": user, "dateTimeOriginal": taken,
+                                                     "timeZone": None, "localDateTime": taken.replace(tzinfo=None)}
                     return self.reply(201, {"id": a["id"], "status": "created"})
                 if self.path == "/api/albums":
                     dto = json.loads(self.body())
@@ -312,6 +337,16 @@ class FakeImmich:
                 self.reply(404, {})
 
             def do_PUT(self):
+                if self.path.startswith("/api/assets/"):
+                    user, a = fake.users[self.headers["x-api-key"]], fake.asset(self.path.split("/")[3])
+                    if a is None or a["owner"] != user:
+                        return self.reply(400, {"message": "no asset.update access"})
+                    when = datetime.fromisoformat(json.loads(self.body())["dateTimeOriginal"])
+                    fake.date_updates.append(a["id"])
+                    h, m = divmod(int(when.utcoffset().total_seconds()) // 60, 60)
+                    a.update(dateTimeOriginal=when.astimezone(timezone.utc), localDateTime=when.replace(tzinfo=None),
+                             timeZone=f"UTC{h:+d}" + (f":{m:02d}" if m else ""))
+                    return self.reply(200, {"id": a["id"]})
                 album = fake.albums[self.path.split("/")[3]]
                 dto = json.loads(self.body())
                 if self.path.endswith("/assets"):
@@ -332,8 +367,17 @@ class FakeImmich:
         self.url = f"http://127.0.0.1:{self.server.server_port}"
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
 
+    def asset(self, asset_id):
+        return next((a for a in self.assets.values() if a["id"] == asset_id), None)
+
     def album_dto(self, a):
         return {"id": a["id"], "albumName": a["name"], "albumUsers": [{"user": {"id": u}, "role": r} for u, r in a["users"].items()]}
+
+
+def keys_file(tmp_path):
+    path = tmp_path / "keys.env"
+    path.write_text("# API keys\n" + "".join(f"{k}='{v}'\n" for k, v in KEYS.items()))
+    return path
 
 
 @pytest.fixture
@@ -466,20 +510,17 @@ def test_a_lost_album_create_response_does_not_create_a_second_album(tmp_path, i
 
 
 def test_upload_exits_nonzero_when_an_album_fails(tmp_path, immich, monkeypatch, capsys):
-    import io
     data = tmp_path / "data"
     write(data, "Event/a.jpg", b"a")
     manifest, journal, config = tmp_path / "m.jsonl", tmp_path / "j.jsonl", tmp_path / "c.json"
     manifest.write_text(json.dumps(row("Event/a.jpg", album="Event")) + "\n")
     config.write_text(json.dumps({"accounts": CONFIG.accounts, "default_owner": "operator"}))
     args = ["upload", "--config", str(config), "--manifest", str(manifest), "--journal", str(journal),
-            "--root", str(data), "--server", immich.url]
-    monkeypatch.setattr(sys, "stdin", io.StringIO("".join(f"{k}={v}\n" for k, v in KEYS.items())))
+            "--root", str(data), "--server", immich.url, "--keys-file", str(keys_file(tmp_path))]
     assert pm.main(args) == 0
     journal.write_text(capsys.readouterr().out)
     immich.forbidden.add(json.loads(journal.read_text())["id"])
     next(iter(immich.albums.values()))["assets"].clear()
-    monkeypatch.setattr(sys, "stdin", io.StringIO("".join(f"{k}={v}\n" for k, v in KEYS.items())))
     assert pm.main(args) == 1
 
 
@@ -519,13 +560,11 @@ def test_a_file_journalled_as_done_under_another_owner_is_an_error_and_never_com
 
 
 def upload_args(tmp_path, immich, manifest_text, monkeypatch):
-    import io
     manifest, journal, config = tmp_path / "m.jsonl", tmp_path / "j.jsonl", tmp_path / "c.json"
     manifest.write_text(manifest_text)
     config.write_text(json.dumps({"accounts": CONFIG.accounts, "default_owner": "operator"}))
-    monkeypatch.setattr(sys, "stdin", io.StringIO("".join(f"{k}={v}\n" for k, v in KEYS.items())))
     return ["upload", "--config", str(config), "--manifest", str(manifest), "--journal", str(journal),
-            "--root", str(tmp_path), "--server", immich.url]
+            "--root", str(tmp_path), "--server", immich.url, "--keys-file", str(keys_file(tmp_path))]
 
 
 def test_upload_exits_nonzero_on_an_owner_mismatch(tmp_path, immich, monkeypatch, capsys):
@@ -564,3 +603,101 @@ def test_an_error_between_successes_does_not_count_toward_the_stop(tmp_path, imm
     args = upload_args(tmp_path, immich, "".join(json.dumps(r) + "\n" for r in rows), monkeypatch)
     assert pm.main(args + ["--workers", "1", "--max-consecutive-errors", "2"]) == 1
     assert len(immich.uploads) == 3
+
+
+# --- fix-dates ---
+
+def uploaded_rows(immich, tmp_path, rows):
+    for r in rows:
+        write(tmp_path, r["path"], r["path"].encode())
+    done, _ = migrate(immich, tmp_path, rows)
+    return done
+
+
+def fix(immich, rows, journal, dry_run=False):
+    return list(pm.fix_dates(rows, journal, pm.clients(CONFIG, immich.url, KEYS), TZ, dry_run=dry_run))
+
+
+def test_fix_dates_sets_household_wall_clock_on_assets_whose_offset_was_assumed(tmp_path, immich):
+    rows = [row("Event/a.jpg", date="2015-07-12T21:50:15+00:00"),  # a UTC-named or QuickTime UTC date
+            row("Event/b.jpg", date="2017-04-24T08:26:35-07:00"),
+            {**row("Event/c.jpg", date="2021-03-04T05:06:07+09:00", source="exif"), "date_offset_from_file": True},
+            row("Event/skipped.jpg", action="skip")]
+    journal = uploaded_rows(immich, tmp_path, rows)
+    out = {d["path"]: d for d in fix(immich, rows, journal)}
+    assert {p: d["status"] for p, d in out.items()} == {"Event/a.jpg": "fixed", "Event/b.jpg": "fixed"}
+    assert out["Event/a.jpg"]["after"] == "2015-07-12T14:50:15-07:00"
+    assert out["Event/a.jpg"]["before"]["localDateTime"].startswith("2015-07-12T21:50:15")
+    a = immich.asset(out["Event/a.jpg"]["id"])
+    assert (a["localDateTime"].isoformat(), a["timeZone"]) == ("2015-07-12T14:50:15", "UTC-7")
+
+
+def test_fix_dates_dry_run_changes_nothing_and_a_rerun_skips_correct_assets(tmp_path, immich):
+    rows = [row("Event/a.jpg", date="2015-12-16T03:50:12+00:00"), row("Event/b.jpg", date="2015-12-16T03:50:12-08:00")]
+    journal = uploaded_rows(immich, tmp_path, rows)
+    assert [d["status"] for d in fix(immich, rows, journal, dry_run=True)] == ["would-fix", "would-fix"]
+    assert immich.date_updates == []
+    fix(immich, rows, journal)
+    assert [d["status"] for d in fix(immich, rows, journal)] == ["correct", "correct"]
+    assert len(immich.date_updates) == 2
+
+
+def test_fix_dates_leaves_an_asset_whose_zone_immich_found_itself(tmp_path, immich):
+    rows = [row("Event/a.jpg", date="2014-06-01T12:00:00-07:00", source="exif")]
+    journal = uploaded_rows(immich, tmp_path, rows)
+    immich.asset(journal[0]["id"])["timeZone"] = "Europe/Paris"  # from GPS, say
+    assert [d["status"] for d in fix(immich, rows, journal)] == ["immich-zone"]
+    assert immich.date_updates == []
+
+
+def test_fix_dates_touches_only_files_this_tool_created_once_each(tmp_path, immich):
+    rows = [row("Event/a.jpg", date="2015-07-12T21:50:15+00:00"), row("Copy/a.jpg", date="2015-07-12T21:50:15+00:00")]
+    write(tmp_path, "Event/a.jpg", b"same")
+    write(tmp_path, "Copy/a.jpg", b"same")
+    first, _ = migrate(immich, tmp_path, rows[:1])
+    second, _ = migrate(immich, tmp_path, rows[1:])
+    journal = first + second
+    assert [j["status"] for j in journal] == ["created", "duplicate"]
+    assert [d["status"] for d in fix(immich, rows, journal)] == ["fixed"]
+
+
+def test_fix_dates_command_reports_counts_and_stops_after_errors_in_a_row(tmp_path, immich, capsys):
+    rows = [row(f"Event/{n}.jpg", date="2015-07-12T21:50:15+00:00") for n in "abcd"]
+    journal = uploaded_rows(immich, tmp_path, rows)
+    (tmp_path / "m.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    (tmp_path / "j.jsonl").write_text("".join(json.dumps(j) + "\n" for j in journal))
+    (tmp_path / "c.json").write_text(json.dumps({"accounts": CONFIG.accounts, "default_owner": "operator",
+                                                 "timezone": "America/Los_Angeles"}))
+    args = ["fix-dates", "--config", str(tmp_path / "c.json"), "--manifest", str(tmp_path / "m.jsonl"),
+            "--journal", str(tmp_path / "j.jsonl"), "--server", immich.url, "--keys-file", str(keys_file(tmp_path))]
+    assert pm.main(args + ["--dry-run"]) == 0
+    assert "dates: {'would-fix': 4}" in capsys.readouterr().err
+    for a in list(immich.assets.values()):
+        a["owner"] = "someone else"  # every asset now refuses: a systemic failure
+    assert pm.main(args + ["--max-consecutive-errors", "2"]) == 2
+    out = capsys.readouterr()
+    assert len(out.out.splitlines()) == 2 and "2 errors in a row" in out.err
+
+
+def test_keys_come_from_a_keys_file_or_the_environment_never_stdin(tmp_path, monkeypatch):
+    assert pm.load_keys(CONFIG, str(keys_file(tmp_path))) == KEYS
+    for k, v in KEYS.items():
+        monkeypatch.setenv(k, v)
+    assert pm.load_keys(CONFIG, None) == KEYS
+    monkeypatch.delenv("IMMICH_API_KEY_MEMBER")
+    with pytest.raises(SystemExit, match="IMMICH_API_KEY_MEMBER"):
+        pm.load_keys(CONFIG, None)
+
+
+def test_keys_tar_packs_only_the_api_keys_into_a_file_for_docker_cp(tmp_path, capsysbinary):
+    import tarfile
+    env = tmp_path / ".env"
+    env.write_text("HOPS_SECRET=x\nIMMICH_API_KEY_OPERATOR='op'\nIMMICH_API_KEY_MEMBER=me\n")
+    assert pm.main(["keys-tar", "--env", str(env)]) == 0
+    with tarfile.open(fileobj=io.BytesIO(capsysbinary.readouterr().out)) as t:
+        member = t.getmember("keys.env")
+        assert member.mode == 0o600
+        text = t.extractfile(member).read().decode()
+    assert text == "IMMICH_API_KEY_OPERATOR='op'\nIMMICH_API_KEY_MEMBER=me\n"
+    (tmp_path / "keys.env").write_text(text)
+    assert pm.load_keys(CONFIG, str(tmp_path / "keys.env")) == {"IMMICH_API_KEY_OPERATOR": "op", "IMMICH_API_KEY_MEMBER": "me"}

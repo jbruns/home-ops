@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Migrate a folder of photos into Immich, one owning account per file.
 
-Three commands (see README.md):
+Four commands (see README.md):
 
   plan    exiftool's JSON for the folder to a manifest: per file, upload it (owner, album, date) or skip
           it (Apple-made, its Live Photo video, not media, unreadable). Runs anywhere
   report  a manifest's counts per account. Runs anywhere
   upload  send a manifest's files to their owners' accounts, skipping any the journal or the account
           already holds (by SHA-1), then create and share their albums. Runs where the files and Immich are
+  fix-dates  give each uploaded asset whose date's offset was assumed (not the file's own) its date in
+          household wall-clock time. Runs where Immich is
 """
 import argparse
 import hashlib
@@ -134,6 +136,10 @@ def name_date(record):
 
 
 def resolve_date(record, tz, quicktime_local=True, utc_names=()):
+    return _resolve(record, tz, quicktime_local, utc_names)[:3]
+
+
+def _resolve(record, tz, quicktime_local=True, utc_names=()):
     """(date, source, uncertain): the capture date, offset-aware, from EXIF, else the filename, else the mtime.
 
     An EXIF date takes its own offset, else its own EXIF offset tag (EXIF groups only), else UTC for
@@ -142,6 +148,7 @@ def resolve_date(record, tz, quicktime_local=True, utc_names=()):
     (`quicktime-local`). A filename matching one of `utc_names` carries UTC: its date is UTC, and it never
     makes a QuickTime date local. A filename date is in `tz`; the mtime is shown in
     `tz`. `uncertain` marks a wall-clock time `tz` makes ambiguous or skips (see `localize`).
+    `_resolve` adds a fourth: whether the offset came from the file itself.
     """
     utc_name = any(p.search(os.path.basename(record["SourceFile"])) for p in utc_names)
     for name, offset_tag in EXIF_DATE_TAGS:
@@ -158,19 +165,20 @@ def resolve_date(record, tz, quicktime_local=True, utc_names=()):
                     named = name_date(record) if quicktime_local and not utc_name else None
                     if named and named.replace(second=0, microsecond=0) == dt.replace(second=0, microsecond=0):
                         dt, uncertain = localize(dt, tz)
-                        return _iso(dt), "quicktime-local", uncertain
+                        return _iso(dt), "quicktime-local", uncertain, False
                     offset = timezone.utc
                 dt, uncertain = (dt.replace(tzinfo=offset), False) if offset else localize(dt, tz)
-            return _iso(dt), "exif", uncertain
+                return _iso(dt), "exif", uncertain, offset is not None and offset is not timezone.utc
+            return _iso(dt), "exif", uncertain, True
     dt = name_date(record)
     if dt:
         dt, uncertain = (dt.replace(tzinfo=timezone.utc), False) if utc_name else localize(dt, tz)
-        return _iso(dt), "filename", uncertain
+        return _iso(dt), "filename", uncertain, False
     dt = _exif_date(record.get("System:FileModifyDate", ""))
     if dt is None:
-        return None, "mtime", False
+        return None, "mtime", False, False
     dt, uncertain = (dt.astimezone(tz), False) if dt.tzinfo else localize(dt, tz)
-    return _iso(dt), "mtime", uncertain
+    return _iso(dt), "mtime", uncertain, False
 
 
 ALBUM_JOINER = " / "
@@ -246,10 +254,11 @@ def plan(records, root, config):
             reason = APPLE
         else:
             reason = None
-        date, source, uncertain = resolve_date(r, tz, config.quicktime_local, config.utc_names)
+        date, source, uncertain, from_file = _resolve(r, tz, config.quicktime_local, config.utc_names)
         rows.append({"path": path, "action": "skip" if reason else "upload", "reason": reason,
                      "owner": owner_of(path, config), "album": album_of(path, config, tops), "media": media,
-                     "date": date, "date_source": source, "date_uncertain": uncertain, "make": str(makes[0]).strip() if makes else None,
+                     "date": date, "date_source": source, "date_uncertain": uncertain,
+                     "date_offset_from_file": from_file, "make": str(makes[0]).strip() if makes else None,
                      "size": r.get("System:FileSize"), "pair": pair})
     return rows
 
@@ -461,6 +470,75 @@ def sync_albums(rows, journal, clients):
         yield out
 
 
+# --- Dates ---
+
+UTC_ZONES = {None, "", "UTC", "UTC+0", "Etc/UTC", "UTC+00:00"}
+
+
+def _when(value):
+    return datetime.fromisoformat(value.replace("Z", "+00:00")) if value else None
+
+
+def fix_dates(rows, journal, clients, tz, dry_run=False):
+    """Give each asset this tool created, whose planned date's offset was assumed rather than the file's
+    own, its date in household wall-clock time; yield one row per asset.
+
+    Status: `correct` (its instant and wall clock already right), `immich-zone` (Immich found a zone of
+    its own, e.g. from GPS: left alone), `would-fix` (dry run), `fixed`, or `error`.
+    """
+    created = {j["path"]: j for j in journal if j.get("status") == "created" and j.get("id")}
+    for r in sorted(rows, key=lambda r: r["path"]):
+        j = created.get(r["path"])
+        if r["action"] != "upload" or not r.get("date") or r.get("date_offset_from_file") or not j or j["owner"] != r["owner"]:
+            continue
+        target = datetime.fromisoformat(r["date"]).astimezone(tz)
+        out = {"path": r["path"], "owner": r["owner"], "id": j["id"], "status": None, "before": None,
+               "after": _iso(target), "error": None}
+        try:
+            client = clients[r["owner"]]
+            asset = client.call("GET", f"/assets/{j['id']}")[1]
+            exif = asset.get("exifInfo") or {}
+            out["before"] = {"dateTimeOriginal": exif.get("dateTimeOriginal"), "timeZone": exif.get("timeZone"),
+                             "localDateTime": asset.get("localDateTime")}
+            local = _when(asset.get("localDateTime"))
+            if (_when(exif.get("dateTimeOriginal")) == target
+                    and local and local.replace(tzinfo=None) == target.replace(tzinfo=None)):
+                out["status"] = "correct"
+            elif exif.get("timeZone") not in UTC_ZONES:
+                out["status"] = "immich-zone"
+            elif dry_run:
+                out["status"] = "would-fix"
+            else:
+                client.call("PUT", f"/assets/{j['id']}", {"dateTimeOriginal": out["after"]})
+                out["status"] = "fixed"
+        except ImmichError as e:
+            out["status"], out["error"] = "error", str(e)
+        yield out
+
+
+def drain(items, max_errors, label):
+    """Print each item as a JSON line, counting statuses; stop early (returning None) after `max_errors`
+    errors in a row. Returns the status counts."""
+    status, streak = Counter(), 0
+    for item in items:
+        status[item["status"]] += 1
+        print(json.dumps(item, ensure_ascii=False), flush=True)
+        yield item
+        if sum(status.values()) % 500 == 0:
+            print(f"{label}: {dict(status)}", file=sys.stderr, flush=True)
+        streak = streak + 1 if item["status"] == "error" else 0
+        if streak >= max_errors:
+            items.close()
+            print(f"{label}: {dict(status)}", file=sys.stderr)
+            print(f"stopped: {streak} errors in a row, a systemic failure; last: {item['error']}", file=sys.stderr)
+            raise Stopped
+    print(f"{label}: {dict(status)}", file=sys.stderr)
+
+
+class Stopped(Exception):
+    pass
+
+
 # --- Report and CLI ---
 
 def report(rows):
@@ -526,6 +604,20 @@ def read_jsonl(path):
     return rows
 
 
+def load_keys(config, keys_file):
+    """Each account's API key, from `keys_file` (NAME=value lines, a .env's) or else the environment.
+    Never from stdin or argv, so no shell or interpreter can echo one."""
+    if keys_file:
+        with open(keys_file) as f:
+            keys = read_keys(f)
+    else:
+        keys = {k: os.environ[k] for k in config.accounts.values() if os.environ.get(k)}
+    missing = sorted(set(config.accounts.values()) - set(keys))
+    if missing:
+        raise SystemExit(f"no API key for {', '.join(missing)}")
+    return {k: keys[k] for k in config.accounts.values()}
+
+
 def read_keys(stream):
     """API keys as NAME=value lines (a .env's), so they never appear in a command line."""
     keys = {}
@@ -536,6 +628,19 @@ def read_keys(stream):
     return keys
 
 
+def keys_tar(env_path, out):
+    """Write a tar holding `keys.env` (mode 0600): the `IMMICH_API_KEY_*` lines of `env_path`, for
+    `docker cp -` into a container. The keys travel as a file, never through a shell or argv."""
+    import io
+    import tarfile
+    with open(env_path) as f:
+        data = "".join(line for line in f if line.startswith("IMMICH_API_KEY_")).encode()
+    info = tarfile.TarInfo("keys.env")
+    info.size, info.mode, info.mtime = len(data), 0o600, int(time.time())
+    with tarfile.open(fileobj=out, mode="w") as t:
+        t.addfile(info, io.BytesIO(data))
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -543,18 +648,25 @@ def main(argv=None):
     p.add_argument("--config", required=True)
     p.add_argument("--root", required=True, help="the scanned folder, as exiftool saw it")
     sub.add_parser("report", help="manifest (stdin) to per-account counts (stdout)")
-    u = sub.add_parser("upload", help="upload a manifest's files and sync its albums; API keys as NAME=value lines on stdin; "
-                                      "new journal rows to stdout")
-    u.add_argument("--config", required=True)
-    u.add_argument("--manifest", required=True)
+    k = sub.add_parser("keys-tar", help="a tar of keys.env, the .env's IMMICH_API_KEY_* lines, to stdout for docker cp")
+    k.add_argument("--env", required=True)
+    u = sub.add_parser("upload", help="upload a manifest's files and sync its albums; new journal rows to stdout")
+    f = sub.add_parser("fix-dates", help="set household wall-clock dates on uploaded assets whose offset was assumed; "
+                                         "one row per asset to stdout")
+    for c in (u, f):
+        c.add_argument("--config", required=True)
+        c.add_argument("--manifest", required=True)
+        c.add_argument("--server", default="http://immich-server:2283")
+        c.add_argument("--keys-file", help="API keys as NAME=value lines (else from the environment)")
+        c.add_argument("--max-consecutive-errors", type=int, default=10,
+                       help="stop (exit 2) after this many errors in a row: a systemic failure")
+    f.add_argument("--journal", required=True, help="the upload journal: which asset each file became")
+    f.add_argument("--dry-run", action="store_true", help="change nothing; report what would change")
     u.add_argument("--journal", help="journal of earlier runs; its files are not uploaded again")
     u.add_argument("--root", required=True, help="the folder the manifest's paths are relative to")
-    u.add_argument("--server", default="http://immich-server:2283")
     u.add_argument("--workers", type=int, default=4)
     u.add_argument("--limit", type=int, help="upload at most this many files (a trial run)")
-    u.add_argument("--no-albums", action="store_true")
-    u.add_argument("--max-consecutive-errors", type=int, default=10,
-                   help="stop (exit 2, albums untouched) after this many file errors in a row: a systemic failure")
+    u.add_argument("--no-albums", action="store_true", help="(a stop after errors in a row leaves albums untouched too)")
     args = ap.parse_args(argv)
 
     if args.cmd == "plan":
@@ -564,10 +676,14 @@ def main(argv=None):
             print(json.dumps(r, ensure_ascii=False))
     elif args.cmd == "report":
         print(report([json.loads(line) for line in sys.stdin if line.strip()]))
-    elif args.cmd == "upload":
+    elif args.cmd == "keys-tar":
+        keys_tar(args.env, sys.stdout.buffer)
+        sys.stdout.buffer.flush()
+        return 0
+    else:
         with open(args.config) as f:
             config = Config(json.load(f))
-        cl = clients(config, args.server, read_keys(sys.stdin))
+        cl = clients(config, args.server, load_keys(config, args.keys_file))
         for account, client in cl.items():  # fail fast on a wrong key, missing permission or server
             try:
                 client.user_id
@@ -575,23 +691,22 @@ def main(argv=None):
                 raise SystemExit(f"account {account}: {e}")
             print(f"account {account}: ok", file=sys.stderr)
         rows, journal = read_manifest(args.manifest), read_jsonl(args.journal)
+        if args.cmd == "fix-dates":
+            try:
+                done = list(drain(fix_dates(rows, journal, cl, config.tz, args.dry_run),
+                                  args.max_consecutive_errors, "dates"))
+            except Stopped:
+                return 2
+            return 1 if any(d["status"] == "error" for d in done) else 0
         if args.limit is not None:
             rows = pending(rows, journal)[:args.limit]
-        status, streak = Counter(), 0
-        files = upload(rows, args.root, cl, journal, args.workers)
-        for j in files:
-            status[j["status"]] += 1
-            journal.append(j)
-            print(json.dumps(j, ensure_ascii=False), flush=True)
-            if sum(status.values()) % 500 == 0:
-                print(f"files: {dict(status)}", file=sys.stderr, flush=True)
-            streak = streak + 1 if j["status"] == "error" else 0
-            if streak >= args.max_consecutive_errors:
-                files.close()
-                print(f"files: {dict(status)}", file=sys.stderr)
-                print(f"stopped: {streak} errors in a row, a systemic failure; last: {j['error']}", file=sys.stderr)
-                return 2
-        print(f"files: {dict(status)}", file=sys.stderr)
+        status = Counter()
+        try:
+            for j in drain(upload(rows, args.root, cl, journal, args.workers), args.max_consecutive_errors, "files"):
+                status[j["status"]] += 1
+                journal.append(j)
+        except Stopped:
+            return 2
         album_failures = 0
         if not args.no_albums:
             for a in sync_albums(rows, journal, cl):
