@@ -728,7 +728,8 @@ def test_fix_dates_ignores_sub_seconds_and_keeps_immichs(tmp_path, immich):
     a, b = (immich.asset(j["id"]) for j in journal)
     a.update(dateTimeOriginal=datetime(2014, 9, 18, 1, 33, 35, 839000, timezone.utc), timeZone="UTC-7",
              localDateTime=datetime(2014, 9, 17, 18, 33, 35, 839000))
-    b.update(localDateTime=datetime(2014, 9, 17, 18, 33, 35, 839000))  # naive EXIF: wall clock right, instant not
+    b.update(dateTimeOriginal=datetime(2014, 9, 17, 18, 33, 35, 839000, timezone.utc),  # naive EXIF read as UTC:
+             localDateTime=datetime(2014, 9, 17, 18, 33, 35, 839000))                # wall clock right, instant not
     out = fix(immich, rows, journal)
     assert [d["status"] for d in out] == ["correct", "fixed"]
     assert out[1]["after"] == "2014-09-17T18:33:35.839-07:00"
