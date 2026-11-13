@@ -45,11 +45,12 @@ def owner_of(path, config):
     return config.owners.get(top, config.default_owner)
 
 
-# Each capture-date tag, best first, with the EXIF tags that hold its offset when the value lacks one
-EXIF_DATE_TAGS = (("DateTimeOriginal", ("OffsetTimeOriginal", "OffsetTime")), ("CreationDate", ()),
-                  ("CreateDate", ("OffsetTimeDigitized", "OffsetTime")), ("MediaCreateDate", ()))
-# QuickTime stores its own dates in UTC
-QUICKTIME_GROUPS = re.compile(r"^(QuickTime|Track\d+)$")
+# Each capture-date tag, best first, with the EXIF tag holding its offset when the value lacks one
+# (OffsetTime is ModifyDate's, which is no capture date)
+EXIF_DATE_TAGS = (("DateTimeOriginal", "OffsetTimeOriginal"), ("CreationDate", None),
+                  ("CreateDate", "OffsetTimeDigitized"), ("MediaCreateDate", None))
+EXIF_GROUPS = re.compile(r"^(ExifIFD|IFD\d+|SubIFD\d*)$")  # the groups an EXIF offset tag applies to
+QUICKTIME_GROUPS = re.compile(r"^(QuickTime|Track\d+)$")  # QuickTime stores its own dates in UTC
 EXIF_DATE = re.compile(r"(\d{4}):(\d\d):(\d\d) (\d\d):(\d\d):(\d\d)(\.\d+)?\s*([+-]\d\d:\d\d|Z)?$")
 OFFSET = re.compile(r"^([+-])(\d\d):(\d\d)$")
 NAME_DATES = (  # YY-MM-DD HH-MM-SS (or YYYY-…), as the Nextcloud app names uploads; YYYYMMDD_HHMMSS, as cameras do
@@ -100,23 +101,44 @@ def _exif_date(value):
     return dt
 
 
-def resolve_date(record, tz):
-    """The capture date, offset-aware, and where it came from: EXIF, then the filename, then the file's mtime.
+def localize(naive, tz):
+    """(aware datetime, uncertain) for a wall-clock time in `tz`. An ambiguous time (clocks set back) takes its
+    first occurrence; a nonexistent one (clocks set forward) becomes the instant just after the jump."""
+    def exists(t):
+        return t.replace(tzinfo=tz).astimezone(timezone.utc).astimezone(tz).replace(tzinfo=None) == t
 
-    An EXIF date takes its own offset, else its EXIF offset tag, else UTC for QuickTime's own dates, else `tz`
-    (the household's). A filename date is in `tz`; the mtime is shown in `tz`.
+    first, second = naive.replace(tzinfo=tz, fold=0), naive.replace(tzinfo=tz, fold=1)
+    if exists(naive):
+        return first, first.utcoffset() != second.utcoffset()
+    start = naive.replace(second=0, microsecond=0)
+    for _ in range(24 * 60):
+        if exists(start - timedelta(minutes=1)):
+            break
+        start -= timedelta(minutes=1)
+    return start.replace(tzinfo=tz, fold=0).astimezone(timezone.utc).astimezone(tz), True
+
+
+def resolve_date(record, tz):
+    """(date, source, uncertain): the capture date, offset-aware, from EXIF, else the filename, else the mtime.
+
+    An EXIF date takes its own offset, else its own EXIF offset tag (EXIF groups only), else UTC for
+    QuickTime's own dates, else `tz` (the household's). A filename date is in `tz`; the mtime is shown in
+    `tz`. `uncertain` marks a wall-clock time `tz` makes ambiguous or skips (see `localize`).
     """
-    for name, offset_tags in EXIF_DATE_TAGS:
+    for name, offset_tag in EXIF_DATE_TAGS:
         for group, value in _tagged(record, name):
             dt = _exif_date(value)
             if not dt:
                 continue
+            uncertain = False
             if dt.tzinfo is None:
-                offset = next((o for t in offset_tags for o in map(_offset, tags(record, t)) if o), None)
-                if offset is None and QUICKTIME_GROUPS.match(group):
+                offset = None
+                if offset_tag and EXIF_GROUPS.match(group):
+                    offset = next((o for o in map(_offset, tags(record, offset_tag)) if o), None)
+                elif QUICKTIME_GROUPS.match(group):
                     offset = timezone.utc
-                dt = dt.replace(tzinfo=offset) if offset else dt.replace(tzinfo=tz)
-            return _iso(dt), "exif"
+                dt, uncertain = (dt.replace(tzinfo=offset), False) if offset else localize(dt, tz)
+            return _iso(dt), "exif", uncertain
     name = os.path.basename(record["SourceFile"])
     for pattern in NAME_DATES:
         m = pattern.search(name)
@@ -124,11 +146,13 @@ def resolve_date(record, tz):
             y = m.group(1)
             dt = _datetime(y if len(y) == 4 else f"{19 if int(y) > 69 else 20}{y}", *m.groups()[1:])
             if dt:
-                return _iso(dt.replace(tzinfo=tz)), "filename"
+                dt, uncertain = localize(dt, tz)
+                return _iso(dt), "filename", uncertain
     dt = _exif_date(record.get("System:FileModifyDate", ""))
     if dt is None:
-        return None, "mtime"
-    return _iso(dt.astimezone(tz) if dt.tzinfo else dt.replace(tzinfo=tz)), "mtime"
+        return None, "mtime", False
+    dt, uncertain = (dt.astimezone(tz), False) if dt.tzinfo else localize(dt, tz)
+    return _iso(dt), "mtime", uncertain
 
 
 ALBUM_JOINER = " / "
@@ -204,10 +228,10 @@ def plan(records, root, config):
             reason = APPLE
         else:
             reason = None
-        date, source = resolve_date(r, tz)
+        date, source, uncertain = resolve_date(r, tz)
         rows.append({"path": path, "action": "skip" if reason else "upload", "reason": reason,
                      "owner": owner_of(path, config), "album": album_of(path, config, tops), "media": media,
-                     "date": date, "date_source": source, "make": str(makes[0]).strip() if makes else None,
+                     "date": date, "date_source": source, "date_uncertain": uncertain, "make": str(makes[0]).strip() if makes else None,
                      "size": r.get("System:FileSize"), "pair": pair})
     return rows
 
@@ -330,14 +354,26 @@ DONE = ("created", "duplicate")
 
 
 def uploaded(journal):
-    """path -> asset id of each file the journal records as in Immich (the latest row for a path wins)."""
-    ids = {}
+    """path -> (owner, asset id) of each file the journal records as in Immich (the latest row for a path wins)."""
+    done = {}
     for j in journal:
         if j.get("status") in DONE and j.get("id"):
-            ids[j["path"]] = j["id"]
-        else:
-            ids.pop(j.get("path"), None)
-    return ids
+            done[j["path"]] = (j.get("owner"), j["id"])
+        elif done.get(j.get("path"), (None,))[0] == j.get("owner"):  # rechecked by its owner and not found
+            del done[j["path"]]
+    return done
+
+
+def asset_ids(rows, journal):
+    """path -> asset id of each row the journal records as in Immich under the row's owner."""
+    done = uploaded(journal)
+    return {r["path"]: done[r["path"]][1] for r in rows if done.get(r["path"], (None,))[0] == r["owner"]}
+
+
+def pending(rows, journal):
+    """The rows planned for upload that the journal does not record as in Immich under their owner."""
+    ids = asset_ids(rows, journal)
+    return [r for r in rows if r["action"] == "upload" and r["path"] not in ids]
 
 
 def upload(rows, root, clients, journal=(), workers=4):
@@ -345,12 +381,19 @@ def upload(rows, root, clients, journal=(), workers=4):
 
     Each file is first checked against its owner's assets by SHA-1, so a file Immich already holds is
     journalled as a duplicate, not sent again. One whose match is in the trash is journalled as `trashed`,
-    a failure: it is checked again on the next run.
+    a failure: it is checked again on the next run. One the journal records as done under another owner is
+    journalled as `owner-mismatch`, a failure, and left alone.
     """
     done = uploaded(journal)
 
     def one(r):
         out = {"path": r["path"], "owner": r["owner"], "sha1": None, "id": None, "status": None, "error": None}
+        if r["path"] in done:
+            owner, asset = done[r["path"]]
+            out["status"] = "owner-mismatch"
+            out["error"] = (f"journalled as asset {asset} of {owner}, but planned for {r['owner']}: "
+                            "resolve by hand (move or delete the asset, fix the journal or config)")
+            return out
         try:
             client, abspath = clients[r["owner"]], os.path.join(root, r["path"])
             out["sha1"] = sha1_of(abspath)
@@ -367,14 +410,14 @@ def upload(rows, root, clients, journal=(), workers=4):
             out["status"], out["error"] = "error", str(e)
         return out
 
-    todo = [r for r in rows if r["action"] == "upload" and r["path"] not in done]
+    todo = pending(rows, journal)
     with ThreadPoolExecutor(workers) as pool:
         yield from pool.map(one, todo)
 
 
 def sync_albums(rows, journal, clients):
     """Make each (owner, album) hold its uploaded files and share it with every other account; yield one row per album."""
-    ids = uploaded(journal)
+    ids = asset_ids(rows, journal)
     wanted = defaultdict(list)
     for r in rows:
         if r["action"] == "upload" and r["album"] and r["path"] in ids:
@@ -410,17 +453,37 @@ def report(rows):
         up = [r for r in mine if r["action"] == "upload"]
         skip = Counter((r["reason"], r["media"]) if r["reason"] == APPLE else r["reason"] for r in mine if r["action"] == "skip")
         dates = Counter(r["date_source"] for r in up)
+        uncertain_up = sum(1 for r in up if r.get("date_uncertain"))
+        uncertain_held = sum(1 for r in mine if r.get("date_uncertain") and r["reason"] in (APPLE, "apple-live"))
         albums = Counter(r["album"] for r in up if r["album"])
         by_name = sum(1 for r in mine if r["reason"] == APPLE and r["media"] == "image" and not r.get("make"))
         lines.append(f"{owner}  upload {len(up)}  skip {len(mine) - len(up)} (apple stills {skip[(APPLE, 'image')]} "
                      f"(by name {by_name}), "
                      f"apple videos {skip[(APPLE, 'video')]}, apple live videos {skip['apple-live']}, "
                      f"not-media {skip['not-media']}, unsupported {skip['unsupported']}, unreadable {skip['unreadable']})")
-        lines.append(f"{owner}  dates: exif {dates['exif']}, filename {dates['filename']}, mtime {dates['mtime']}")
+        lines.append(f"{owner}  dates: exif {dates['exif']}, filename {dates['filename']}, mtime {dates['mtime']}; "
+                     f"uncertain {uncertain_up} to upload, {uncertain_held} held")
         lines.append(f"{owner}  albums {len(albums)} ({sum(albums.values())} files)")
         lines += [f"{owner}    album {n!r}: {c}" for n, c in sorted(albums.items())]
     lines += [f"{r['reason']}: {r['path']}" for r in rows if r["reason"] in ("unreadable", "unsupported")]
     return "\n".join(lines)
+
+
+def read_manifest(path):
+    """The manifest's rows; any malformed record stops the run, so no planned file is silently left out."""
+    rows = []
+    with open(path) as f:
+        for n, line in enumerate(f, 1):
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError as e:
+                raise SystemExit(f"{path}:{n}: malformed manifest record ({e}): re-run plan")
+            if not isinstance(row, dict) or not {"path", "action", "owner"} <= row.keys():
+                raise SystemExit(f"{path}:{n}: manifest record lacks path, action or owner: re-run plan")
+            rows.append(row)
+    return rows
 
 
 def read_jsonl(path):
@@ -491,10 +554,9 @@ def main(argv=None):
             except ImmichError as e:
                 raise SystemExit(f"account {account}: {e}")
             print(f"account {account}: ok", file=sys.stderr)
-        rows, journal = read_jsonl(args.manifest), read_jsonl(args.journal)
+        rows, journal = read_manifest(args.manifest), read_jsonl(args.journal)
         if args.limit is not None:
-            done = uploaded(journal)
-            rows = [r for r in rows if r["action"] == "upload" and r["path"] not in done][:args.limit]
+            rows = pending(rows, journal)[:args.limit]
         status = Counter()
         for j in upload(rows, args.root, cl, journal, args.workers):
             status[j["status"]] += 1
@@ -509,7 +571,7 @@ def main(argv=None):
                 album_failures += bool(a["error"] or a["failed"])
                 print(json.dumps(a, ensure_ascii=False), file=sys.stderr)
             print(f"albums failed: {album_failures}", file=sys.stderr)
-        return 1 if status["error"] or status["trashed"] or album_failures else 0
+        return 1 if status["error"] or status["trashed"] or status["owner-mismatch"] or album_failures else 0
 
 
 if __name__ == "__main__":
