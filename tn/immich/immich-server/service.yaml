@@ -1,0 +1,126 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json
+services:
+  immich-server:
+    # https://github.com/immich-app/immich/releases ; Renovate moves it with immich-machine-learning.
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: ghcr.io/immich-app/immich-server:v3.4.1@sha256:7c489add298fc2f92cda4c777de6462aa206877e04087b815f62c7664af0b53b
+    container_name: immich-server
+    # Immich supports running as any user (its docker-compose.rootless.yml), so no caps. Its volumes
+    # must be owned by this user before the first Deploy.
+    user: ${HOME_UID}:${HOME_GID}
+    deploy:
+      resources:
+        limits:
+          # Immich asks for 6G RAM for the whole Stack (requirements); the server holds the API, the
+          # job workers, thumbnailing and ffmpeg. Revisit after 30 days of working-set data.
+          memory: 4G
+        reservations:
+          # Hardware transcoding with NVENC/NVDEC (hwaccel.transcoding.yml nvenc), shared with Plex,
+          # Emby and Open WebUI.
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      # The image's check: GET /api/server/ping.
+      test: ["CMD", "immich-healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      # Database migrations run before the API listens, longest on a major upgrade.
+      start_period: 300s
+      start_interval: 5s
+    depends_on:
+      postgres:
+        condition: service_healthy
+        restart: true
+      valkey:
+        condition: service_healthy
+        restart: true
+    environment:
+      - TZ=${TZ}
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
+      - DB_HOSTNAME=postgres
+      - DB_USERNAME=postgres
+      - DB_DATABASE_NAME=immich
+      - DB_PASSWORD_FILE=/run/secrets/immich_db_password
+      - REDIS_HOSTNAME=valkey
+      # Server settings are declared in immich-config.yaml, not in the UI: with a config file the
+      # Administration > Settings page is read-only. Keys it leaves out keep Immich's defaults.
+      - IMMICH_CONFIG_FILE=/config/immich-config.yaml
+      # Prometheus metrics on 8081 (api) and 8082 (microservices); scraped as job immich.
+      - IMMICH_TELEMETRY_INCLUDE=all
+      # The proxy network, so Immich logs and rate-limits by the client address Traefik forwards.
+      - IMMICH_TRUSTED_PROXIES=172.30.0.0/24
+    secrets:
+      - immich_db_password
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: critical
+      startup-order: "2"
+      # Originals and Immich's own nightly database dumps (upload, library, profile, backups);
+      # thumbs and encoded-video are separate volumes left out of the Backup (regenerable).
+      stack-back.volumes: true
+      stack-back.volumes.include: "immich_data"
+
+      traefik.enable: true
+      traefik.docker.network: proxy
+
+      # Listen on http, but redirect all requests to https
+      traefik.http.routers.immich-server-http.rule: Host(`photos.${ALT_DOMAIN_HOME}`)
+      traefik.http.routers.immich-server-http.entrypoints: http
+      traefik.http.routers.immich-server-http.middlewares: redirect-https
+
+      # Direct all https requests to the service with Immich-specific middleware. No body size limit:
+      # uploads are whole videos; the https entrypoint's readTimeout (edge) bounds how long one may take.
+      traefik.http.routers.immich-server-https.rule: Host(`photos.${ALT_DOMAIN_HOME}`)
+      traefik.http.routers.immich-server-https.entrypoints: https
+      traefik.http.routers.immich-server-https.tls: true
+      traefik.http.routers.immich-server-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.immich-server-https.service: immich-server
+      traefik.http.routers.immich-server-https.middlewares: immich-server-chain
+
+      # Probe (GLOSSARY.md): the public path a user takes; see prometheus.yml
+      probe.url: https://photos.${ALT_DOMAIN_HOME}/api/server/ping
+
+      # Middleware for Immich-specific headers
+      traefik.http.middlewares.immich-server-headers.headers.referrerPolicy: same-origin
+      traefik.http.middlewares.immich-server-headers.headers.stsSeconds: 31536000
+      traefik.http.middlewares.immich-server-headers.headers.stsIncludeSubdomains: true
+      traefik.http.middlewares.immich-server-headers.headers.stsPreload: true
+      traefik.http.middlewares.immich-server-headers.headers.contentTypeNosniff: true
+      traefik.http.middlewares.immich-server-headers.headers.customResponseHeaders.X-Robots-Tag: 'noindex,nofollow'
+
+      # Chain all Immich middlewares together
+      traefik.http.middlewares.immich-server-chain.chain.middlewares: crowdsec-bouncer, immich-server-headers
+
+      traefik.http.services.immich-server.loadbalancer.server.port: 2283
+    volumes:
+      # UPLOAD_LOCATION: upload, library (storage template), profile and backups (Immich's nightly
+      # database dump, as ADR 0011 allows: part of its state).
+      - data:/data
+      # Generated from the originals; Immich regenerates them (Jobs > Generate Thumbnails, Transcode
+      # Videos), so they stay out of the Backup.
+      - thumbs:/data/thumbs
+      - encoded_video:/data/encoded-video
+      - ./immich-config.yaml:/config/immich-config.yaml:ro
+    networks:
+      - default
+      - proxy
+      - metrics
+
+volumes:
+  data:
+    name: immich_data
+    external: true
+  # Regenerable, but external so they can be owned by the server's user before the first Deploy;
+  # a Compose-made volume would be root-owned.
+  thumbs:
+    name: immich_thumbs
+    external: true
+  encoded_video:
+    name: immich_encoded-video
+    external: true

@@ -42,6 +42,7 @@ pin updates, selection overrides, and recovery.
 | `monitoring` | Prometheus, Alertmanager, Grafana, Loki, Alloy, blackbox-exporter (Probes, Dependency Probes), docker-socket-proxy, cAdvisor, node-exporter, dcgm-exporter, restic-exporter, backup-coverage, container-health-exporter |
 | `nextcloud` | Nextcloud (+ cron), MariaDB (+ mysqld_exporter), Valkey (+ redis_exporter) |
 | `vaultwarden` | Vaultwarden, its own MariaDB (+ mysqld_exporter) |
+| `immich` | Immich (server, CUDA machine learning), its own Postgres and Valkey |
 | `open-webui` | Open WebUI, Ollama |
 | `syncthing` | Syncthing |
 | `sonarr`, `radarr` | One Organizer each (+ exportarr, queue exporter) |
@@ -131,7 +132,7 @@ Alert and recording-rule behavioral suites live in `tools/validate/rules/` (`rul
 
 ## Backups
 
-- stack-back runs nightly (10:12 UTC). It dumps every container labeled `stack-back.mariadb: true` over the `backup` network, then backs up all named volumes into a restic repository at the root of the Host's own Backblaze B2 bucket, over the S3-compatible API ([ADR-0014](docs/adr/0014-backups-go-straight-to-the-hosts-own-bucket.md)).
+- stack-back runs nightly (10:12 UTC). It dumps every container labeled `stack-back.mariadb: true` or `stack-back.postgres: true` (on the `backup` network), then backs up all named volumes into a restic repository at the root of the Host's own Backblaze B2 bucket, over the S3-compatible API ([ADR-0014](docs/adr/0014-backups-go-straight-to-the-hosts-own-bucket.md)).
 - Only named volumes (Service config and state) are backed up. Media on bind mounts under `${ZFS_POOL_ROOT_HDD}` (books, audiobooks, music, ROMs) is not.
 - The bucket's lifecycle rule is "Keep only the last version of the file", so B2 deletes what restic prunes a day later.
 - `tn/ops/stack-back.sops.env` holds the repository URL, the restic password and stack-back's key, which can write and delete. restic-exporter and backup-coverage read with a separate read-only key (`tn/monitoring/restic-exporter/b2.sops.env`). The Operator's password manager also holds the restic password, since without it no Backup can be read.
@@ -156,7 +157,7 @@ Label an ad-hoc `docker run` on the Host `startup-order=skip` so startup-order a
 2. Every Service extends the Baseline (`tn/_baseline.yaml`, [ADR-0007](docs/adr/0007-service-baseline-via-extends.md)). It adds a Compose healthcheck, a digest-pinned image, a memory limit, any `cap_add` it needs (only where the image cannot run as its target user with `user:`), a `tier` label and a `startup-order` label. An item it cannot meet needs a `baseline.exempt.<item>` label giving the reason; `homelab-validate compose` lists them all.
 3. For an Exposed Service, join `proxy` (external) and set the `traefik.*` labels including `traefik.docker.network: proxy`. Routers are `<container>-http`, `-https`, `-health` and `-client-<protocol>`; `-health` and `-client-` routers skip forward auth, so they use `strip-idp-headers`, and the Traefik service is named after the container ([ADR-0006](docs/adr/0006-protected-services.md)). For metrics, join `metrics` and add a scrape job in `prometheus.yml`.
 4. Give every volume an explicit `name:` of the form `<stack>_[<service>_]<purpose>`. A volume holding data is `external: true`; create it with `docker volume create` before the first Deploy, so Compose can never remove it. One holding only what its Service regenerates (a cache or scratch space) may be left to Compose with the label `homeops.regenerable: "<reason>"`. Cover every `VOLUME` path of the image with a volume, bind mount or `tmpfs`; anonymous volumes fail the Baseline ([ADR-0010](docs/adr/0010-volumes-named-for-their-stack.md)).
-5. For a database, keep it on the Stack's `default` network, label it `stack-back.mariadb: true`, and add it to `backup`.
+5. For a database, keep it on the Stack's `default` network, label it `stack-back.mariadb: true` (or `stack-back.postgres: true`, with `POSTGRES_USER` and `POSTGRES_DB` in its environment), and add it to `backup`.
 6. Write `env.template`. Create and encrypt `.sops.env` (it must exist even if empty).
 7. Run `homelab-declared-containers` and commit `tn/monitoring/node-exporter/declared_containers.prom`, so ContainerDown watches the new Services.
 8. Open a PR. doco-cd deploys the Stack once it merges. A change to `tn/_baseline.yaml` recreates every Service that extends it, so it ships in its own PR.

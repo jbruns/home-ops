@@ -219,7 +219,7 @@ How much it matters when a Service is down: Critical, Warning, or Info.
 _Avoid_: Priority, importance
 
 **Critical**:
-A Tier whose failure Pages immediately, at any hour (e.g. Traefik, Vaultwarden, Nextcloud and its database, pool health, backups).
+A Tier whose failure Pages immediately, at any hour (e.g. Traefik, Vaultwarden, Nextcloud and Immich with their databases, pool health, backups).
 
 **Warning**:
 A Tier whose failure is reported in the Digest, not Paged (e.g. media and download Services).

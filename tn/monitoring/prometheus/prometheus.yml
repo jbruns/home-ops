@@ -93,6 +93,12 @@ scrape_configs:
       - targets: ['vaultwarden-mariadb-exporter:9104']
         labels: {container: vaultwarden-mariadb-exporter, datastore: vaultwarden-mariadb, stack: vaultwarden, tier: info}
 
+  # IMMICH STACK (IMMICH_TELEMETRY_INCLUDE=all: 8081 api, 8082 microservices workers)
+  - job_name: immich
+    static_configs:
+      - targets: ['immich-server:8081', 'immich-server:8082']
+        labels: {container: immich-server, stack: immich, tier: warning}
+
   # MONITORING STACK
   - job_name: prometheus
     basic_auth:

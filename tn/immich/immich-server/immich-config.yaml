@@ -1,0 +1,35 @@
+# Immich server settings (IMMICH_CONFIG_FILE). Only the keys set here; the rest keep the defaults of
+# the pinned release (https://docs.immich.app/install/config-file). While this file is mounted, the
+# Administration > Settings page is read-only: change a setting here, in a PR.
+
+ffmpeg:
+  # NVENC encode and NVDEC decode on the shared GPU (hwaccel.transcoding.yml nvenc).
+  accel: nvenc
+  accelDecode: true
+
+machineLearning:
+  clip:
+    enabled: true
+    # The best recall in Immich's CLIP model table (English 85.99%) and Pareto-optimal there; a
+    # SigLIP2 model, which understands search text in any language. ~3.9G at f32, which fits the
+    # 16 GB GPU alongside Plex, Emby and Open WebUI; it unloads when idle. Changing it means
+    # re-running Smart Search on all assets (Jobs).
+    modelName: ViT-SO400M-16-SigLIP2-384__webli
+  facialRecognition:
+    enabled: true
+    modelName: buffalo_l
+  ocr:
+    enabled: true
+
+# Renovate proposes new releases (renovate.json); the in-app banner would only repeat it.
+newVersionCheck:
+  enabled: false
+
+oauth:
+  enabled: false
+passwordLogin:
+  enabled: true
+
+storageTemplate:
+  enabled: true
+  template: "{{y}}/{{y}}-{{MM}}-{{dd}}/{{filename}}"

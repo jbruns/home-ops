@@ -1,0 +1,56 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json
+services:
+  immich-machine-learning:
+    # https://github.com/immich-app/immich/releases ; the -cuda variant (hwaccel.ml.yml). Renovate
+    # moves it with immich-server.
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: ghcr.io/immich-app/immich-machine-learning:v3.4.1-cuda@sha256:aaa7eb0f47e3815a1c575790085474e01c129df7c47ffbbcbfd80947d4c41339
+    container_name: immich-machine-learning
+    # Immich supports running as any user (its docker-compose.rootless.yml), so no caps. The cache
+    # volume must be owned by this user before the first Deploy.
+    user: ${HOME_UID}:${HOME_GID}
+    deploy:
+      resources:
+        limits:
+          # The CLIP model in immich-config.json peaks at ~3.9G RSS at f32 (Immich's model table),
+          # plus buffalo_l, OCR and the CUDA runtime. Revisit after 30 days of working-set data.
+          memory: 8G
+        reservations:
+          # CUDA inference, shared with Plex, Emby and Open WebUI. Idle models unload after
+          # MACHINE_LEARNING_MODEL_TTL (300s default), freeing the VRAM.
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      # The image's check: GET /ping on 3003.
+      test: ["CMD", "python3", "healthcheck.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+      start_interval: 5s
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      # As upstream: the newer model exports.
+      - MACHINE_LEARNING_MODEL_REVISION=v2
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      # Warning: uploads and browsing work without it; only search, faces and OCR wait.
+      tier: warning
+      startup-order: "2"
+    volumes:
+      # Downloaded models; regenerable (downloaded again on first use), so not in the Backup.
+      - cache:/cache
+    networks:
+      - default
+
+volumes:
+  # Regenerable, but external so it can be owned by the service's user before the first Deploy;
+  # a Compose-made volume would be root-owned.
+  cache:
+    name: immich_machine-learning_cache
+    external: true

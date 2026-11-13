@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json
+configs:
+  immich_valkey_conf:
+    content: |
+      save ""
+      appendonly no
+      loglevel warning
+
+services:
+  # Immich's job queues. Upstream keeps them only in an anonymous volume, so nothing here needs to
+  # survive a recreate: Immich queues missing work again on its nightly jobs. Reachable only on the
+  # Stack's default network, as upstream, so no password.
+  valkey:
+    # https://hub.docker.com/r/valkey/valkey
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: valkey/valkey:9.1.3-alpine@sha256:bf09d58e96d6b4524a15396b65b242bbe18beebbcc15a04d8ee75ddac62fae0b
+    container_name: immich-valkey
+    # The image's valkey user; the entrypoint skips its chown + su-exec when not root, so no caps.
+    user: "999:1000"
+    deploy:
+      resources:
+        limits:
+          # Queue metadata only; nextcloud-valkey peaks at 23M. Revisit after 30 days.
+          memory: 256M
+    command: ["valkey-server", "/etc/valkey/valkey.conf"]
+    configs:
+      - source: immich_valkey_conf
+        target: /etc/valkey/valkey.conf
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli ping | grep -q PONG"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+      start_interval: 2s
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: critical
+      startup-order: "1"
+    networks:
+      - default

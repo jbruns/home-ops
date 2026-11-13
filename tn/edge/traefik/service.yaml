@@ -49,6 +49,9 @@ services:
 
       # Entrypoints
       - --entrypoints.https.address=:443
+      # Time to read a whole request, body included (default 60s). Immich's mobile app uploads each
+      # video in one request, so allow an hour; writeTimeout is unlimited by default.
+      - --entrypoints.https.transport.respondingTimeouts.readTimeout=3600s
       - --entrypoints.http.address=:80
       # Trust X-Forwarded-For only from Cloudflare's edge, so access logs (CrowdSec) and the
       # bouncer see the real client instead of a Cloudflare IP. All three lists must match
