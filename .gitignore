@@ -15,3 +15,7 @@ tn/**/*.txt
 # Python caches from Repo Tooling and its tests
 __pycache__/
 .pytest_cache/
+
+# photo-migrate's real folder mapping (names people) and its run files
+tools/photo-migrate/config.json
+tools/photo-migrate/run/
