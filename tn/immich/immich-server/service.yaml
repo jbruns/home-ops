@@ -53,7 +53,9 @@ services:
       - IMMICH_CONFIG_FILE=/config/immich-config.yaml
       # Prometheus metrics on 8081 (api) and 8082 (microservices); scraped as job immich.
       - IMMICH_TELEMETRY_INCLUDE=all
-      # The proxy network, so Immich logs and rate-limits by the client address Traefik forwards.
+      # The proxy network (Traefik), so Immich takes the client address from the X-Forwarded-For
+      # Traefik sets. Traefik replaces a client-sent X-Forwarded-For from an untrusted peer with
+      # that peer's address, so a client cannot spoof it.
       - IMMICH_TRUSTED_PROXIES=172.30.0.0/24
     secrets:
       - immich_db_password
@@ -66,6 +68,12 @@ services:
       stack-back.volumes: true
       stack-back.volumes.include: "immich_data"
 
+      # DNS-only, unlike most Exposed Services: the public record points straight at the Host, not
+      # through Cloudflare. Immich's mobile app uploads each asset in one request, and videos exceed
+      # Cloudflare's 100 MB request limit. Go back to proxied once Immich supports chunked or
+      # resumable uploads (watch the release notes on Renovate's immich PRs).
+      # Without Cloudflare, Traefik trusts no forwarded headers from the peer (forwardedHeaders.trustedIPs
+      # lists only Cloudflare), so the bouncer and the access log see the real client address.
       traefik.enable: true
       traefik.docker.network: proxy
 
@@ -83,7 +91,9 @@ services:
       traefik.http.routers.immich-server-https.service: immich-server
       traefik.http.routers.immich-server-https.middlewares: immich-server-chain
 
-      # Probe (GLOSSARY.md): the public path a user takes; see prometheus.yml
+      # Probe (GLOSSARY.md): the public path a user takes; see prometheus.yml. From inside the Host
+      # it resolves to the Host's public address and relies on the router's NAT hairpin, as the
+      # DNS-only Nextcloud Probe already does.
       probe.url: https://photos.${ALT_DOMAIN_HOME}/api/server/ping
 
       # Middleware for Immich-specific headers
