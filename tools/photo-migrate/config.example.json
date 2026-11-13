@@ -4,6 +4,8 @@
     "member": "IMMICH_API_KEY_MEMBER"
   },
   "default_owner": "operator",
+  "timezone": "America/Los_Angeles",
+  "apple_name_patterns": ["_iOS\\."],
   "owners": {
     "<member>": "member",
     "<member> Phone": "member"

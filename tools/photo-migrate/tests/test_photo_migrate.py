@@ -11,7 +11,10 @@ CONFIG = pm.Config({
     "default_owner": "operator",
     "owners": {"Member": "member", "Member Phone": "member"},
     "not_albums": ["Member", "Member Phone", "Operator Phone", "DSLR"],
+    "timezone": "America/Los_Angeles",
+    "apple_name_patterns": ["_iOS\\."],
 })
+TZ = CONFIG.tz
 
 
 def test_folders_mapped_to_an_account_belong_to_it_and_all_others_to_the_default():
@@ -28,41 +31,55 @@ def rec(name, directory="/d/gf/Event 2015", **tags):
     return base
 
 
-def test_the_exif_capture_date_wins_over_the_filename_and_mtime():
+def test_the_exif_capture_date_wins_over_the_filename_and_mtime_and_is_household_local_without_an_offset():
     r = rec("15-07-04 10-11-12 0001.jpg", **{"ExifIFD:DateTimeOriginal": "2015:07:04 21:30:00", "ExifIFD:CreateDate": "2015:07:05 00:00:00"})
-    assert pm.resolve_date(r) == ("2015-07-04T21:30:00", "exif")
+    assert pm.resolve_date(r, TZ) == ("2015-07-04T21:30:00-07:00", "exif")
 
 
-def test_a_video_without_exif_uses_its_quicktime_creation_date_as_exif():
+def test_an_exif_offset_tag_gives_its_date_the_offset():
+    r = rec("a.jpg", **{"ExifIFD:DateTimeOriginal": "2021:03:04 05:06:07", "ExifIFD:OffsetTimeOriginal": "+09:00",
+                        "ExifIFD:OffsetTime": "+01:00"})
+    assert pm.resolve_date(r, TZ) == ("2021-03-04T05:06:07+09:00", "exif")
+    r = rec("a.jpg", **{"ExifIFD:CreateDate": "2021:03:04 05:06:07", "ExifIFD:OffsetTimeDigitized": "-03:00"})
+    assert pm.resolve_date(r, TZ) == ("2021-03-04T05:06:07-03:00", "exif")
+    r = rec("a.jpg", **{"ExifIFD:DateTimeOriginal": "2021:03:04 05:06:07", "ExifIFD:OffsetTime": "+01:00"})
+    assert pm.resolve_date(r, TZ) == ("2021-03-04T05:06:07+01:00", "exif")
+
+
+def test_a_quicktime_creation_date_keeps_its_offset_and_a_bare_quicktime_date_is_utc():
+    r = rec("IMG_1.MOV", **{"File:MIMEType": "video/quicktime", "Keys:CreationDate": "2019:01:02 03:04:05-08:00",
+                            "QuickTime:CreateDate": "2019:01:02 11:04:05"})
+    assert pm.resolve_date(r, TZ) == ("2019-01-02T03:04:05-08:00", "exif")
     r = rec("clip.mp4", **{"File:MIMEType": "video/mp4", "QuickTime:CreateDate": "2019:01:02 03:04:05"})
-    assert pm.resolve_date(r) == ("2019-01-02T03:04:05", "exif")
+    assert pm.resolve_date(r, TZ) == ("2019-01-02T03:04:05+00:00", "exif")
 
 
-def test_zero_or_garbage_exif_dates_are_ignored():
-    r = rec("clip.mov", **{"QuickTime:CreateDate": "0000:00:00 00:00:00", "ExifIFD:DateTimeOriginal": "    :  :     :  :  "})
-    assert pm.resolve_date(r) == ("2020-06-01T08:00:00-07:00", "mtime")
+def test_zero_or_garbage_exif_dates_are_ignored_and_mtime_is_shown_household_local():
+    r = rec("clip.mov", **{"QuickTime:CreateDate": "0000:00:00 00:00:00", "ExifIFD:DateTimeOriginal": "    :  :     :  :  ",
+                           "System:FileModifyDate": "2020:06:01 15:00:00+00:00"})
+    assert pm.resolve_date(r, TZ) == ("2020-06-01T08:00:00-07:00", "mtime")
 
 
-def test_the_filename_dates_a_file_without_exif_with_a_two_or_four_digit_year():
-    assert pm.resolve_date(rec("15-07-04 10-11-12 0001.jpg")) == ("2015-07-04T10:11:12", "filename")
-    assert pm.resolve_date(rec("2004-10-29 22-21-42 0791.JPG")) == ("2004-10-29T22:21:42", "filename")
-    assert pm.resolve_date(rec("98-01-02 03-04-05 0001.jpg")) == ("1998-01-02T03:04:05", "filename")
+def test_the_filename_dates_a_file_without_exif_in_household_time_with_daylight_saving():
+    assert pm.resolve_date(rec("15-07-04 10-11-12 0001.jpg"), TZ) == ("2015-07-04T10:11:12-07:00", "filename")
+    assert pm.resolve_date(rec("2004-10-29 22-21-42 0791.JPG"), TZ) == ("2004-10-29T22:21:42-07:00", "filename")
+    assert pm.resolve_date(rec("98-01-02 03-04-05 0001.jpg"), TZ) == ("1998-01-02T03:04:05-08:00", "filename")
 
 
 def test_common_camera_and_export_filename_dates_are_read_too():
-    assert pm.resolve_date(rec("IMG_20160524_151629.jpg")) == ("2016-05-24T15:16:29", "filename")
-    assert pm.resolve_date(rec("20170116_213232000_iOS.jpg")) == ("2017-01-16T21:32:32", "filename")
-    assert pm.resolve_date(rec("Photo-2017-03-01-12-16-28_2120.JPG")) == ("2017-03-01T12:16:28", "filename")
-    assert pm.resolve_date(rec("FB_IMG_1445486645351.jpg"))[1] == "mtime"
+    assert pm.resolve_date(rec("IMG_20160524_151629.jpg"), TZ) == ("2016-05-24T15:16:29-07:00", "filename")
+    assert pm.resolve_date(rec("20170116_213232000_iOS.jpg"), TZ) == ("2017-01-16T21:32:32-08:00", "filename")
+    assert pm.resolve_date(rec("Photo-2017-03-01-12-16-28_2120.JPG"), TZ) == ("2017-03-01T12:16:28-08:00", "filename")
+    assert pm.resolve_date(rec("FB_IMG_1445486645351.jpg"), TZ)[1] == "mtime"
 
 
 def test_an_impossible_filename_date_falls_through_to_mtime():
-    assert pm.resolve_date(rec("15-13-40 10-11-12 0001.jpg")) == ("2020-06-01T08:00:00-07:00", "mtime")
+    assert pm.resolve_date(rec("15-13-40 10-11-12 0001.jpg"), TZ) == ("2020-06-01T08:00:00-07:00", "mtime")
 
 
 def test_an_exif_offset_and_subseconds_are_kept():
     r = rec("a.jpg", **{"ExifIFD:DateTimeOriginal": "2021:03:04 05:06:07.123+01:00"})
-    assert pm.resolve_date(r) == ("2021-03-04T05:06:07.123+01:00", "exif")
+    assert pm.resolve_date(r, TZ) == ("2021-03-04T05:06:07.123+01:00", "exif")
 
 
 def test_a_top_level_event_folder_is_one_album_including_its_subfolders():
@@ -93,7 +110,7 @@ def test_a_non_apple_file_is_planned_for_upload_to_its_owner_and_album():
                    rec("DSC_2.JPG", "/d/gf/Event 2015", **{"IFD0:Make": "NIKON"}))
     assert rows["Member Phone/IMG_1.JPG"] == {
         "path": "Member Phone/IMG_1.JPG", "action": "upload", "reason": None, "owner": "member", "album": None,
-        "media": "image", "date": "2019-01-02T03:04:05", "date_source": "exif", "make": "samsung", "size": 1000, "pair": None}
+        "media": "image", "date": "2019-01-02T03:04:05-08:00", "date_source": "exif", "make": "samsung", "size": 1000, "pair": None}
     assert rows["Event 2015/DSC_2.JPG"]["album"] == "Event 2015"
     assert rows["Event 2015/DSC_2.JPG"]["owner"] == "operator"
 
@@ -113,6 +130,26 @@ def test_a_live_photo_video_is_skipped_with_its_apple_still_whatever_its_own_mak
     assert rows["Event 2015/img_1.mov"]["reason"] == "apple-live"
     assert rows["Event 2015/img_1.mov"]["pair"] == "Event 2015/IMG_1.JPG"
     assert rows["Event 2015/DSC_2.MOV"]["action"] == "upload"
+
+
+def test_any_spelling_of_apple_as_make_is_apple_and_takes_its_live_video_with_it():
+    rows = planned(rec("IMG_1.JPG", **{"IFD0:Make": " Apple Inc. "}), rec("IMG_1.MOV", **{"File:MIMEType": "video/quicktime"}),
+                   rec("IMG_2.JPG", **{"IFD0:Make": "APPLE"}), rec("IMG_3.MOV", **{"File:MIMEType": "video/quicktime", "Keys:Make": "Apple Computer"}),
+                   rec("IMG_4.JPG", **{"IFD0:Make": "Pineapple Cameras"}))
+    assert rows["Event 2015/IMG_1.JPG"]["reason"] == "apple"
+    assert rows["Event 2015/IMG_1.MOV"]["reason"] == "apple-live"
+    assert rows["Event 2015/IMG_2.JPG"]["reason"] == "apple"
+    assert rows["Event 2015/IMG_3.MOV"]["reason"] == "apple"
+    assert rows["Event 2015/IMG_4.JPG"]["action"] == "upload"
+
+
+def test_a_file_with_no_make_named_as_an_ios_export_is_held_as_apple_with_its_live_video():
+    rows = planned(rec("20170116_213232000_iOS.jpg"), rec("20170116_213232000_iOS.MOV", **{"File:MIMEType": "video/quicktime"}),
+                   rec("20170116_213233000_iOS.jpg", **{"IFD0:Make": "samsung"}), rec("kiosk_iOS_guide.jpg"))
+    assert rows["Event 2015/20170116_213232000_iOS.jpg"]["reason"] == "apple"
+    assert rows["Event 2015/20170116_213232000_iOS.MOV"]["reason"] == "apple-live"
+    assert rows["Event 2015/20170116_213233000_iOS.jpg"]["action"] == "upload"
+    assert rows["Event 2015/kiosk_iOS_guide.jpg"]["action"] == "upload"
 
 
 def test_files_exiftool_cannot_read_or_that_are_not_media_are_skipped():
@@ -147,6 +184,9 @@ class FakeImmich:
         self.assets = {}  # (user, sha1) -> asset
         self.albums = {}  # id -> album
         self.uploads = []
+        self.trashed = set()  # asset ids in the trash
+        self.forbidden = set()  # asset ids an album add refuses
+        self.drop_album_creates = 0  # create the album but lose the response this many times
         fake = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -178,7 +218,8 @@ class FakeImmich:
                     results = []
                     for item in json.loads(self.body())["assets"]:
                         a = fake.assets.get((user, item["checksum"]))
-                        results.append({"id": item["id"], "action": "reject", "reason": "duplicate", "assetId": a["id"]} if a
+                        results.append({"id": item["id"], "action": "reject", "reason": "duplicate", "assetId": a["id"],
+                                        "isTrashed": a["id"] in fake.trashed} if a
                                        else {"id": item["id"], "action": "accept"})
                     return self.reply(200, {"results": results})
                 if self.path == "/api/assets":
@@ -199,6 +240,10 @@ class FakeImmich:
                     a = {"id": str(uuid.uuid4()), "owner": user, "name": dto["albumName"], "assets": [],
                          "users": {u["userId"]: u["role"] for u in dto.get("albumUsers", [])}}
                     fake.albums[a["id"]] = a
+                    if fake.drop_album_creates:
+                        fake.drop_album_creates -= 1
+                        self.close_connection = True
+                        return
                     return self.reply(201, fake.album_dto(a))
                 self.reply(404, {})
 
@@ -208,6 +253,9 @@ class FakeImmich:
                 if self.path.endswith("/assets"):
                     out = []
                     for i in dto["ids"]:
+                        if i in fake.forbidden:
+                            out.append({"id": i, "success": False, "error": "no_permission"})
+                            continue
                         out.append({"id": i, "success": i not in album["assets"]} | ({} if i not in album["assets"] else {"error": "duplicate"}))
                         if i not in album["assets"]:
                             album["assets"].append(i)
@@ -301,11 +349,12 @@ def test_a_missing_file_is_journalled_as_an_error_and_the_rest_continue(tmp_path
 def test_the_report_counts_each_accounts_uploads_skips_date_sources_and_albums():
     rows = [row("Event/a.jpg", album="Event"), row("Event/b.jpg", album="Event", source="exif"),
             row("Member/c.jpg", owner="member"),
-            {**row("Event/d.heic"), "action": "skip", "reason": "apple"},
+            {**row("Event/d.heic"), "action": "skip", "reason": "apple", "make": "Apple"},
+            {**row("Event/f_iOS.jpg"), "action": "skip", "reason": "apple", "make": None},
             {**row("Event/d.mov"), "action": "skip", "reason": "apple-live", "media": "video"},
             {**row("Event/e.jpg"), "action": "skip", "reason": "unreadable"}]
     text = pm.report(rows)
-    assert "operator  upload 2  skip 3 (apple stills 1, apple videos 0, apple live videos 1, not-media 0, unsupported 0, unreadable 1)" in text
+    assert "operator  upload 2  skip 4 (apple stills 2 (by name 1), apple videos 0, apple live videos 1, not-media 0, unsupported 0, unreadable 1)" in text
     assert "member  upload 1  skip 0" in text
     assert "operator  dates: exif 1, filename 1, mtime 0" in text
     assert "operator  albums 1 (2 files)" in text
@@ -317,3 +366,69 @@ def test_media_whose_extension_immich_does_not_take_is_skipped_as_unsupported():
     assert rows["Event 2015/Card.pub"]["reason"] == "unsupported"
     assert rows["Event 2015/Cheers"]["reason"] == "unsupported"
     assert rows["Event 2015/ok.JPEG"]["action"] == "upload"
+
+
+def test_a_file_whose_match_is_in_the_trash_is_an_error_to_restore_and_is_rechecked_next_run(tmp_path, immich):
+    write(tmp_path, "Event/a.jpg", b"a")
+    rows = [row("Event/a.jpg", album="Event")]
+    first, _ = migrate(immich, tmp_path, rows)
+    immich.trashed.add(first[0]["id"])
+    second, albums = migrate(immich, tmp_path, rows)  # a lost journal: Immich's match is found, in the trash
+    assert second[0]["status"] == "trashed"
+    assert "restore" in second[0]["error"]
+    third, _ = migrate(immich, tmp_path, rows, tuple(second))
+    assert [d["status"] for d in third] == ["trashed"]
+
+
+def test_every_album_add_failure_other_than_a_duplicate_is_recorded(tmp_path, immich):
+    write(tmp_path, "Event/a.jpg", b"a")
+    write(tmp_path, "Event/b.jpg", b"b")
+    rows = [row("Event/a.jpg", album="Event"), row("Event/b.jpg", album="Event")]
+    done, _ = migrate(immich, tmp_path, rows)
+    immich.forbidden.add(done[1]["id"])
+    _, (album,) = migrate(immich, tmp_path, rows, tuple(done))
+    assert album["failed"] == [{"id": done[1]["id"], "error": "no_permission"}]
+    assert album["error"] is None
+
+
+def test_a_lost_album_create_response_does_not_create_a_second_album(tmp_path, immich):
+    write(tmp_path, "Event/a.jpg", b"a")
+    immich.drop_album_creates = 1
+    _, (album,) = migrate(immich, tmp_path, [row("Event/a.jpg", album="Event")])
+    assert len(immich.albums) == 1
+    assert album["error"] is None
+    assert len(next(iter(immich.albums.values()))["assets"]) == 1
+
+
+def test_upload_exits_nonzero_when_an_album_fails(tmp_path, immich, monkeypatch, capsys):
+    import io
+    data = tmp_path / "data"
+    write(data, "Event/a.jpg", b"a")
+    manifest, journal, config = tmp_path / "m.jsonl", tmp_path / "j.jsonl", tmp_path / "c.json"
+    manifest.write_text(json.dumps(row("Event/a.jpg", album="Event")) + "\n")
+    config.write_text(json.dumps({"accounts": CONFIG.accounts, "default_owner": "operator"}))
+    args = ["upload", "--config", str(config), "--manifest", str(manifest), "--journal", str(journal),
+            "--root", str(data), "--server", immich.url]
+    monkeypatch.setattr(sys, "stdin", io.StringIO("".join(f"{k}={v}\n" for k, v in KEYS.items())))
+    assert pm.main(args) == 0
+    journal.write_text(capsys.readouterr().out)
+    immich.forbidden.add(json.loads(journal.read_text())["id"])
+    next(iter(immich.albums.values()))["assets"].clear()
+    monkeypatch.setattr(sys, "stdin", io.StringIO("".join(f"{k}={v}\n" for k, v in KEYS.items())))
+    assert pm.main(args) == 1
+
+
+def test_a_journal_cut_off_mid_record_resumes_and_rechecks_that_file(tmp_path, immich):
+    write(tmp_path, "Event/a.jpg", b"a")
+    write(tmp_path, "Event/b.jpg", b"b")
+    write(tmp_path, "Event/c.jpg", b"c")
+    rows = [row("Event/a.jpg"), row("Event/b.jpg"), row("Event/c.jpg")]
+    done, _ = migrate(immich, tmp_path, rows)
+    a, b, c = (json.dumps(d) for d in done)
+    path = tmp_path / "journal.jsonl"
+    path.write_text(a + "\n" + b[:30] + c + "\n" + b[:20])  # a cut-off write, then later rows appended to it
+    journal = pm.read_jsonl(str(path))
+    assert [j["path"] for j in journal] == ["Event/a.jpg", "Event/c.jpg"]
+    again, _ = migrate(immich, tmp_path, rows, tuple(journal))
+    assert [(d["path"], d["status"]) for d in again] == [("Event/b.jpg", "duplicate")]
+    assert len(immich.uploads) == 3

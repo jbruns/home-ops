@@ -21,7 +21,8 @@ import urllib.parse
 import uuid
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 
 class Config:
@@ -30,6 +31,13 @@ class Config:
         self.default_owner = data["default_owner"]
         self.owners = dict(data.get("owners", {}))
         self.not_albums = set(data.get("not_albums", []))
+        self.timezone = data.get("timezone", "UTC")
+        self.apple_names = [re.compile(p) for p in data.get("apple_name_patterns", [])]
+
+    @property
+    def tz(self):
+        """The household's time zone, for dates that carry no offset (loaded only when planning)."""
+        return ZoneInfo(self.timezone)
 
 
 def owner_of(path, config):
@@ -37,8 +45,13 @@ def owner_of(path, config):
     return config.owners.get(top, config.default_owner)
 
 
-EXIF_DATE_TAGS = ("DateTimeOriginal", "CreationDate", "CreateDate", "MediaCreateDate")
-EXIF_DATE = re.compile(r"(\d{4}):(\d\d):(\d\d) (\d\d):(\d\d):(\d\d)(\.\d+)?([+-]\d\d:\d\d|Z)?$")
+# Each capture-date tag, best first, with the EXIF tags that hold its offset when the value lacks one
+EXIF_DATE_TAGS = (("DateTimeOriginal", ("OffsetTimeOriginal", "OffsetTime")), ("CreationDate", ()),
+                  ("CreateDate", ("OffsetTimeDigitized", "OffsetTime")), ("MediaCreateDate", ()))
+# QuickTime stores its own dates in UTC
+QUICKTIME_GROUPS = re.compile(r"^(QuickTime|Track\d+)$")
+EXIF_DATE = re.compile(r"(\d{4}):(\d\d):(\d\d) (\d\d):(\d\d):(\d\d)(\.\d+)?\s*([+-]\d\d:\d\d|Z)?$")
+OFFSET = re.compile(r"^([+-])(\d\d):(\d\d)$")
 NAME_DATES = (  # YY-MM-DD HH-MM-SS (or YYYY-…), as the Nextcloud app names uploads; YYYYMMDD_HHMMSS, as cameras do
     re.compile(r"(?<!\d)(\d{4}|\d{2})-(\d\d)-(\d\d)[ _-](\d\d)-(\d\d)-(\d\d)(?!\d)"),
     re.compile(r"(?<!\d)(\d{4})(\d\d)(\d\d)_(\d\d)(\d\d)(\d\d)"),
@@ -50,37 +63,72 @@ def tags(record, name):
     return [v for k, v in record.items() if k.rsplit(":", 1)[-1] == name]
 
 
-def _iso(y, mo, d, h, mi, s, frac="", tz=""):
+def _tagged(record, name):
+    """(group, value) of every tag `name`, in exiftool's order."""
+    return [(k.rsplit(":", 1)[0] if ":" in k else "", v) for k, v in record.items() if k.rsplit(":", 1)[-1] == name]
+
+
+def _offset(value):
+    m = OFFSET.match(str(value).strip())
+    if not m:
+        return None
+    sign, h, mi = m.groups()
+    delta = timedelta(hours=int(h), minutes=int(mi))
+    return timezone(-delta if sign == "-" else delta)
+
+
+def _datetime(y, mo, d, h, mi, s, frac=None):
     try:
-        datetime(int(y), int(mo), int(d), int(h), int(mi), int(s))
+        dt = datetime(int(y), int(mo), int(d), int(h), int(mi), int(s), int(round(float(frac or 0) * 1e6)))
     except ValueError:
         return None
-    if int(y) < 1900:
-        return None
-    return f"{y}-{mo}-{d}T{h}:{mi}:{s}{frac or ''}{tz or ''}"
+    return dt if dt.year >= 1900 else None
+
+
+def _iso(dt):
+    return dt.isoformat(timespec="milliseconds" if dt.microsecond else "seconds")
 
 
 def _exif_date(value):
+    """A naive or aware datetime from an exiftool date, or None."""
     m = EXIF_DATE.match(str(value).strip())
-    return m and _iso(*m.groups())
+    if not m:
+        return None
+    dt = _datetime(*m.groups()[:7])
+    if dt and m.group(8):
+        dt = dt.replace(tzinfo=timezone.utc if m.group(8) == "Z" else _offset(m.group(8)))
+    return dt
 
 
-def resolve_date(record):
-    """The capture date and where it came from: EXIF, then the filename, then the file's mtime."""
-    for name in EXIF_DATE_TAGS:
-        for value in tags(record, name):
-            date = _exif_date(value)
-            if date:
-                return date, "exif"
+def resolve_date(record, tz):
+    """The capture date, offset-aware, and where it came from: EXIF, then the filename, then the file's mtime.
+
+    An EXIF date takes its own offset, else its EXIF offset tag, else UTC for QuickTime's own dates, else `tz`
+    (the household's). A filename date is in `tz`; the mtime is shown in `tz`.
+    """
+    for name, offset_tags in EXIF_DATE_TAGS:
+        for group, value in _tagged(record, name):
+            dt = _exif_date(value)
+            if not dt:
+                continue
+            if dt.tzinfo is None:
+                offset = next((o for t in offset_tags for o in map(_offset, tags(record, t)) if o), None)
+                if offset is None and QUICKTIME_GROUPS.match(group):
+                    offset = timezone.utc
+                dt = dt.replace(tzinfo=offset) if offset else dt.replace(tzinfo=tz)
+            return _iso(dt), "exif"
     name = os.path.basename(record["SourceFile"])
     for pattern in NAME_DATES:
         m = pattern.search(name)
         if m:
             y = m.group(1)
-            date = _iso(y if len(y) == 4 else f"{19 if int(y) > 69 else 20}{y}", *m.groups()[1:])
-            if date:
-                return date, "filename"
-    return _exif_date(record.get("System:FileModifyDate", "")), "mtime"
+            dt = _datetime(y if len(y) == 4 else f"{19 if int(y) > 69 else 20}{y}", *m.groups()[1:])
+            if dt:
+                return _iso(dt.replace(tzinfo=tz)), "filename"
+    dt = _exif_date(record.get("System:FileModifyDate", ""))
+    if dt is None:
+        return None, "mtime"
+    return _iso(dt.astimezone(tz) if dt.tzinfo else dt.replace(tzinfo=tz)), "mtime"
 
 
 ALBUM_JOINER = " / "
@@ -114,8 +162,14 @@ IMMICH_EXTS = set("""
 """.split())
 
 
-def is_apple(record):
-    return any(str(v).strip().lower() == APPLE for v in tags(record, "Make"))
+def is_apple(record, config):
+    """Made by Apple: any Make tag whose first word is "Apple" ("Apple", "APPLE", "Apple Inc."), or, with no
+    Make at all, a filename matching one of the config's `apple_name_patterns` (iOS exports stripped of EXIF)."""
+    makes = tags(record, "Make")
+    if makes:
+        return any(re.findall(r"[a-z]+", str(v).lower())[:1] == [APPLE] for v in makes)
+    name = os.path.basename(record["SourceFile"])
+    return any(p.search(name) for p in config.apple_names)
 
 
 def media_of(record):
@@ -130,9 +184,9 @@ def plan(records, root, config):
     tops = {p.split("/", 1)[0] for p in rel if p.count("/") == 1}
     apple_stills = {}
     for path, r in zip(rel, records):
-        if media_of(r) == "image" and is_apple(r):
+        if media_of(r) == "image" and is_apple(r, config):
             apple_stills.setdefault(os.path.splitext(path)[0].lower(), path)
-    rows = []
+    tz, rows = config.tz, []
     for path, r in zip(rel, records):
         stem, ext = os.path.splitext(path)
         media, makes = media_of(r), tags(r, "Make")
@@ -146,11 +200,11 @@ def plan(records, root, config):
             reason = "unsupported"
         elif pair:
             reason = "apple-live"
-        elif is_apple(r):
+        elif is_apple(r, config):
             reason = APPLE
         else:
             reason = None
-        date, source = resolve_date(r)
+        date, source = resolve_date(r, tz)
         rows.append({"path": path, "action": "skip" if reason else "upload", "reason": reason,
                      "owner": owner_of(path, config), "album": album_of(path, config, tops), "media": media,
                      "date": date, "date_source": source, "make": str(makes[0]).strip() if makes else None,
@@ -166,7 +220,9 @@ RETRIES = 3
 
 
 class ImmichError(Exception):
-    pass
+    def __init__(self, message, status=None):
+        super().__init__(message)
+        self.status = status  # the HTTP status, or None when no response came
 
 
 class Immich:
@@ -178,8 +234,8 @@ class Immich:
         self.key = key
         self._id = None
 
-    def call(self, method, path, body=None, headers=None, length=None):
-        for attempt in range(RETRIES):
+    def call(self, method, path, body=None, headers=None, length=None, retries=RETRIES):
+        for attempt in range(retries):
             conn = http.client.HTTPConnection(self.host, self.port, timeout=600)
             try:
                 h, payload = {"x-api-key": self.key, "Accept": "application/json", **(headers or {})}, None
@@ -190,14 +246,14 @@ class Immich:
                 conn.request(method, self.base + path, body=payload, headers=h)
                 resp = conn.getresponse()
                 data = resp.read()
-                if resp.status >= 500 and attempt < RETRIES - 1:
+                if resp.status >= 500 and attempt < retries - 1:
                     time.sleep(2 ** attempt)
                     continue
                 if resp.status >= 400:
-                    raise ImmichError(f"{method} {path}: HTTP {resp.status} {data[:300]!r}")
+                    raise ImmichError(f"{method} {path}: HTTP {resp.status} {data[:300]!r}", resp.status)
                 return resp.status, json.loads(data) if data else None
             except (OSError, http.client.HTTPException) as e:
-                if attempt == RETRIES - 1:
+                if attempt == retries - 1:
                     raise ImmichError(f"{method} {path}: {e}") from e
                 time.sleep(2 ** attempt)
             finally:
@@ -210,11 +266,30 @@ class Immich:
         return self._id
 
     def existing(self, sha1):
-        """The id of this account's asset with this SHA-1, or None."""
+        """(id, in the trash) of this account's asset with this SHA-1, or (None, False)."""
         result = self.call("POST", "/assets/bulk-upload-check", {"assets": [{"id": "f", "checksum": sha1}]})[1]["results"][0]
-        if result["action"] == "reject" and result.get("reason") != "duplicate":
+        if result["action"] != "reject":
+            return None, False
+        if result.get("reason") != "duplicate":
             raise ImmichError(f"rejected: {result.get('reason')}")
-        return result.get("assetId") if result["action"] == "reject" else None
+        return result.get("assetId"), bool(result.get("isTrashed"))
+
+    def album_named(self, name):
+        query = urllib.parse.urlencode({"name": name, "isOwned": "true"})
+        return next((a for a in self.call("GET", f"/albums?{query}")[1] if a["albumName"] == name), None)
+
+    def find_or_create_album(self, name, users):
+        """(album, created). A create whose response is lost is never sent again blind: the album is looked up first."""
+        for attempt in range(RETRIES):
+            album = self.album_named(name)
+            if album:
+                return album, False
+            try:
+                return self.call("POST", "/albums", {"albumName": name, "albumUsers": users}, retries=1)[1], True
+            except ImmichError as e:
+                if (e.status and e.status < 500) or attempt == RETRIES - 1:
+                    raise
+                time.sleep(2 ** attempt)
 
     def upload(self, abspath, date):
         boundary = uuid.uuid4().hex
@@ -251,12 +326,17 @@ def sha1_of(path):
     return h.hexdigest()
 
 
+DONE = ("created", "duplicate")
+
+
 def uploaded(journal):
-    """path -> asset id, from journal rows (the latest row for a path wins)."""
+    """path -> asset id of each file the journal records as in Immich (the latest row for a path wins)."""
     ids = {}
     for j in journal:
-        if j.get("id"):
+        if j.get("status") in DONE and j.get("id"):
             ids[j["path"]] = j["id"]
+        else:
+            ids.pop(j.get("path"), None)
     return ids
 
 
@@ -264,7 +344,8 @@ def upload(rows, root, clients, journal=(), workers=4):
     """Upload every row planned for upload whose path the journal lacks; yield one journal row per file.
 
     Each file is first checked against its owner's assets by SHA-1, so a file Immich already holds is
-    journalled as a duplicate, not sent again.
+    journalled as a duplicate, not sent again. One whose match is in the trash is journalled as `trashed`,
+    a failure: it is checked again on the next run.
     """
     done = uploaded(journal)
 
@@ -273,8 +354,11 @@ def upload(rows, root, clients, journal=(), workers=4):
         try:
             client, abspath = clients[r["owner"]], os.path.join(root, r["path"])
             out["sha1"] = sha1_of(abspath)
-            out["id"] = client.existing(out["sha1"])
-            if out["id"]:
+            out["id"], trashed = client.existing(out["sha1"])
+            if trashed:
+                out["status"] = "trashed"
+                out["error"] = f"its match {out['id']} is in the owner's trash: restore it in Immich, then re-run"
+            elif out["id"]:
                 out["status"] = "duplicate"
             else:
                 res = client.upload(abspath, r["date"])
@@ -298,14 +382,9 @@ def sync_albums(rows, journal, clients):
     for (owner, name), assets in sorted(wanted.items()):
         client = clients[owner]
         others = sorted(c.user_id for a, c in clients.items() if a != owner)
-        out = {"owner": owner, "album": name, "id": None, "created": False, "added": 0, "error": None}
+        out = {"owner": owner, "album": name, "id": None, "created": False, "added": 0, "failed": [], "error": None}
         try:
-            query = urllib.parse.urlencode({"name": name, "isOwned": "true"})
-            album = next((a for a in client.call("GET", f"/albums?{query}")[1] if a["albumName"] == name), None)
-            if album is None:
-                users = [{"userId": u, "role": ALBUM_ROLE} for u in others]
-                album = client.call("POST", "/albums", {"albumName": name, "albumUsers": users})[1]
-                out["created"] = True
+            album, out["created"] = client.find_or_create_album(name, [{"userId": u, "role": ALBUM_ROLE} for u in others])
             out["id"] = album["id"]
             members = {u["user"]["id"] for u in album.get("albumUsers", [])}
             missing = [{"userId": u, "role": ALBUM_ROLE} for u in others if u not in members]
@@ -314,6 +393,8 @@ def sync_albums(rows, journal, clients):
             for i in range(0, len(assets), ALBUM_BATCH):
                 res = client.call("PUT", f"/albums/{album['id']}/assets", {"ids": assets[i:i + ALBUM_BATCH]})[1]
                 out["added"] += sum(1 for x in res if x.get("success"))
+                out["failed"] += [{"id": x["id"], "error": x.get("error")} for x in res
+                                  if not x.get("success") and x.get("error") != "duplicate"]
         except ImmichError as e:
             out["error"] = str(e)
         yield out
@@ -330,7 +411,9 @@ def report(rows):
         skip = Counter((r["reason"], r["media"]) if r["reason"] == APPLE else r["reason"] for r in mine if r["action"] == "skip")
         dates = Counter(r["date_source"] for r in up)
         albums = Counter(r["album"] for r in up if r["album"])
-        lines.append(f"{owner}  upload {len(up)}  skip {len(mine) - len(up)} (apple stills {skip[(APPLE, 'image')]}, "
+        by_name = sum(1 for r in mine if r["reason"] == APPLE and r["media"] == "image" and not r.get("make"))
+        lines.append(f"{owner}  upload {len(up)}  skip {len(mine) - len(up)} (apple stills {skip[(APPLE, 'image')]} "
+                     f"(by name {by_name}), "
                      f"apple videos {skip[(APPLE, 'video')]}, apple live videos {skip['apple-live']}, "
                      f"not-media {skip['not-media']}, unsupported {skip['unsupported']}, unreadable {skip['unreadable']})")
         lines.append(f"{owner}  dates: exif {dates['exif']}, filename {dates['filename']}, mtime {dates['mtime']}")
@@ -341,10 +424,25 @@ def report(rows):
 
 
 def read_jsonl(path):
+    """Rows of a JSON-lines file. A record cut off by an interrupted write is dropped (its file is checked
+    again), and a record appended straight after one is recovered."""
     if not path or not os.path.exists(path):
         return []
+    rows = []
     with open(path) as f:
-        return [json.loads(line) for line in f if line.strip()]
+        for n, line in enumerate(f, 1):
+            line = line.strip()
+            starts = [m.start() for m in re.finditer(r'\{"', line)]
+            for i in [0] + [i for i in reversed(starts) if i > 0]:
+                try:
+                    rows.append(json.loads(line[i:]))
+                    break
+                except json.JSONDecodeError:
+                    continue
+            else:
+                if line:
+                    print(f"{path}:{n}: dropped a cut-off record", file=sys.stderr)
+    return rows
 
 
 def read_keys(stream):
@@ -405,10 +503,13 @@ def main(argv=None):
             if sum(status.values()) % 500 == 0:
                 print(f"files: {dict(status)}", file=sys.stderr, flush=True)
         print(f"files: {dict(status)}", file=sys.stderr)
+        album_failures = 0
         if not args.no_albums:
             for a in sync_albums(rows, journal, cl):
+                album_failures += bool(a["error"] or a["failed"])
                 print(json.dumps(a, ensure_ascii=False), file=sys.stderr)
-        return 1 if status["error"] else 0
+            print(f"albums failed: {album_failures}", file=sys.stderr)
+        return 1 if status["error"] or status["trashed"] or album_failures else 0
 
 
 if __name__ == "__main__":

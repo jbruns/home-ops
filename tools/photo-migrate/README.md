@@ -19,14 +19,15 @@ pattern), take a per-file include list, leave some folders out of folder-as-albu
 | skip `not-media` | Not an image or video by MIME type (exiftool: unknown file type), or a `.thm` (a camera's thumbnail of a video) |
 | skip `unsupported` | Media whose extension Immich does not take (it judges a file by its name) |
 | skip `apple-live` | A `.mov` with the same folder and name (any case) as an Apple still: its Live Photo video, whatever its own make. `pair` names the still |
-| skip `apple` | Any `Make` tag (EXIF or QuickTime) is `Apple`, wherever the file is |
+| skip `apple` | Any `Make` tag (EXIF or QuickTime) starts with the word Apple (`Apple`, `APPLE`, `Apple Inc.`), wherever the file is; or the file has no `Make` and its name matches one of `apple_name_patterns` (iOS exports stripped of EXIF) |
 | album | The top-level folder, subfolders included, unless it is in `not_albums` (device and person folders). A top-level folder holding no files itself only groups event folders: each child is an album, `<top> / <child>`. Files at the root have none |
-| date | EXIF (`DateTimeOriginal`, `CreationDate`, `CreateDate`, `MediaCreateDate`), then the filename (`YY-MM-DD HH-MM-SS …` as the Nextcloud app names uploads, `YYYY-…`, or `YYYYMMDD_HHMMSS` as cameras do), then the file's mtime |
+| date | EXIF (`DateTimeOriginal`, `CreationDate`, `CreateDate`, `MediaCreateDate`), then the filename (`YY-MM-DD HH-MM-SS …` as the Nextcloud app names uploads, `YYYY-…`, or `YYYYMMDD_HHMMSS` as cameras do), then the file's mtime. Every date carries an offset: an EXIF date's own, else its EXIF offset tag (`OffsetTimeOriginal`, `OffsetTimeDigitized`, `OffsetTime`), else UTC for QuickTime's own dates, else `timezone`'s (DST-aware); filename dates are in `timezone`, and the mtime is shown in it |
 
 `upload` sends each planned file to its owner. It first asks Immich whether the account already holds
 a file with that SHA-1, so a re-run, or an exact duplicate, uploads nothing twice. Immich reads the
 EXIF date itself; the planned date is sent as the file's creation and modification time, which Immich
-uses when the file has none (a date without an offset is sent as UTC, so it shows as written). Then
+uses when the file has none. A file whose match is in the owner's trash is an error (`trashed`): restore
+it in Immich and re-run. Then
 each album is created by its owner if missing, given its files, and shared with every other account
 as a **viewer** (partner sharing already shows each account the other's files).
 
@@ -34,7 +35,9 @@ as a **viewer** (partner sharing already shows each account the other's files).
 
 `config.json` (gitignored: it names people's folders) maps folders to accounts. Copy
 `config.example.json` and fill in the real folder names. `accounts` maps each account to the `.env`
-key holding its API key.
+key holding its API key. `timezone` (an IANA name, default `UTC`) is the household's, for dates that
+carry no offset. `apple_name_patterns` are regular expressions searched in the filename of a file with
+no `Make`.
 
 Each account's API key, created by that account's user, needs the permissions `user.read`, `asset.upload`, `album.read`, `album.create`, `albumAsset.create` and `albumUser.create`.
 
@@ -47,7 +50,9 @@ Run files live in `tools/photo-migrate/run/` (gitignored). Keep them until #871 
   (`upload` or `skip`), `reason`, `owner`, `album`, `media` (`image` or `video`), `date`, `date_source`,
   `make`, `size`, `pair`.
 - `journal.jsonl`: one row per file `upload` handled: `path`, `owner`, `sha1`, `id` (the Immich asset),
-  `status` (`created`, `duplicate` or `error`), `error`. A file with an `id` is not sent again.
+  `status` (`created`, `duplicate`, `trashed` or `error`), `error`. A `created` or `duplicate` file is not
+  sent again; any other is checked again on the next run. A record cut off by an interrupted run is
+  dropped, so its file is checked again.
 
 **Reconciliation (#871)** reads the manifest's `apple` and `apple-live` rows: each has its owner,
 capture `date`, `media` and `album`. To import the files with no match in iCloud, write their rows to a
@@ -87,8 +92,9 @@ hops strays
 ```
 
 `upload` reads the API keys as `NAME=value` lines on stdin, so they never appear in a command line,
-prints a journal row per file to stdout and progress and one row per album to stderr, and exits 1 if
-any file failed.
+prints a journal row per file to stdout and progress and one row per album to stderr (with `failed`,
+the files the album refused other than duplicates), and exits 1 if any file failed or is trashed, or any
+album failed.
 
 ## Test
 

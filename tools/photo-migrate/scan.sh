@@ -4,4 +4,5 @@ set -eu
 exiftool=$(find /usr/src/app/server/node_modules/.pnpm -path '*exiftool-vendored.pl@*/bin/exiftool' | head -1)
 exec perl "$exiftool" -r -j -G1 -a -n -q -q -ext '*' \
   -Make -Model -DateTimeOriginal -CreationDate -CreateDate -MediaCreateDate \
+  -OffsetTimeOriginal -OffsetTimeDigitized -OffsetTime \
   -MIMEType -FileModifyDate -FileSize -Error "$1"
