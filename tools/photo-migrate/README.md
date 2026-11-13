@@ -83,13 +83,16 @@ python3 tools/photo-migrate/photo_migrate.py plan --config tools/photo-migrate/c
   < $R/exif.json > $R/manifest.jsonl
 python3 tools/photo-migrate/photo_migrate.py report < $R/manifest.jsonl
 
-# 2. Upload (add --limit 0 to only check the keys and network, --limit 20 for a trial); re-run it until no file errors
+# 2. Upload, one file at a time (add --limit 0 to only check the keys and network, --limit 20 for a
+#    trial); re-run it until no file errors. The journal is appended inside the container, so a dropped
+#    SSH session loses nothing: follow progress with `$H logs -f photo-migrate`, wait with `$H wait photo-migrate`.
 $H create -i --name photo-migrate --label startup-order=skip --network immich_default \
-  -v nextcloud_data:/d:ro -w /srv "$PY" \
-  python3 photo_migrate.py upload --config config.json --manifest manifest.jsonl --journal journal.jsonl --root $GF
+  -v nextcloud_data:/d:ro -w /srv --entrypoint sh "$PY" -c "python3 photo_migrate.py upload --config config.json \
+  --manifest manifest.jsonl --journal journal.jsonl --root $GF --workers 1 >> journal.jsonl"
 COPYFILE_DISABLE=1 tar -c --no-xattrs -C tools/photo-migrate photo_migrate.py config.json -C run manifest.jsonl journal.jsonl \
   | $H cp - photo-migrate:/srv
-grep '^IMMICH_API_KEY_' .env | $H start -ai photo-migrate >> $R/journal.jsonl
+grep '^IMMICH_API_KEY_' .env | $H start -ai photo-migrate
+$H cp photo-migrate:/srv/journal.jsonl - | tar -xO > $R/journal.jsonl.new && mv $R/journal.jsonl.new $R/journal.jsonl
 $H rm photo-migrate
 hops strays
 ```
@@ -97,7 +100,9 @@ hops strays
 `upload` reads the API keys as `NAME=value` lines on stdin, so they never appear in a command line,
 prints a journal row per file to stdout and progress and one row per album to stderr (with `failed`,
 the files the album refused other than duplicates), and exits 1 if any file failed, is trashed or has
-an owner mismatch, or any album failed.
+an owner mismatch, or any album failed. After `--max-consecutive-errors` (default 10) file errors in a
+row, a systemic failure (a revoked key, a full disk, Immich down), it stops, leaves the albums alone and
+exits 2.
 
 ## Test
 

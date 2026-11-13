@@ -553,6 +553,8 @@ def main(argv=None):
     u.add_argument("--workers", type=int, default=4)
     u.add_argument("--limit", type=int, help="upload at most this many files (a trial run)")
     u.add_argument("--no-albums", action="store_true")
+    u.add_argument("--max-consecutive-errors", type=int, default=10,
+                   help="stop (exit 2, albums untouched) after this many file errors in a row: a systemic failure")
     args = ap.parse_args(argv)
 
     if args.cmd == "plan":
@@ -575,13 +577,20 @@ def main(argv=None):
         rows, journal = read_manifest(args.manifest), read_jsonl(args.journal)
         if args.limit is not None:
             rows = pending(rows, journal)[:args.limit]
-        status = Counter()
-        for j in upload(rows, args.root, cl, journal, args.workers):
+        status, streak = Counter(), 0
+        files = upload(rows, args.root, cl, journal, args.workers)
+        for j in files:
             status[j["status"]] += 1
             journal.append(j)
             print(json.dumps(j, ensure_ascii=False), flush=True)
             if sum(status.values()) % 500 == 0:
                 print(f"files: {dict(status)}", file=sys.stderr, flush=True)
+            streak = streak + 1 if j["status"] == "error" else 0
+            if streak >= args.max_consecutive_errors:
+                files.close()
+                print(f"files: {dict(status)}", file=sys.stderr)
+                print(f"stopped: {streak} errors in a row, a systemic failure; last: {j['error']}", file=sys.stderr)
+                return 2
         print(f"files: {dict(status)}", file=sys.stderr)
         album_failures = 0
         if not args.no_albums:

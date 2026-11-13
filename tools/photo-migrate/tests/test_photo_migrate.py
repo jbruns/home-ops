@@ -545,3 +545,22 @@ def test_a_malformed_manifest_record_stops_the_upload_before_anything_is_sent(tm
     with pytest.raises(SystemExit, match=r"m\.jsonl:2"):
         pm.main(upload_args(tmp_path, immich, text, monkeypatch))
     assert immich.uploads == []
+
+
+def test_upload_stops_after_too_many_errors_in_a_row_and_skips_albums(tmp_path, immich, monkeypatch, capsys):
+    rows = [row(f"Event/{n}.jpg", album="Event") for n in "abcdef"]  # none exists: every file fails
+    args = upload_args(tmp_path, immich, "".join(json.dumps(r) + "\n" for r in rows), monkeypatch)
+    assert pm.main(args + ["--workers", "1", "--max-consecutive-errors", "3"]) == 2
+    out = capsys.readouterr()
+    assert [json.loads(line)["path"] for line in out.out.splitlines()] == ["Event/a.jpg", "Event/b.jpg", "Event/c.jpg"]
+    assert "3 errors in a row" in out.err
+    assert immich.albums == {}
+
+
+def test_an_error_between_successes_does_not_count_toward_the_stop(tmp_path, immich, monkeypatch):
+    for n in "ace":
+        write(tmp_path, f"Event/{n}.jpg", n.encode())
+    rows = [row(f"Event/{n}.jpg") for n in "abcde"]
+    args = upload_args(tmp_path, immich, "".join(json.dumps(r) + "\n" for r in rows), monkeypatch)
+    assert pm.main(args + ["--workers", "1", "--max-consecutive-errors", "2"]) == 1
+    assert len(immich.uploads) == 3
