@@ -5,6 +5,7 @@
   },
   "default_owner": "operator",
   "timezone": "America/Los_Angeles",
+  "quicktime_local_when_name_matches": true,
   "apple_name_patterns": ["_iOS\\."],
   "owners": {
     "<member>": "member",

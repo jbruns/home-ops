@@ -32,6 +32,7 @@ class Config:
         self.owners = dict(data.get("owners", {}))
         self.not_albums = set(data.get("not_albums", []))
         self.timezone = data.get("timezone", "UTC")
+        self.quicktime_local = bool(data.get("quicktime_local_when_name_matches", True))
         self.apple_names = [re.compile(p) for p in data.get("apple_name_patterns", [])]
 
     @property
@@ -55,7 +56,7 @@ EXIF_DATE = re.compile(r"(\d{4}):(\d\d):(\d\d) (\d\d):(\d\d):(\d\d)(\.\d+)?\s*([
 OFFSET = re.compile(r"^([+-])(\d\d):(\d\d)$")
 NAME_DATES = (  # YY-MM-DD HH-MM-SS (or YYYY-…), as the Nextcloud app names uploads; YYYYMMDD_HHMMSS, as cameras do
     re.compile(r"(?<!\d)(\d{4}|\d{2})-(\d\d)-(\d\d)[ _-](\d\d)-(\d\d)-(\d\d)(?!\d)"),
-    re.compile(r"(?<!\d)(\d{4})(\d\d)(\d\d)_(\d\d)(\d\d)(\d\d)"),
+    re.compile(r"(?<!\d)(\d{4})(\d\d)(\d\d)[-_](\d\d)(\d\d)(\d\d)"),
 )
 
 
@@ -118,11 +119,26 @@ def localize(naive, tz):
     return start.replace(tzinfo=tz, fold=0).astimezone(timezone.utc).astimezone(tz), True
 
 
-def resolve_date(record, tz):
+def name_date(record):
+    """The naive wall-clock time in the file's name, or None."""
+    name = os.path.basename(record["SourceFile"])
+    for pattern in NAME_DATES:
+        m = pattern.search(name)
+        if m:
+            y = m.group(1)
+            dt = _datetime(y if len(y) == 4 else f"{19 if int(y) > 69 else 20}{y}", *m.groups()[1:])
+            if dt:
+                return dt
+    return None
+
+
+def resolve_date(record, tz, quicktime_local=True):
     """(date, source, uncertain): the capture date, offset-aware, from EXIF, else the filename, else the mtime.
 
     An EXIF date takes its own offset, else its own EXIF offset tag (EXIF groups only), else UTC for
-    QuickTime's own dates, else `tz` (the household's). A filename date is in `tz`; the mtime is shown in
+    QuickTime's own dates, else `tz` (the household's). With `quicktime_local`, a bare QuickTime date whose
+    wall clock is the filename's, to the minute, was written in local time: it is read in `tz`
+    (`quicktime-local`). A filename date is in `tz`; the mtime is shown in
     `tz`. `uncertain` marks a wall-clock time `tz` makes ambiguous or skips (see `localize`).
     """
     for name, offset_tag in EXIF_DATE_TAGS:
@@ -136,18 +152,17 @@ def resolve_date(record, tz):
                 if offset_tag and EXIF_GROUPS.match(group):
                     offset = next((o for o in map(_offset, tags(record, offset_tag)) if o), None)
                 elif QUICKTIME_GROUPS.match(group):
+                    named = name_date(record) if quicktime_local else None
+                    if named and named.replace(second=0, microsecond=0) == dt.replace(second=0, microsecond=0):
+                        dt, uncertain = localize(dt, tz)
+                        return _iso(dt), "quicktime-local", uncertain
                     offset = timezone.utc
                 dt, uncertain = (dt.replace(tzinfo=offset), False) if offset else localize(dt, tz)
             return _iso(dt), "exif", uncertain
-    name = os.path.basename(record["SourceFile"])
-    for pattern in NAME_DATES:
-        m = pattern.search(name)
-        if m:
-            y = m.group(1)
-            dt = _datetime(y if len(y) == 4 else f"{19 if int(y) > 69 else 20}{y}", *m.groups()[1:])
-            if dt:
-                dt, uncertain = localize(dt, tz)
-                return _iso(dt), "filename", uncertain
+    dt = name_date(record)
+    if dt:
+        dt, uncertain = localize(dt, tz)
+        return _iso(dt), "filename", uncertain
     dt = _exif_date(record.get("System:FileModifyDate", ""))
     if dt is None:
         return None, "mtime", False
@@ -228,7 +243,7 @@ def plan(records, root, config):
             reason = APPLE
         else:
             reason = None
-        date, source, uncertain = resolve_date(r, tz)
+        date, source, uncertain = resolve_date(r, tz, config.quicktime_local)
         rows.append({"path": path, "action": "skip" if reason else "upload", "reason": reason,
                      "owner": owner_of(path, config), "album": album_of(path, config, tops), "media": media,
                      "date": date, "date_source": source, "date_uncertain": uncertain, "make": str(makes[0]).strip() if makes else None,
@@ -461,7 +476,7 @@ def report(rows):
                      f"(by name {by_name}), "
                      f"apple videos {skip[(APPLE, 'video')]}, apple live videos {skip['apple-live']}, "
                      f"not-media {skip['not-media']}, unsupported {skip['unsupported']}, unreadable {skip['unreadable']})")
-        lines.append(f"{owner}  dates: exif {dates['exif']}, filename {dates['filename']}, mtime {dates['mtime']}; "
+        lines.append(f"{owner}  dates: exif {dates['exif']}, quicktime-local {dates['quicktime-local']}, filename {dates['filename']}, mtime {dates['mtime']}; "
                      f"uncertain {uncertain_up} to upload, {uncertain_held} held")
         lines.append(f"{owner}  albums {len(albums)} ({sum(albums.values())} files)")
         lines += [f"{owner}    album {n!r}: {c}" for n, c in sorted(albums.items())]

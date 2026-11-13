@@ -21,7 +21,7 @@ pattern), take a per-file include list, leave some folders out of folder-as-albu
 | skip `apple-live` | A `.mov` with the same folder and name (any case) as an Apple still: its Live Photo video, whatever its own make. `pair` names the still |
 | skip `apple` | Any `Make` tag (EXIF or QuickTime) starts with the word Apple (`Apple`, `APPLE`, `Apple Inc.`), wherever the file is; or the file has no `Make` and its name matches one of `apple_name_patterns` (iOS exports stripped of EXIF) |
 | album | The top-level folder, subfolders included, unless it is in `not_albums` (device and person folders). A top-level folder holding no files itself only groups event folders: each child is an album, `<top> / <child>`. Files at the root have none |
-| date | EXIF (`DateTimeOriginal`, `CreationDate`, `CreateDate`, `MediaCreateDate`), then the filename (`YY-MM-DD HH-MM-SS …` as the Nextcloud app names uploads, `YYYY-…`, or `YYYYMMDD_HHMMSS` as cameras do), then the file's mtime. Every date carries an offset: an EXIF date's own, else its own EXIF offset tag (`OffsetTimeOriginal` for `DateTimeOriginal`, `OffsetTimeDigitized` for `CreateDate`, EXIF groups only), else UTC for QuickTime's own dates, else `timezone`'s (DST-aware); filename dates are in `timezone`, and the mtime is shown in it. A local time the zone makes ambiguous takes its first occurrence; one it skips becomes the instant just after the jump; both set `date_uncertain` |
+| date | EXIF (`DateTimeOriginal`, `CreationDate`, `CreateDate`, `MediaCreateDate`), then the filename (`YY-MM-DD HH-MM-SS …` as the Nextcloud app names uploads, `YYYY-…`, or `YYYYMMDD_HHMMSS`/`YYYYMMDD-HHMMSS` as cameras do), then the file's mtime. Every date carries an offset: an EXIF date's own, else its own EXIF offset tag (`OffsetTimeOriginal` for `DateTimeOriginal`, `OffsetTimeDigitized` for `CreateDate`, EXIF groups only), else UTC for QuickTime's own dates (but local, source `quicktime-local`, when its wall clock is the filename's to the minute: the device wrote local time), else `timezone`'s (DST-aware); filename dates are in `timezone`, and the mtime is shown in it. A local time the zone makes ambiguous takes its first occurrence; one it skips becomes the instant just after the jump; both set `date_uncertain` |
 
 `upload` sends each planned file to its owner. It first asks Immich whether the account already holds
 a file with that SHA-1, so a re-run, or an exact duplicate, uploads nothing twice. Immich reads the
@@ -36,7 +36,8 @@ as a **viewer** (partner sharing already shows each account the other's files).
 `config.json` (gitignored: it names people's folders) maps folders to accounts. Copy
 `config.example.json` and fill in the real folder names. `accounts` maps each account to the `.env`
 key holding its API key. `timezone` (an IANA name, default `UTC`) is the household's, for dates that
-carry no offset. `apple_name_patterns` are regular expressions searched in the filename of a file with
+carry no offset. `quicktime_local_when_name_matches` (default `true`) turns the `quicktime-local` rule on.
+`apple_name_patterns` are regular expressions searched in the filename of a file with
 no `Make`.
 
 Each account's API key, created by that account's user, needs the permissions `user.read`, `asset.upload`, `album.read`, `album.create`, `albumAsset.create` and `albumUser.create`.

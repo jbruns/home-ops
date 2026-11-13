@@ -61,6 +61,26 @@ def test_a_quicktime_creation_date_keeps_its_offset_and_a_bare_quicktime_date_is
     assert pm.resolve_date(r, TZ) == ("2019-01-02T03:04:05+00:00", "exif", False)
 
 
+def test_a_bare_quicktime_date_matching_the_filename_clock_to_the_minute_is_household_local():
+    r = rec("vid-20140808-224025271.mp4", **{"QuickTime:CreateDate": "2014:08:08 22:40:39"})
+    assert pm.resolve_date(r, TZ) == ("2014-08-08T22:40:39-07:00", "quicktime-local", False)
+    r = rec("20150704_221912.mp4", **{"QuickTime:CreateDate": "2015:07:04 22:19:59"})
+    assert pm.resolve_date(r, TZ)[:2] == ("2015-07-04T22:19:59-07:00", "quicktime-local")
+
+
+def test_a_bare_quicktime_date_stays_utc_unless_the_filename_clock_matches_or_when_turned_off():
+    utc = rec("vid-20140808-224025271.mp4", **{"QuickTime:CreateDate": "2014:08:09 05:40:39"})
+    assert pm.resolve_date(utc, TZ) == ("2014-08-09T05:40:39+00:00", "exif", False)
+    next_minute = rec("20150704_221912.mp4", **{"QuickTime:CreateDate": "2015:07:04 22:20:00"})
+    assert pm.resolve_date(next_minute, TZ)[1] == "exif"
+    unnamed = rec("MVI_0266.MOV", **{"QuickTime:CreateDate": "2012:05:29 18:54:01"})
+    assert pm.resolve_date(unnamed, TZ)[:2] == ("2012-05-29T18:54:01+00:00", "exif")
+    local = rec("vid-20140808-224025271.mp4", **{"QuickTime:CreateDate": "2014:08:08 22:40:39"})
+    assert pm.resolve_date(local, TZ, quicktime_local=False) == ("2014-08-08T22:40:39+00:00", "exif", False)
+    assert pm.Config({"accounts": {}, "default_owner": "operator"}).quicktime_local is True
+    assert pm.Config({"accounts": {}, "default_owner": "operator", "quicktime_local_when_name_matches": False}).quicktime_local is False
+
+
 def test_zero_or_garbage_exif_dates_are_ignored_and_mtime_is_shown_household_local():
     r = rec("clip.mov", **{"QuickTime:CreateDate": "0000:00:00 00:00:00", "ExifIFD:DateTimeOriginal": "    :  :     :  :  ",
                            "System:FileModifyDate": "2020:06:01 15:00:00+00:00"})
@@ -388,7 +408,7 @@ def test_the_report_counts_each_accounts_uploads_skips_date_sources_and_albums()
     text = pm.report(rows)
     assert "operator  upload 2  skip 4 (apple stills 2 (by name 1), apple videos 0, apple live videos 1, not-media 0, unsupported 0, unreadable 1)" in text
     assert "member  upload 1  skip 0" in text
-    assert "operator  dates: exif 1, filename 1, mtime 0; uncertain 0 to upload, 0 held" in text
+    assert "operator  dates: exif 1, quicktime-local 0, filename 1, mtime 0; uncertain 0 to upload, 0 held" in text
     assert "operator  albums 1 (2 files)" in text
     assert "unreadable: Event/e.jpg" in text
 
