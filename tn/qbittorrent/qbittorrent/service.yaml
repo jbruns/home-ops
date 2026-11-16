@@ -15,7 +15,12 @@ services:
     deploy:
       resources:
         limits:
-          # 30-day peak 5.6G working set, mostly page cache; RSS ~256M
+          # Disk IO type must stay POSIX-compliant (WebUI Advanced; Session\DiskIOType=Posix in the
+          # config volume). libtorrent's default memory-mapped I/O fills this limit with dirty page cache
+          # on ZFS, which the kernel can't reclaim fast enough, and the OOM killer restarts qbittorrent-nox
+          # every few minutes under load. With POSIX I/O, writes go to the ZFS ARC instead, and the
+          # container holds qBittorrent's own memory (hundreds of MiB, plus up to the 1 GiB disk
+          # queue). Pre-allocation stays off: on ZFS it writes every file twice.
           memory: 8G
     healthcheck:
       test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8080/"]
