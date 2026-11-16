@@ -22,9 +22,6 @@ kind = "ingest"
 path = "/additions"
 writable = true
 
-[audits]
-keep = 20
-
 [auth]
 identity_header = "X-authentik-username"
 # Traefik's static address on `proxy` (tn/edge), the only peer that may set the header.
@@ -33,11 +30,3 @@ trusted_proxies = ["172.30.0.10/32"]
 [jobs]
 concurrent = 1
 pace = "gentle"
-
-[selections]
-keep = 20
-
-# Fetch newer DATs, cue packs and SBI packs from Redump for the systems a Source Set follows: each at most once a
-# day per system. Never No-Intro.
-[fetch]
-redump = true
