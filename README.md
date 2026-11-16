@@ -73,7 +73,7 @@ Other Stacks declare these networks `external: true`, so `edge`, `monitoring` an
 
 Changes to `tn/doco-cd/` ship in their own PR (CI enforces this). doco-cd replaces itself with the `applier` strategy, which waits for in-flight Deploys to finish first. With `scale_out`, two deployers overlapped and left containers named `<id>_<name>`.
 
-To force-recreate one Service (for example after `ContainerLeftoverName`), run `hops recreate <stack>/<service>` (lifecycle commands in the hops README). It calls doco-cd's REST API from a container on the `metrics` network that is not being recreated. The key (`tn/doco-cd/api_secret.sops.txt`) is decrypted locally and sent on stdin.
+To force-recreate one Service (for example after `ContainerLeftoverName`), run `hops recreate <stack>/<service>` (lifecycle commands in the hops README). It calls doco-cd's REST API from a container on the `metrics` network that is not being recreated. The key (`tn/doco-cd/api_secret.sops.txt`) is decrypted locally and sent on stdin. doco-cd reads the same key, with its permissions, from `tn/doco-cd/api_keys.sops.txt`; rotate both together.
 
 Deleting a Stack folder removes the Stack from the Host but keeps its volumes. Volumes are named after the Stack that owns them, `<stack>_[<service>_]<purpose>` ([ADR-0010](docs/adr/0010-volumes-named-for-their-stack.md)). Some still carry a prefix from before the one-Stack-per-app split (e.g. `media_plex_config`) until their Stack is moved with `hops volume move` (#638); never rename one by copying.
 
