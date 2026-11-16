@@ -51,6 +51,28 @@ tunables:
     purpose: Room for containers that watch Library folders for changes.
     type: SYSCTL
     value: 524288
+  # TCP autotuning grows a socket's buffer only to its connection's bandwidth-delay product, so LAN and
+  # local streaming connections stay small; total TCP memory stays capped by tcp_mem.
+  net.core.rmem_max:
+    purpose: Ceiling for receive buffers a program sets itself, so 10 Gb/s WAN peers aren't buffer-limited.
+    type: SYSCTL
+    value: 67108864
+  net.core.wmem_max:
+    purpose: Ceiling for send buffers a program sets itself, so 10 Gb/s WAN peers aren't buffer-limited.
+    type: SYSCTL
+    value: 67108864
+  net.ipv4.tcp_rmem:
+    purpose: Lets TCP receive autotuning reach 64 MiB on high-latency 10 Gb/s WAN connections.
+    type: SYSCTL
+    value: 4096 131072 67108864
+  net.ipv4.tcp_wmem:
+    purpose: Lets TCP send autotuning reach 64 MiB on high-latency 10 Gb/s WAN connections (seeding, remote streams).
+    type: SYSCTL
+    value: 4096 16384 67108864
+  net.core.netdev_max_backlog:
+    purpose: Room for 10 Gb/s receive bursts before the kernel drops packets.
+    type: SYSCTL
+    value: 16384
 
 cron_jobs:
   smart-test:
