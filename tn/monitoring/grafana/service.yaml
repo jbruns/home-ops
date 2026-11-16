@@ -5,7 +5,7 @@ services:
     extends:
       file: ../../_baseline.yaml
       service: baseline
-    image: grafana/grafana:12.4.13@sha256:41bbc1b5e04416f81891806076db2a2ff60a5d4da5f78d36a88b033a8c199185
+    image: grafana/grafana:12.4.15@sha256:2894082f6cf7081aefdc1389265c04000812309208c190d75e8c65f7a30e4b7e
     container_name: grafana
     user: ${MONITORING_UID}:${MONITORING_GID}
     deploy:
