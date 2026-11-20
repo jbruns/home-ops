@@ -45,7 +45,7 @@ services:
     extends:
       file: ../_baseline.yaml
       service: baseline
-    image: ghcr.io/open-webui/open-webui:v0.12.5@sha256:03443b8de6b617da9d900edd09b4bf1cb0ddbfdcba6afb42c548336a0b821ded
+    image: ghcr.io/open-webui/open-webui:v0.13.4@sha256:d5168bfbc28609eff5bea1b438dd864cf64d185cf6582c02244865e18385b901
     depends_on:
       ollama:
         condition: service_healthy
