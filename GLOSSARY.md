@@ -135,6 +135,20 @@ _Avoid_: Player, streamer
 A part a Service plays in getting media into a Library: Requester, Downloader, Organizer, or Media Server. A Service may hold several Roles (Sonarr is a Requester and an Organizer; a recording Plex organizes its recordings Library), and gets only the storage access its Roles need.
 _Avoid_: Type, kind
 
+## Game Servers
+
+**Game Server**:
+A Service that game clients connect to directly to play together (e.g. a Minecraft world), reachable only from the home LAN.
+_Avoid_: Game host, dedicated server (when meaning the Service)
+
+**Game PC**:
+A desktop the Operator builds, with this repo's bootstrap script, for Players to play on the Game Servers. It is not a Host.
+_Avoid_: Client, rig, LAN machine
+
+**Player**:
+A person who plays on the Game Servers. Players are named only in SOPS-encrypted files, never in plaintext.
+_Avoid_: User, kid, gamer
+
 ## Custom code
 
 **Custom Component**:
@@ -177,6 +191,10 @@ _Avoid_: Override, exception
 **Stray**:
 A container, image, volume, or network on the TrueNAS Host that no Stack declares or uses, a Guest that is neither a Kept Guest nor marked as a Scratch Guest, or a Rollback Snapshot past its release date. Data that belongs to a Stack is never a Stray, even while nothing uses it.
 _Avoid_: Ad-hoc, orphan, leftover
+
+**Parked Service**:
+A declared Service set to run no containers between the times it is needed. It keeps its volumes, labels and secrets, has no Probe targets, and its volumes are skipped by Backups while parked.
+_Avoid_: Disabled, stopped, paused
 
 **Rollback Snapshot**:
 A ZFS snapshot taken before a risky change, recording the change it serves and a release date, and released once the change is verified. It replaces hand-made copies of data on the TrueNAS Host; it is never a Backup.
