@@ -3,7 +3,19 @@
 Title Select audits Source Sets against their DATs and builds Selections into Library Folders (an Owned Application,
 ADR 0018). It reads `sources/` in the Games dataset read-only, as the Root `sources`, and writes only to the Managed
 Folders mounted under the Root `play`, the Source Sets it repairs, the Ingest Folder (`games/ingest`, Root `ingest`)
-and the Additions Root (`games/additions`), each bound read-write on its own (ADR 0009). It keeps its SQLite store and DAT files in the volume `title-select_store`. Its own README, at the pinned version, documents the commands, API and configuration.
+and the Additions Root (`games/additions`), each bound read-write on its own (ADR 0009). It keeps its SQLite store and DAT files in the volume `title-select_store`, in the folder `baseline/` (`TITLE_SELECT_STORE`); the store from before the baseline release, which Title Select can't open, stays at the volume's top. It has no configuration file: auth comes from the environment in `compose.yaml`, and the Roots are registered in the store. Its own README, at the pinned version, documents the commands, API and settings.
+
+## Roots
+
+A new store has no Roots; the workbench's setup page (or Settings → Roots) registers them. Register these, matching
+the mounts in `compose.yaml`:
+
+| Root | Path | Kind | Writable |
+|---|---|---|---|
+| `sources` | `/sources` | general | no; writable paths: the Source Sets bound read-write (below) |
+| `play` | `/play` | general | yes |
+| `ingest` | `/ingest` | ingest | yes |
+| `additions` | `/additions` | additions | yes |
 
 ## The workbench
 
@@ -28,8 +40,9 @@ Select refuses a folder that isn't empty or carries another store's `.title-sele
 ## Repairs, ingest and additions
 
 A Source Set that repairs may write is bound read-write on its own over the read-only `/sources` mount and listed in
-`writable_paths` in `title-select.toml`; today `No-Intro/Atari - Atari 2600` and `No-Intro/Nintendo - Game Boy
-Advance`. To add one, add both in a PR. The first repair writes a `.title-select` marker into the Source Set.
+the Root `sources`'s writable paths, in the workbench (Settings → Roots); today `No-Intro/Atari - Atari 2600`,
+`No-Intro/Nintendo - Game Boy Advance` and `Redump/Sony - PlayStation (America)`. To add one, add its bind in a PR,
+then add its writable path once the Deploy has run. The first repair writes a `.title-select` marker into the Source Set.
 
 Drop files into `games/ingest` and scan the Ingest Folder from the workbench. Title Select moves what it can place
 into a Source Set or an additions set through a plan you approve, and keeps the rest aside. Additions sets live in

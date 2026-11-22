@@ -6,13 +6,13 @@ services:
       file: ../_baseline.yaml
       service: baseline
     # An Owned Application, released from its own repo; Renovate keeps tag and digest current.
-    image: ghcr.io/jbruns/title-select:0.9.0@sha256:b8442088a7c774d13e35bee6e0d002b2a4d4d6b5fc1c42301566e1ee69bcd441
+    image: ghcr.io/jbruns/title-select:0.12.0@sha256:fe5797f3980549a5eb272efeffe186f107f3d88f12bc30ecb25924d29f829ef3
     container_name: title-select
     # The Operator's uid and gid (host/truenas/identities.yaml), so it can read sources/ (mode 0700). A pilot
     # crutch: it gets its own user and group when it takes the Organizer role (ADR 0009).
     user: "1000:1001"
     read_only: true
-    command: ["--config", "/etc/title-select.toml", "serve", "--listen", "0.0.0.0:8080"]
+    command: ["serve", "--listen", "0.0.0.0:8080"]
     healthcheck:
       test: ["CMD", "/title-select", "health"]
       interval: 30s
@@ -31,6 +31,12 @@ services:
     environment:
       - TZ=${TZ}
       - TITLE_SELECT_OPERATOR_TOKEN_FILE=/run/secrets/title_select_operator_token
+      # The store, in its own folder in the volume. A store from before the baseline release (0.12.0) can't be
+      # opened, so the baseline starts a new one here and leaves the old one at the volume's top, untouched.
+      - TITLE_SELECT_STORE=/store/baseline
+      # The IdP's forward auth sets this header; only Traefik's static address on `proxy` (tn/edge) may set it.
+      - TITLE_SELECT_IDENTITY_HEADER=X-authentik-username
+      - TITLE_SELECT_TRUSTED_PROXIES=172.30.0.10/32
     secrets:
       - title_select_operator_token
     labels:
@@ -86,7 +92,6 @@ services:
         target: /store
         volume:
           nocopy: true
-      - ./title-select.toml:/etc/title-select.toml:ro
       # The Root `sources`. Never created by the Deploy (ADR 0009).
       - type: bind
         source: ${ZFS_POOL_ROOT_HDD}/games/sources
@@ -95,7 +100,7 @@ services:
         bind:
           create_host_path: false
       # Source Sets that repairs may write, each bound read-write over the read-only `sources` mount and listed in
-      # the Root's writable_paths (ADR 0009). Same dataset, so renames within a Source Set stay on one mount.
+      # the Root's writable paths, registered in the workbench (ADR 0009). Same dataset, so renames within a Source Set stay on one mount.
       - type: bind
         source: ${ZFS_POOL_ROOT_HDD}/games/sources/No-Intro/Atari - Atari 2600
         target: /sources/No-Intro/Atari - Atari 2600
