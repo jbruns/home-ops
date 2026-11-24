@@ -5,7 +5,7 @@ services:
     extends:
       file: ../../_baseline.yaml
       service: baseline
-    image: ngosang/restic-exporter:2.1.2@sha256:a8f9cfa3016237c7008aefa4d9c6639bc9b34d2582eed07ac58dcf56632e4170
+    image: ngosang/restic-exporter:2.2.1@sha256:d52129303925520186bf17ffa0389ba56a1651afbc1c4bc5ce12ed6543d33192
     container_name: restic-exporter
     deploy:
       resources:
