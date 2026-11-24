@@ -1,0 +1,119 @@
+# Stage Select: an Owned Application (ADR 0018) that audits Source Sets against their DATs, repairs them and builds
+# Library Folders. A Protected Service (ADR 0006); see README.md for the workbench, the headless Audit, and parking
+# the Service.
+services:
+  stage-select:
+    extends:
+      file: ../_baseline.yaml
+      service: baseline
+    # An Owned Application, released from its own repo; Renovate keeps tag and digest current.
+    image: ghcr.io/jbruns/stage-select:0.13.0@sha256:9ec15d47f8cac33ab98104fea07b14a9d9ea3c12f181dba2756144734603e7e8
+    container_name: stage-select
+    # The Operator's uid and gid (host/truenas/identities.yaml), so it can read sources/ (mode 0700) and write the
+    # Games tree the Operator owns. A crutch until it gets its own user and group (ADR 0009).
+    user: "1000:1001"
+    read_only: true
+    # The image serves on 0.0.0.0:8080 with its store at /store; everything else is registered in the store.
+    healthcheck:
+      test: ["CMD", "/stage-select", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+      start_interval: 5s
+    deploy:
+      resources:
+        limits:
+          # Twice the largest peak measured on the Host, 195.75M, rounded up. That peak is an upper bound that
+          # includes page cache, from auditing, repairing and building the PlayStation set. Selections on the
+          # PlayStation DAT peaked lower, at 172M. The method is in the application's docs/memory.md.
+          memory: 400M
+          cpus: "1"
+    environment:
+      - TZ=${TZ}
+      - STAGE_SELECT_OPERATOR_TOKEN_FILE=/run/secrets/stage_select_operator_token
+      # The IdP's forward auth sets this header; only Traefik's static address on `proxy` (tn/edge) may set it.
+      - STAGE_SELECT_IDENTITY_HEADER=X-authentik-username
+      - STAGE_SELECT_TRUSTED_PROXIES=172.30.0.10/32
+    secrets:
+      - stage_select_operator_token
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info. Set it to info while parked (README.md).
+      tier: warning
+      startup-order: "3"
+      # The store is backed up as it is; a restore may replay the WAL.
+      stack-back.volumes: true
+      stack-back.volumes.include: "stage-select_store"
+
+      traefik.enable: true
+      traefik.docker.network: proxy
+
+      traefik.http.routers.stage-select-http.rule: Host(`stageselect.${DOMAIN}`)
+      traefik.http.routers.stage-select-http.entrypoints: http
+      traefik.http.routers.stage-select-http.middlewares: redirect-https
+
+      # The workbench and its API: `protected` is crowdsec-bouncer then idp-forward-auth (edge Stack), which
+      # sets X-authentik-username.
+      traefik.http.routers.stage-select-https.rule: Host(`stageselect.${DOMAIN}`)
+      traefik.http.routers.stage-select-https.entrypoints: https
+      traefik.http.routers.stage-select-https.tls: true
+      traefik.http.routers.stage-select-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.stage-select-https.service: stage-select
+      traefik.http.routers.stage-select-https.middlewares: protected
+
+      # The Probe's path, without forward auth.
+      traefik.http.routers.stage-select-health.rule: Host(`stageselect.${DOMAIN}`) && Path(`/api/v1/health`)
+      traefik.http.routers.stage-select-health.entrypoints: https
+      traefik.http.routers.stage-select-health.tls: true
+      traefik.http.routers.stage-select-health.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.stage-select-health.service: stage-select
+      traefik.http.routers.stage-select-health.middlewares: crowdsec-bouncer,strip-idp-headers
+
+      # The Client Path: the headless Audit, authenticated by the Operator token. Covers /api/v1/events (SSE).
+      traefik.http.routers.stage-select-client-api.rule: Host(`stageselect.${DOMAIN}`) && PathPrefix(`/api/v1`) && HeaderRegexp(`Authorization`, `^Bearer .+`)
+      traefik.http.routers.stage-select-client-api.entrypoints: https
+      traefik.http.routers.stage-select-client-api.tls: true
+      traefik.http.routers.stage-select-client-api.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.stage-select-client-api.service: stage-select
+      traefik.http.routers.stage-select-client-api.middlewares: crowdsec-bouncer,strip-idp-headers,client-ratelimit
+
+      traefik.http.services.stage-select.loadbalancer.server.port: 8080
+
+      # Probes: probe.url is the health router; probe.idp_url is the workbench, which must redirect to the IdP.
+      # Probe targets come from running containers, so a parked Service has none.
+      probe.url: https://stageselect.${DOMAIN}/api/v1/health
+      probe.idp_url: https://stageselect.${DOMAIN}/
+    volumes:
+      # nocopy: Docker would otherwise reset an empty volume's owner to the image's /store (65532) on first mount.
+      - type: volume
+        source: stage-select_store
+        target: /store
+        volume:
+          nocopy: true
+      # The whole Games tree, read-write, as one bind (ADR 0009): a move between a Source Set, a Library Folder, the
+      # Ingest Folder and the Additions Root is then a rename, never a copy. Stage Select writes only where its
+      # registered Roots allow (README.md); the bind bounds what it can reach. Never created by the Deploy.
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/games
+        target: /data/games
+        bind:
+          create_host_path: false
+    networks:
+      - default
+      - proxy
+
+secrets:
+  stage_select_operator_token:
+    file: ./operator_token.sops.txt
+
+volumes:
+  stage-select_store:
+    # Holds data, so external (ADR 0010): created, and chowned to the user above, before the first Deploy. A new,
+    # empty volume: Stage Select opens no store an earlier release made, and must never be pointed at one.
+    name: stage-select_store
+    external: true
+
+networks:
+  proxy:
+    name: proxy
+    external: true

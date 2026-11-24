@@ -164,7 +164,7 @@ The stated upstream or community capability whose arrival makes a Custom Compone
 _Avoid_: Sunset, deprecation note
 
 **Owned Application**:
-An application we build and intend to maintain as a product, in its own repo, shipped and pinned like a Custom Component but without a Retirement Condition (e.g. Fuzzbin, Title Select).
+An application we build and intend to maintain as a product, in its own repo, shipped and pinned like a Custom Component but without a Retirement Condition (e.g. Fuzzbin, Stage Select).
 _Avoid_: Custom Component (when meaning this), app
 
 **Contract Test**:
