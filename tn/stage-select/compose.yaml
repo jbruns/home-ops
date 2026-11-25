@@ -7,7 +7,7 @@ services:
       file: ../_baseline.yaml
       service: baseline
     # An Owned Application, released from its own repo; Renovate keeps tag and digest current.
-    image: ghcr.io/jbruns/stage-select:0.13.0@sha256:9ec15d47f8cac33ab98104fea07b14a9d9ea3c12f181dba2756144734603e7e8
+    image: ghcr.io/jbruns/stage-select:0.13.1@sha256:e518136d3c623a772b0bcc24cffae09dcdb5bf73f837e538f88001b47d358a07
     container_name: stage-select
     # The Operator's uid and gid (host/truenas/identities.yaml), so it can read sources/ (mode 0700) and write the
     # Games tree the Operator owns. A crutch until it gets its own user and group (ADR 0009).
@@ -28,7 +28,6 @@ services:
           # includes page cache, from auditing, repairing and building the PlayStation set. Selections on the
           # PlayStation DAT peaked lower, at 172M. The method is in the application's docs/memory.md.
           memory: 400M
-          cpus: "1"
     environment:
       - TZ=${TZ}
       - STAGE_SELECT_OPERATOR_TOKEN_FILE=/run/secrets/stage_select_operator_token
