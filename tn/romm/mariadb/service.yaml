@@ -1,0 +1,101 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json
+services:
+  mariadb:
+    # https://hub.docker.com/_/mariadb ; RomM's recommended database (MariaDB 10.11 or later). The image keeps binary
+    # logging off, so RomM's migrations can create their triggers without log_bin_trust_function_creators.
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: mariadb:11.8.9@sha256:c4124d1afa875e47f2892edf26b482fa54f796e2f342d3717a04ca091a22a9bd
+    container_name: romm-mariadb
+    # The image's mysql user; the entrypoint skips its chown + gosu when not root, so no caps.
+    user: "999:999"
+    deploy:
+      resources:
+        limits:
+          # Unmeasured: vaultwarden-mariadb's 30-day peak is 230M with the default buffer pool. Measure and
+          # tighten (#912).
+          memory: 512M
+    stop_grace_period: 60s
+    # The image's check, via its healthcheck user (.my-healthcheck.cnf in the datadir).
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 5s
+    environment:
+      - MARIADB_ROOT_PASSWORD_FILE=/run/secrets/romm_mariadb_root_password
+      # root only via the local socket (hops db logs in that way); no root@% on a fresh init.
+      - MARIADB_ROOT_HOST=localhost
+    # MARIADB_DATABASE/USER/PASSWORD: RomM's own account (created on first init); stack-back dumps with it too.
+    env_file:
+      - ./mariadb.sops.env
+    secrets:
+      - romm_mariadb_root_password
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: warning
+      startup-order: "1"
+      stack-back.mariadb: true
+      # Expected users, checked by hops db --users (the image's mariadb.sys and healthcheck are implied):
+      # root@localhost: admin, local socket only. exporter@%: mysqld-exporter, see mariadb-exporter.
+      # rommuser@%: RomM's own login (DB_USER); stack-back dumps with it too (mariadb.sops.env).
+      homeops.db.users: "root@localhost,exporter@%,rommuser@%"
+
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    networks:
+      - default
+      # stack-back (ops) dumps the database over the backup network.
+      - backup
+
+  mariadb-exporter:
+    # https://github.com/prometheus/mysqld_exporter
+    # Its `exporter` account is created by hand, once (a fresh data volume needs it again):
+    #   CREATE USER 'exporter'@'%' IDENTIFIED BY '<MARIADB_EXPORTER_PASSWORD>' WITH MAX_USER_CONNECTIONS 3;
+    #   GRANT PROCESS, SLAVE MONITOR ON *.* TO 'exporter'@'%';
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: prom/mysqld-exporter:v0.21.0@sha256:afad0c59a154fea24ca5ea0e6f95f2b0b168601b111266963dc8a347715b5318
+    container_name: romm-mariadb-exporter
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:9104/metrics"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 5s
+    deploy:
+      resources:
+        limits:
+          # The other two instances' 30-day peaks are 33M and 35M working set.
+          memory: 64M
+    command:
+      - --mysqld.address=mariadb:3306
+      - --mysqld.username=exporter
+    environment:
+      - MYSQLD_EXPORTER_PASSWORD=${MARIADB_EXPORTER_PASSWORD}
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: info
+      startup-order: "3"
+
+    networks:
+      - default
+      - metrics
+
+secrets:
+  romm_mariadb_root_password:
+    file: ./mariadb_root_password.sops.txt
+
+volumes:
+  mariadb_data:
+    # Holds data, so external (ADR 0010): created, and chowned to 999:999, before the first Deploy.
+    name: romm_mariadb_data
+    external: true

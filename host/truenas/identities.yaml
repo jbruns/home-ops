@@ -55,7 +55,7 @@ users:
     shell: /usr/sbin/nologin
     smb: true
   gaming:
-    purpose: Gaming appliances log in as this to read the Games Library's library/ and switch/ over SMB; it can't write.
+    purpose: Gaming appliances log in as this to read the Games Library's library/, bios/ and switch/ over SMB; it can't write.
     uid: 1014
     group: gaming
     groups: [builtin_users]
@@ -89,7 +89,7 @@ groups:
     gid: 1005
     members: [operator]
   gaming:
-    purpose: Reads the Games Library's library/ and switch/; the gaming login, and ownfoil through group_add.
+    purpose: Reads the Games Library's library/, bios/ and switch/; the gaming login, and ownfoil and RomM through group_add.
     gid: 1014
   retronas:
     purpose: Group of the retronas dataset.

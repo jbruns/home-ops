@@ -1,0 +1,67 @@
+# RomM's config.yml, mounted read-only (romm/service.yaml), so it changes only by PR.
+# https://github.com/rommapp/romm/blob/5.4.1/examples/config.example.yml ; only what differs from upstream's defaults.
+#
+# Layout: /romm/library/roms is games/library, one Library Folder per platform that Stage Select builds and names after
+# RomM's platform (its folder name is RomM's fs_slug), and /romm/library/bios is games/bios. That is RomM's default
+# structure (roms/{platform}/{game}, bios/{platform}), so no `filesystem.structure` and no `system.platforms`
+# bindings. A Library Folder whose name RomM doesn't know gets a binding here.
+
+exclude:
+  roms:
+    multi_file:
+      # MAME disk folders Stage Select lists on a Library Folder's page go here, once arcade is built (that list
+      # applies to every platform).
+      names: []
+
+filesystem:
+  # Hashing stays on: Stage Select finds its Additions in RomM by hash, and compares RomM's hashes with the DAT's.
+  skip_hash_calculation: false
+
+scan:
+  priority:
+    # ScreenScraper first, as Stage Select asks (its ADR 0020): it matches by hash and keeps titles close to the
+    # DAT's, which Stage Select compares. RetroAchievements and HowLongToBeat come last, as enrichment. Hasheous
+    # stays off (HASHEOUS_API_ENABLED); MobyGames, Flashpoint and Steam have no key or no library here.
+    metadata:
+      - ss
+      - igdb
+      - launchbox
+      - ra
+      - hltb
+    artwork:
+      - ss
+      - libretro
+      - sgdb
+      - igdb
+      - launchbox
+    region:
+      - us
+      - wor
+      - eu
+      - jp
+    region_mode: prefer_rom_tags
+    language:
+      - en
+  # ScreenScraper media to download, into resources/. No videos: large, and backed up with romm_data.
+  media:
+    - box2d
+    - box3d
+    - box2d_back
+    - box2d_side
+    - physical
+    - screenshot
+    - title_screen
+    - logo
+    - bezel
+    - manual
+  # Both exports write into the library, which is read-only and Stage Select's (ADR 0009).
+  gamelist:
+    export: false
+  pegasus:
+    export: false
+
+emulatorjs:
+  netplay:
+    # Off: netplay switches every player to nightly EmulatorJS from a CDN, which RomM's docs call intermittently
+    # broken. Turning it on needs ICE servers here, and TURN beyond the LAN (ADR 0021 for any published port).
+    enabled: false

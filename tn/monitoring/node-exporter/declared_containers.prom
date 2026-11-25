@@ -50,6 +50,11 @@ homeops_container_declared{stack="qbittorrent",service="qbittorrent",name="qbitt
 homeops_container_declared{stack="radarr",service="radarr",name="radarr",tier="warning"} 1
 homeops_container_declared{stack="radarr",service="radarr-exporter",name="radarr-exporter",tier="info"} 1
 homeops_container_declared{stack="radarr",service="radarr-queue-exporter",name="radarr-queue-exporter",tier="info"} 1
+homeops_container_declared{stack="romm",service="mariadb",name="romm-mariadb",tier="warning"} 1
+homeops_container_declared{stack="romm",service="mariadb-exporter",name="romm-mariadb-exporter",tier="info"} 1
+homeops_container_declared{stack="romm",service="romm",name="romm",tier="warning"} 1
+homeops_container_declared{stack="romm",service="valkey",name="romm-valkey",tier="warning"} 1
+homeops_container_declared{stack="romm",service="valkey-exporter",name="romm-valkey-exporter",tier="info"} 1
 homeops_container_declared{stack="sabnzbd",service="sabnzbd",name="sabnzbd",tier="warning"} 1
 homeops_container_declared{stack="sabnzbd",service="sabnzbd-exporter",name="sabnzbd-exporter",tier="info"} 1
 homeops_container_declared{stack="sabnzbd",service="sabnzbd-status-exporter",name="sabnzbd-status-exporter",tier="info"} 1

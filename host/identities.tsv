@@ -25,5 +25,6 @@ user   audiobookshelf  4010  media  -
 user   nextpvr         4011  media  -
 user   ownfoil         4012  media  -
 user   autobrr         4013  media  -
+user   romm            4014  media  -
 # The no-login owner of files people added over SMB before #543; no Service runs as it.
 user   media           1001  media  -

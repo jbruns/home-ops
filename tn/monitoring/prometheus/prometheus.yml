@@ -78,12 +78,14 @@ scrape_configs:
       - targets: ['cwa-ingest-gate:9715']
         labels: {container: cwa-ingest-gate, stack: calibre-web-automated, tier: warning}
 
-  # NEXTCLOUD STACK (Valkey; redis_exporter speaks the same protocol)
+  # Valkey per Stack (nextcloud, romm); redis_exporter speaks the same protocol
   - job_name: redis
     scrape_interval: 90s
     static_configs:
       - targets: ['nextcloud-valkey-exporter:9121']
         labels: {container: nextcloud-valkey-exporter, stack: nextcloud, tier: info}
+      - targets: ['romm-valkey-exporter:9121']
+        labels: {container: romm-valkey-exporter, stack: romm, tier: info}
 
   # mysqld_exporter per MariaDB; `datastore` names the Datastore it watches (DatastoreDown).
   - job_name: mysqld
@@ -92,6 +94,8 @@ scrape_configs:
         labels: {container: nextcloud-mariadb-exporter, datastore: nextcloud-mariadb, stack: nextcloud, tier: info}
       - targets: ['vaultwarden-mariadb-exporter:9104']
         labels: {container: vaultwarden-mariadb-exporter, datastore: vaultwarden-mariadb, stack: vaultwarden, tier: info}
+      - targets: ['romm-mariadb-exporter:9104']
+        labels: {container: romm-mariadb-exporter, datastore: romm-mariadb, stack: romm, tier: info}
 
   # IMMICH STACK (IMMICH_TELEMETRY_INCLUDE=all: 8081 api, 8082 microservices workers)
   - job_name: immich

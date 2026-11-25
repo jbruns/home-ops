@@ -29,17 +29,30 @@ Open `https://stageselect.<domain>/` and sign in through the IdP. The workbench 
 - **Register a Source Set:** in the Root `sources`, the folder's path inside it (e.g. `No-Intro/Atari - Atari 2600`)
   and its DAT.
 - **Audit:** open the Source Set and start an Audit. Jobs shows its progress live.
-- **Build:** make a Library Folder in the Root `play` (e.g. `roms/atari2600`) bound to the system, Source Set and
+- **Build:** make a Library Folder directly in the Root `play`, named after RomM's platform (e.g. `nes`) bound to the system, Source Set and
   Selection Profile, then plan a build, review the plan and approve it.
 
 ## Library Folders
 
-Library Folders live in the Root `play`, `games/library`: today `roms/atari2600`, `roms/gba` and `acceptance/psx`
-(the milestone acceptance's PlayStation folder, apart from the hand-laid ES-DE library). Registering one needs a folder
-that is empty or missing; Stage Select creates it. A folder an earlier release built keeps its files and its
-`.title-select/` folder, and Stage Select won't adopt it: move it aside, register the folder again and build it, then
-delete the old folder once you've kept what you want from it. Updating ES-DE's `gamelists/` for the built files (for
-example `.a26` to `.zip`) is the Operator's.
+Library Folders live directly in the Root `play`, `games/library`, one per platform and named after RomM's platform
+(today `nes`), because RomM reads `games/library` as its `roms/` folder (`tn/romm`). Registering one needs a folder that
+is empty or missing; Stage Select creates it. A folder an earlier release built keeps its files and its `.title-select/`
+folder, and Stage Select won't adopt it: move it aside, register the folder again and build it, then delete the old
+folder once you've kept what you want from it. Nothing else belongs in `games/library`: RomM reads every folder there
+that doesn't start with a dot as a platform.
+
+## RomM
+
+Stage Select asks RomM to scan a platform after each Build, keeps RomM's public "Additions" collection, and compares
+what RomM matched with what each Build made (the folder's RomM tab). It never writes names or metadata into RomM. Set it
+up once RomM runs (`tn/romm/README.md` makes its user and token): Settings → Operations → RomM, with
+
+- address `https://rmm.<domain>`;
+- the token of RomM's `stage-select` user;
+- root `play`, the Root whose folders RomM reads as platforms.
+
+Then use Test connection. The token is kept in the store, so the store's Backup holds it; changing the address needs the
+token again.
 
 ## Repairs, ingest and additions
 
