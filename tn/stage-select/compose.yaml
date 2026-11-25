@@ -7,7 +7,7 @@ services:
       file: ../_baseline.yaml
       service: baseline
     # An Owned Application, released from its own repo; Renovate keeps tag and digest current.
-    image: ghcr.io/jbruns/stage-select:0.13.2@sha256:a9d2fcae4d471399bc5f8a040e5be6cbbc26cf2b45c61c5749a2e1dbe37726cb
+    image: ghcr.io/jbruns/stage-select:0.13.3@sha256:ba338f0082dd7c9912673f490a2db341330e3bd05aff6e03f3c9080908876461
     container_name: stage-select
     # The Operator's uid and gid (host/truenas/identities.yaml), so it can read sources/ (mode 0700) and write the
     # Games tree the Operator owns. A crutch until it gets its own user and group (ADR 0009).
