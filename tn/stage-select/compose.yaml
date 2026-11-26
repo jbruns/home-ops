@@ -9,9 +9,11 @@ services:
     # An Owned Application, released from its own repo; Renovate keeps tag and digest current.
     image: ghcr.io/jbruns/stage-select:0.13.3@sha256:ba338f0082dd7c9912673f490a2db341330e3bd05aff6e03f3c9080908876461
     container_name: stage-select
-    # The Operator's uid and gid (host/truenas/identities.yaml), so it can read sources/ (mode 0700) and write the
-    # Games tree the Operator owns. A crutch until it gets its own user and group (ADR 0009).
-    user: "1000:1001"
+    # Its own uid (host/identities.tsv) in group media, as each media app Service has (ADR 0009). It writes the
+    # Games tree through group gaming, which owns it (host/truenas/storage.yaml).
+    user: ${STAGE_SELECT_UID}:${MEDIA_SHARED_GID}
+    group_add:
+      - ${GAMING_GID}
     read_only: true
     # The image serves on 0.0.0.0:8080 with its store at /store; everything else is registered in the store.
     healthcheck:
@@ -107,8 +109,9 @@ secrets:
 
 volumes:
   stage-select_store:
-    # Holds data, so external (ADR 0010): created, and chowned to the user above, before the first Deploy. A new,
-    # empty volume: Stage Select opens no store an earlier release made, and must never be pointed at one.
+    # Holds data, so external (ADR 0010): created, and chowned to the user above (STAGE_SELECT_UID:MEDIA_SHARED_GID),
+    # before the first Deploy. A new, empty volume: Stage Select opens no store an earlier release made, and must never
+    # be pointed at one. Moved from the Operator's uid to its own in place (chowned), so it is the same store.
     name: stage-select_store
     external: true
 
