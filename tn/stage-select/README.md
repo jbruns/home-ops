@@ -70,7 +70,7 @@ On the Host, this runs an Audit over the Client Path with the running container'
 leaves the Host in plain text:
 
 ```sh
-sudo docker run --rm --label startup-order=skip --read-only --user 1000:1001 \
+sudo docker run --rm --label startup-order=skip --read-only --user 4015:1002 \
   --volumes-from stage-select:ro \
   -e STAGE_SELECT_OPERATOR_TOKEN_FILE=/run/secrets/stage_select_operator_token \
   "$(sudo docker inspect -f '{{.Config.Image}}' stage-select)" \
