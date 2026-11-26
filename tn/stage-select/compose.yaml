@@ -7,7 +7,7 @@ services:
       file: ../_baseline.yaml
       service: baseline
     # An Owned Application, released from its own repo; Renovate keeps tag and digest current.
-    image: ghcr.io/jbruns/stage-select:0.13.3@sha256:ba338f0082dd7c9912673f490a2db341330e3bd05aff6e03f3c9080908876461
+    image: ghcr.io/jbruns/stage-select:0.14.0@sha256:7884e5eee792858d671ca0e399441c02a3cbaa50528b636cba4ac72d631531e7
     container_name: stage-select
     # Its own uid (host/identities.tsv) in group media, as each media app Service has (ADR 0009). It writes the
     # Games tree through group gaming, which owns it (host/truenas/storage.yaml).
