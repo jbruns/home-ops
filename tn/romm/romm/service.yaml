@@ -4,9 +4,6 @@ configs:
   # they change by PR instead.
   romm_config:
     file: ./config.yml
-  # Read through REDIS_PASSWORD_FILE, so the password is not in the container's declared environment.
-  romm_redis_password:
-    content: ${VALKEY_PASSWORD}
 
 services:
   romm:
@@ -59,7 +56,9 @@ services:
       - DB_NAME=romm
       - DB_USER=rommuser
       - REDIS_HOST=valkey
-      - REDIS_PASSWORD_FILE=/run/romm/redis_password
+      # From .sops.env, as romm-mariadb-exporter's password is. Not a config: Compose can't write a `content:` config
+      # into a read-only container ("file is the sole supported option"), and a `file:` one would copy the password.
+      - REDIS_PASSWORD=${VALKEY_PASSWORD}
 
       # Security. Protected by native OIDC (ADR 0006): RomM supports it and sends browsers to the IdP itself
       # (OIDC_AUTOLOGIN), so no forward auth. Accounts are made on first sign-in; the IdP's groups claim decides who
@@ -108,8 +107,6 @@ services:
     configs:
       - source: romm_config
         target: /romm/config/config.yml
-      - source: romm_redis_password
-        target: /run/romm/redis_password
     depends_on:
       mariadb:
         condition: service_healthy
