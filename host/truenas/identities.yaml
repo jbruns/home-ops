@@ -6,7 +6,7 @@ users:
     purpose: The Operator's own login, for SMB, SSH and the UI.
     uid: 1000
     group: operator
-    groups: [smbadmins, media, backups, software, retronas, builtin_administrators, builtin_users]
+    groups: [smbadmins, media, backups, software, retronas, gaming, builtin_administrators, builtin_users]
     home: /mnt/andromeda/home/<operator>
     shell: /usr/bin/zsh
     smb: true
@@ -55,7 +55,7 @@ users:
     shell: /usr/sbin/nologin
     smb: true
   gaming:
-    purpose: Gaming appliances log in as this to read the Games Library's library/, bios/ and switch/ over SMB; it can't write.
+    purpose: Gaming appliances log in as this to read the Games Library over SMB; the share gives it READ only, so it can't write.
     uid: 1014
     group: gaming
     groups: [builtin_users]
@@ -89,8 +89,9 @@ groups:
     gid: 1005
     members: [operator]
   gaming:
-    purpose: Reads the Games Library's library/, bios/ and switch/; the gaming login, and ownfoil and RomM through group_add.
+    purpose: May write the whole Games Library (ADR 0009). The Operator and Stage Select write through it; ownfoil and RomM read through it with read-only mounts, and the gaming login with the share's READ.
     gid: 1014
+    members: [operator, gaming]
   retronas:
     purpose: Group of the retronas dataset.
     gid: 3000

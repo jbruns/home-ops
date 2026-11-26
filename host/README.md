@@ -63,7 +63,7 @@ step 1 again. Renovate never automerges it, because the Host does not pick up th
 ## Runbook: create users and groups
 
 The identities are listed in [`identities.tsv`](identities.tsv): the `media` group (gid 1002), one
-user per media app Service (4001-4014) with `media` as its primary group and no other groups, and
+user per media app Service (4001-4015) with `media` as its primary group and no other groups, and
 the no-login `media` user (1001) that owns files added over SMB before #543. There are no
 per-Service groups: access inside a Library tree comes from `media` (see
 [0552](../docs/research/0552-unix-identities.md)). To change the set, edit only that file.

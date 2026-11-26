@@ -61,17 +61,20 @@ datasets:
     quota: 300 GiB  # each week's archives are about 26 GB (#831): 3 kept, a 4th until the run prunes, and about 4 more held by the backups task's 30-day snapshots, which count against the quota
     permissions: {mode: '2750', owner: proxmox, group: backups, default_acl: [user::rwx, group::r-x, other::---]}
   andromeda/games:
-    purpose: The Games Library. sources/ holds Source Sets (Operator only); library/ holds the Library Folders Stage Select builds, bios/ the BIOS files the Operator curates for RomM, and switch/ the Switch titles, all read by group gaming.
+    purpose: The Games Library (ADR 0009). sources/ holds Source Sets, library/ the Library Folders Stage Select builds, ingest/ its Ingest Folder, additions/ its Additions Root, bios/ the BIOS files RomM serves and switch/ the Switch titles. Group gaming may write all of it; read-only mounts and the share's READ keep its readers from writing.
     recordsize: 1M  # files block-cloned in from roms and emulation keep their 128K records
     permissions:
-      mode: '2750'
+      mode: '2770'
       owner: operator
       group: gaming
+      default_acl: [user::rwx, group::rwx, other::---]
       paths:
-        sources: {mode: '0700', owner: operator, group: operator}
-        library: {mode: '2750', owner: operator, group: gaming, default_acl: [user::rwx, group::r-x, other::---]}
-        bios: {mode: '2750', owner: operator, group: gaming, default_acl: [user::rwx, group::r-x, other::---]}
-        switch: {mode: '2750', owner: operator, group: gaming, default_acl: [user::rwx, group::r-x, other::---]}
+        sources: {mode: '2770', owner: operator, group: gaming, default_acl: [user::rwx, group::rwx, other::---]}
+        library: {mode: '2770', owner: operator, group: gaming, default_acl: [user::rwx, group::rwx, other::---]}
+        ingest: {mode: '2770', owner: operator, group: gaming, default_acl: [user::rwx, group::rwx, other::---]}
+        additions: {mode: '2770', owner: operator, group: gaming, default_acl: [user::rwx, group::rwx, other::---]}
+        bios: {mode: '2770', owner: operator, group: gaming, default_acl: [user::rwx, group::rwx, other::---]}
+        switch: {mode: '2770', owner: operator, group: gaming, default_acl: [user::rwx, group::rwx, other::---]}
   andromeda/home:
     purpose: Home directories of the two accounts that log in (the Operator and the agent); not shared. Data lives in andromeda/private.
     aclmode: DISCARD
