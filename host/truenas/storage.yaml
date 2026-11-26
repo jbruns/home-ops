@@ -68,6 +68,8 @@ datasets:
       owner: operator
       group: gaming
       default_acl: [user::rwx, group::rwx, other::---]
+      # Not checked: each .stage-select folder and every folder under it stay 700 and Stage Select's own, so a recursive
+      # change must skip them (tn/stage-select/README.md, Permissions).
       paths:
         sources: {mode: '2770', owner: operator, group: gaming, default_acl: [user::rwx, group::rwx, other::---]}
         library: {mode: '2770', owner: operator, group: gaming, default_acl: [user::rwx, group::rwx, other::---]}
