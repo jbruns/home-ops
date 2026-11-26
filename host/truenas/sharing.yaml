@@ -53,9 +53,9 @@ smb_shares:
     path: /mnt/andromeda/retronas
     share_acl: [operator]  # the relay reaches it over NFS, so no other login needs it
   games:
-    purpose: The Operator curates the Games Library; gaming appliances read library/ and switch/ as gaming.
+    purpose: The Operator curates the Games Library; gaming appliances read it as gaming.
     path: /mnt/andromeda/games
-    share_acl: [operator, gaming read]  # gaming gets READ; file permissions keep it out of sources/
+    share_acl: [operator, gaming read]  # gaming gets READ, which alone keeps it from writing: its group may write the tree
   tv-ingest:
     purpose: Ingest Folder for TV episodes added by hand.
     path: /mnt/andromeda/media/tv/ingest

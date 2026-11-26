@@ -13,7 +13,8 @@ SCRIPT = HOST_DIR / "create_usersgroups.sh"
 SERVICE_USERS = [("sonarr", 4001), ("radarr", 4002), ("sabnzbd", 4003), ("navidrome", 4004), ("plex", 4005),
                  ("emby", 4006), ("qbittor", 4007), ("cwa", 4008), ("shelfmark", 4009), ("audiobookshelf", 4010),
                  ("nextpvr", 4011), ("ownfoil", 4012), ("autobrr", 4013),
-                 ("romm", 4014), ("media", 1001)]
+                 ("romm", 4014), ("stage-select", 4015),
+                 ("media", 1001)]
 ALL_COMMANDS = [
     'account group create gid=1002 name="media" smb=false',
     *[f'account user create username="{name}" full_name="{name}" uid={uid} group_create=false home_create=false '
