@@ -21,6 +21,30 @@ A new store has no Roots; the workbench's setup page (or Settings → Roots) reg
 
 Never register `/data/games` itself, or `switch/`: the mount reaches them, but no Root should.
 
+## Permissions
+
+Stage Select runs as `stage-select` (uid 4015, group `media`), with group `gaming` added. Group `gaming` owns the Games
+tree, and `host/truenas/storage.yaml` declares its modes: setgid folders, `2770`, with a default ACL that keeps it
+group-writable (ADR 0009). New files then take group `gaming`, so RomM and the game appliances can read them.
+
+The exception is each `.stage-select` folder, inside a Source Set or a Library Folder, and every folder under it (e.g.
+`retained/`). Stage Select uses one only if its own uid owns it and its mode is exactly `700`. Otherwise it refuses the
+plan with "is not Stage Select's own private folder" or "is no longer private to this service", and writes nothing.
+The drift check doesn't read these folders. A recursive change to the tree's permissions must skip them, or be
+followed, as root on the Host, by:
+
+```sh
+find /mnt/andromeda/games \( -path '*/.stage-select' -o -path '*/.stage-select/*' \) -exec chown 4015:gaming {} +
+find /mnt/andromeda/games -type d \( -path '*/.stage-select' -o -path '*/.stage-select/*' \) -exec chmod 700 {} +
+```
+
+This prints nothing once they're right:
+
+```sh
+find /mnt/andromeda/games \( -path '*/.stage-select' -o -path '*/.stage-select/*' \) \
+  \( ! -user 4015 -o -type d ! -perm 700 \) -print
+```
+
 ## The workbench
 
 Open `https://stageselect.<domain>/` and sign in through the IdP. The workbench needs no other credential.
