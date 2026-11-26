@@ -128,7 +128,7 @@ An EPUB as its publisher released it, rather than one a converter produced from 
 _Avoid_: Original, clean copy
 
 **Media Server**:
-A Service that presents Libraries to users and only reads those it does not organize (Plex, Emby, Navidrome, Audiobookshelf).
+A Service that presents Libraries to users and only reads those it does not organize (Plex, Emby, Navidrome, Audiobookshelf, RomM).
 _Avoid_: Player, streamer
 
 **Role**:

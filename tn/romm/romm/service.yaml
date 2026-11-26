@@ -1,0 +1,193 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json
+configs:
+  # Declared here, mounted read-only: RomM then refuses edits to exclusions and platform bindings from its UI, and
+  # they change by PR instead.
+  romm_config:
+    file: ./config.yml
+  # Read through REDIS_PASSWORD_FILE, so the password is not in the container's declared environment.
+  romm_redis_password:
+    content: ${VALKEY_PASSWORD}
+
+services:
+  romm:
+    # https://github.com/rommapp/romm/releases ; the full image (EmulatorJS, Ruffle, js-dos, PICO-8 and EasyRPG
+    # bundled), not -slim, which fetches EmulatorJS from a CDN at run time. Renovate keeps tag and digest current.
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: rommapp/romm:5.4.1@sha256:8677fb7b81b1d3db20b849e989a1dadc2a11159e51eb34a2acdcb01102274edf
+    container_name: romm
+    # Its own uid (host/identities.tsv) in group media, as each media app Service has (ADR 0009); reads the Games
+    # Library through group gaming (host/truenas/identities.yaml). Started non-root, the init script runs nginx
+    # without `user romm;` and needs no caps.
+    user: ${ROMM_UID}:${MEDIA_SHARED_GID}
+    group_add:
+      - ${GAMING_GID}
+    read_only: true
+    tmpfs:
+      # pid files, nginx temp paths and gunicorn's logging config.
+      - /tmp:uid=${ROMM_UID},gid=${MEDIA_SHARED_GID},mode=0700
+      # nginx's envsubst writes default.conf here at every start.
+      - /etc/nginx/conf.d:uid=${ROMM_UID},gid=${MEDIA_SHARED_GID},mode=0755
+      # The image's VOLUME for its bundled Valkey, unused with REDIS_HOST set (ADR 0010: no anonymous volumes).
+      - /redis-data:uid=${ROMM_UID},gid=${MEDIA_SHARED_GID},mode=0700,size=1m
+    healthcheck:
+      # The image has no HEALTHCHECK. /api/heartbeat needs no auth; python3 is always in the image.
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/heartbeat', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+      start_interval: 5s
+    deploy:
+      resources:
+        limits:
+          # Unmeasured: RomM asks for 2 GB to be comfortable, and scans spike. Measure the 30-day peak and tighten
+          # (#912).
+          memory: 2G
+    # https://github.com/rommapp/romm/blob/5.4.1/env.template ; only what differs from upstream's defaults, plus what
+    # this Stack relies on. Secrets (auth key, DB password, OIDC client and issuer, provider keys) are in romm.sops.env.
+    environment:
+      - TZ=${TZ}
+      - ROMM_BASE_URL=https://rmm.${DOMAIN}
+      - ROMM_SESSION_SECURE_COOKIE=true
+      # Traefik's static address on `proxy` (tn/edge) and nginx inside the container may report the client's address.
+      - FORWARDED_ALLOW_IPS=127.0.0.1,::1,172.30.0.10
+      # Datastores
+      - ROMM_DB_DRIVER=mariadb
+      - DB_HOST=mariadb
+      - DB_NAME=romm
+      - DB_USER=rommuser
+      - REDIS_HOST=valkey
+      - REDIS_PASSWORD_FILE=/run/romm/redis_password
+
+      # Security. Protected by native OIDC (ADR 0006): RomM supports it and sends browsers to the IdP itself
+      # (OIDC_AUTOLOGIN), so no forward auth. Accounts are made on first sign-in; the IdP's groups claim decides who
+      # gets in: romm-users are users, romm-admins are admins, anyone in neither is refused, re-checked every sign-in.
+      # Required clients sign in to RomM itself: Argosy, Grout, Playnite and Stage Select with client API tokens
+      # (Bearer); RetroArch Cloud Sync (/api/sync/retroarch/) and the pkgi-ps3 and Kekatsu feeds (/api/feeds/) only
+      # with HTTP Basic, so a user who needs them sets a local password on their profile, a credential the IdP does
+      # not see. Username/password login stays on for that and for the break-glass admin made by the setup wizard:
+      # if the IdP is down, sign in at /login?bypass_autologin=true with it. README.md has the IdP's side.
+      - OIDC_ENABLED=true
+      - OIDC_PROVIDER=authentik
+      - OIDC_AUTOLOGIN=true
+      - OIDC_REDIRECT_URI=https://rmm.${DOMAIN}/api/oauth/openid
+      - OIDC_CLAIM_ROLES=groups
+      - OIDC_ROLE_VIEWER=romm-users
+      - OIDC_ROLE_ADMIN=romm-admins
+
+      # Metadata providers. ScreenScraper first, as Stage Select asks (its ADR 0020), so RomM's titles stay close to
+      # the DAT's; priorities are in config.yml. Hasheous stays off, as Stage Select asks. IGDB, ScreenScraper,
+      # SteamGridDB and RetroAchievements keys are in romm.sops.env.
+      - PLAYMATCH_API_ENABLED=true
+      - LAUNCHBOX_API_ENABLED=true
+      - HLTB_API_ENABLED=true
+
+      # Scans. Stage Select asks RomM to scan a platform after each Build, so no watcher (it would double-scan and
+      # push Stage Select into backoff). One nightly quick scan catches what Stage Select gave up on, away from
+      # Stage Select's working hours and the nightly Backup.
+      - ENABLE_RESCAN_ON_FILESYSTEM_CHANGE=false
+      - ENABLE_SCHEDULED_RESCAN=true
+      - SCHEDULED_RESCAN_CRON=30 4 * * *
+      # Scheduled tasks. No Switch in RomM (ownfoil serves it), so no TitleDB.
+      - ENABLE_SCHEDULED_UPDATE_LAUNCHBOX_METADATA=true
+      - SCHEDULED_UPDATE_LAUNCHBOX_METADATA_CRON=0 3 * * 0
+      - ENABLE_SCHEDULED_CONVERT_IMAGES_TO_WEBP=true
+      - SCHEDULED_CONVERT_IMAGES_TO_WEBP_CRON=0 6 * * *
+      - ENABLE_SCHEDULED_CLEANUP_ORPHANED_RESOURCES=true
+      - ENABLE_SCHEDULED_RETROACHIEVEMENTS_PROGRESS_SYNC=true
+
+      # Features. RomM is a Media Server (ADR 0009): the library is mounted read-only, so uploads, the ROM patcher's
+      # saves into it and rom-converto's library conversion cannot write; rom-converto stays off. Netplay is off in
+      # config.yml (it would switch every player to nightly EmulatorJS from a CDN). Device install is on (Argosy).
+      - ROM_CONVERTO_ENABLED=false
+      - DEVICE_INSTALL_ENABLED=true
+    env_file:
+      - ./romm.sops.env
+    configs:
+      - source: romm_config
+        target: /romm/config/config.yml
+      - source: romm_redis_password
+        target: /run/romm/redis_password
+    depends_on:
+      mariadb:
+        condition: service_healthy
+        restart: true
+      valkey:
+        condition: service_healthy
+        restart: true
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: warning
+      startup-order: "2"
+      # Saves, states, screenshots, fetched artwork and the LaunchBox database; the MariaDB dump and Valkey's
+      # snapshot are backed up from their own Services.
+      stack-back.volumes: true
+      stack-back.volumes.include: "romm_data"
+
+      # Probe (GLOSSARY.md): the public path a user takes; see prometheus.yml
+      probe.url: https://rmm.${DOMAIN}/api/heartbeat
+      # Native OIDC: RomM's own login path answers with the redirect to the IdP
+      probe.idp_url: https://rmm.${DOMAIN}/api/login/openid
+      probe.idp_auth: oidc
+
+      traefik.enable: true
+      traefik.docker.network: proxy
+
+      traefik.http.routers.romm-http.rule: Host(`rmm.${DOMAIN}`)
+      traefik.http.routers.romm-http.entrypoints: http
+      traefik.http.routers.romm-http.middlewares: redirect-https
+
+      # RomM signs in at the IdP itself (native OIDC), so no forward auth. Websockets (/ws, /netplay) pass as is.
+      traefik.http.routers.romm-https.rule: Host(`rmm.${DOMAIN}`)
+      traefik.http.routers.romm-https.entrypoints: https
+      traefik.http.routers.romm-https.tls: true
+      traefik.http.routers.romm-https.tls.certresolver: ${CERT_RESOLVER}
+      traefik.http.routers.romm-https.service: romm
+      traefik.http.routers.romm-https.middlewares: crowdsec-bouncer
+
+      traefik.http.services.romm.loadbalancer.server.port: 8080
+    volumes:
+      # assets/ (saves, states, screenshots), resources/ (artwork) and launchbox/, on one filesystem as RomM needs
+      # for its hardlinks. nocopy: Docker would otherwise reset an empty volume's owner to the image's /romm (1000).
+      - type: volume
+        source: romm_data
+        target: /romm
+        volume:
+          nocopy: true
+      # Download caches (multi-file ZIPs, up to many GB); nothing here needs to survive.
+      - type: volume
+        source: romm_cache
+        target: /tmp/romm
+        volume:
+          nocopy: true
+      # The Games Library, read-only (ADR 0009): Stage Select builds a Library Folder per platform directly in
+      # games/library, and RomM reads each as roms/<platform>. Media mounts never create their source.
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/games/library
+        target: /romm/library/roms
+        read_only: true
+        bind:
+          create_host_path: false
+      # BIOS files the Operator curates by hand, games/bios/<platform>/.
+      - type: bind
+        source: ${ZFS_POOL_ROOT_HDD}/games/bios
+        target: /romm/library/bios
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - default
+      - proxy
+
+volumes:
+  romm_data:
+    # Holds data, so external (ADR 0010): created, and chowned to ROMM_UID:MEDIA_SHARED_GID, before the first Deploy.
+    name: romm_data
+    external: true
+  romm_cache:
+    # Regenerable, but external so it can be chowned to ROMM_UID before the first Deploy (a volume Compose made would
+    # be root's); not in stack-back.volumes.include, so never backed up.
+    name: romm_cache
+    external: true

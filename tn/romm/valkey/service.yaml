@@ -1,0 +1,95 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json
+configs:
+  # RomM keeps its web sessions (14 days), OAuth refresh tokens, invites, device pairing and install requests and
+  # its LaunchBox metadata store here (backend/handler/redis_handler.py at 5.4.1). Without persistence a restart signs
+  # everyone out and empties the LaunchBox store until its weekly update. RomM's bundled Valkey saves hourly for the
+  # same reason: every snapshot rewrites hundreds of MB, so Valkey's stock policy is far too frequent. No AOF.
+  valkey_conf:
+    content: |
+      requirepass ${VALKEY_PASSWORD}
+      dir /data
+      save 3600 1
+      appendonly no
+      loglevel warning
+  valkey_exporter_password:
+    content: |
+      {"redis://valkey:6379": "${VALKEY_PASSWORD}"}
+
+services:
+  valkey:
+    # https://hub.docker.com/r/valkey/valkey ; RomM needs 7.0 or later (EXPIRE ... NX).
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: valkey/valkey:9.1.3-alpine@sha256:bf09d58e96d6b4524a15396b65b242bbe18beebbcc15a04d8ee75ddac62fae0b
+    container_name: romm-valkey
+    # The image's valkey user; the entrypoint skips its chown + su-exec when not root, so no caps.
+    user: "999:1000"
+    deploy:
+      resources:
+        limits:
+          # Unmeasured. The LaunchBox store alone is hundreds of MB, and an RDB save forks: allow for both. Measure
+          # and tighten (#912).
+          memory: 1G
+    # The password lives in a config file, never in process arguments or the environment (#496).
+    command: ["valkey-server", "/etc/valkey/valkey.conf"]
+    configs:
+      - source: valkey_conf
+        target: /etc/valkey/valkey.conf
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$(sed -n 's/^requirepass //p' /etc/valkey/valkey.conf)\" valkey-cli ping | grep -q PONG"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 2s
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: warning
+      startup-order: "1"
+      stack-back.volumes: true
+      stack-back.volumes.include: "romm_valkey_data"
+
+    volumes:
+      - valkey_data:/data
+    networks:
+      - default
+
+  valkey-exporter:
+    # https://github.com/oliver006/redis_exporter
+    extends:
+      file: ../../_baseline.yaml
+      service: baseline
+    image: oliver006/redis_exporter:v1.96.0@sha256:3d57b9eb142a62ffc600063606a41cd471cd53d81bed10be5b56b3a8918f2c26
+    container_name: romm-valkey-exporter
+    user: ${ROMM_UID}:${MEDIA_SHARED_GID}
+    deploy:
+      resources:
+        limits:
+          # nextcloud-valkey-exporter's 30-day peak is 33M working set.
+          memory: 64M
+    environment:
+      - REDIS_ADDR=redis://valkey:6379
+      - REDIS_PASSWORD_FILE=/run/redis-password.json
+    configs:
+      - source: valkey_exporter_password
+        target: /run/redis-password.json
+    depends_on:
+      valkey:
+        condition: service_healthy
+    labels:
+      # Alert Tier (GLOSSARY.md): critical | warning | info
+      tier: info
+      startup-order: "3"
+      baseline.exempt.healthcheck: "scratch image: no shell, wget or health subcommand"
+
+    networks:
+      - default
+      - metrics
+
+volumes:
+  valkey_data:
+    # Sessions and metadata caches; backed up so a restore keeps users signed in (README.md). Created, and chowned
+    # to 999:1000, before the first Deploy.
+    name: romm_valkey_data
+    external: true
