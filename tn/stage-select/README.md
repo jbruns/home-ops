@@ -28,8 +28,9 @@ tree, and `host/truenas/storage.yaml` declares its modes: setgid folders, `2770`
 group-writable (ADR 0009). New files then take group `gaming`, so RomM and the game appliances can read them.
 
 The exception is each `.stage-select` folder, inside a Source Set or a Library Folder, and every folder under it (e.g.
-`retained/`). Stage Select uses one only if its own uid owns it and its mode is exactly `700`. Otherwise it refuses the
-plan with "is not Stage Select's own private folder" or "is no longer private to this service", and writes nothing.
+`retained/`). Stage Select uses one only if its own uid owns it and its permission bits are exactly `700`; the setgid
+bit a folder inherits here (`2700`) doesn't matter. Otherwise it refuses the plan with "is not Stage Select's own
+private folder" or "is no longer private to this service", and writes nothing.
 The drift check doesn't read these folders. A recursive change to the tree's permissions must skip them, or be
 followed, as root on the Host, by:
 
@@ -42,7 +43,7 @@ This prints nothing once they're right:
 
 ```sh
 find /mnt/andromeda/games \( -path '*/.stage-select' -o -path '*/.stage-select/*' \) \
-  \( ! -user 4015 -o -type d ! -perm 700 \) -print
+  \( ! -user 4015 -o -type d \( ! -perm -0700 -o -perm /077 \) \) -print
 ```
 
 ## The workbench
