@@ -5,7 +5,7 @@ services:
     extends:
       file: ../_baseline.yaml
       service: baseline
-    image: ghcr.io/connorgallopo/tracearr:supervised-1.4.27@sha256:9948e47a12f3c7fb38c20a48aab1e3f68c5ba8a045a5eee4174db21f05f9d14a
+    image: ghcr.io/connorgallopo/tracearr:supervised-3.2.1@sha256:2132375b9e565d2646a8e69527ef3d9111e0715fef84872807a38c78f041a44e
     container_name: tracearr
     shm_size: 512mb  # Required for PostgreSQL shared memory (increase for large imports)
     deploy:
