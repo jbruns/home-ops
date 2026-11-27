@@ -15,7 +15,7 @@ services:
         limits:
           # Unmeasured: vaultwarden-mariadb's 30-day peak is 230M with the default buffer pool. Measure and
           # tighten (#912).
-          memory: 512M
+          memory: 1G
     stop_grace_period: 60s
     # The image's check, via its healthcheck user (.my-healthcheck.cnf in the datadir).
     healthcheck:
